@@ -518,7 +518,6 @@ fragment entityPreview on Entity {
   ... on Dataset {
     name
     origin
-    uri
     platform {
       ...platformFields
     }
@@ -1130,7 +1129,6 @@ fragment schemaMetadataFields on SchemaMetadata {
       name
       type
       origin
-      uri
       properties {
         description
       }

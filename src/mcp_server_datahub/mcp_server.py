@@ -2,8 +2,10 @@ import contextlib
 import contextvars
 import json
 import pathlib
-from typing import Any, Dict, Iterator, Optional
+from typing import Any, Dict, Iterator, List, Optional
 
+import jmespath
+from datahub.errors import ItemNotFoundError
 from datahub.ingestion.graph.client import DataHubGraph
 from datahub.sdk.main_client import DataHubClient
 from datahub.sdk.search_client import compile_filters
@@ -60,6 +62,21 @@ def _execute_graphql(
     )
 
 
+def _inject_urls_for_urns(
+    graph: DataHubGraph, response: Any, json_paths: List[str]
+) -> None:
+    try:
+        graph.frontend_base_url
+    except ValueError:
+        # Not DataHub Cloud, so we can't generate urls.
+        return
+
+    for path in json_paths:
+        for item in jmespath.search(path, response) if path else [response]:
+            if isinstance(item, dict) and item.get("urn"):
+                item["url"] = graph.url_for(item["urn"])
+
+
 search_gql = (pathlib.Path(__file__).parent / "gql/search.gql").read_text()
 entity_details_fragment_gql = (
     pathlib.Path(__file__).parent / "gql/entity_details.gql"
@@ -88,6 +105,10 @@ def _clean_gql_response(response: Any) -> Any:
 def get_entity(urn: str) -> dict:
     client = get_client()
 
+    if not client._graph.exists(urn):
+        # TODO: Ideally we use the `exists` field to check this, and also deal with soft-deleted entities.
+        raise ItemNotFoundError(f"Entity {urn} not found")
+
     # Execute the GraphQL query
     variables = {"urn": urn}
     result = _execute_graphql(
@@ -95,14 +116,11 @@ def get_entity(urn: str) -> dict:
         query=entity_details_fragment_gql,
         variables=variables,
         operation_name="GetEntity",
-    )
+    )["entity"]
 
-    # Extract the entity data from the response
-    if "entity" in result:
-        return _clean_gql_response(result["entity"])
+    _inject_urls_for_urns(client._graph, result, [""])
 
-    # Return empty dict if entity not found
-    return {}
+    return _clean_gql_response(result)
 
 
 @mcp.tool(
@@ -304,9 +322,15 @@ if __name__ == "__main__":
             urn = entity["entity"]["urn"]
     assert urn is not None
 
+    def _divider() -> None:
+        print("\n" + "-" * 80 + "\n")
+
+    _divider()
     print("Getting entity:", urn)
     print(json.dumps(get_entity(urn), indent=2))
+    _divider()
     print("Getting lineage:", urn)
     print(json.dumps(get_lineage(urn, upstream=True), indent=2))
+    _divider()
     print("Getting queries", urn)
     print(json.dumps(get_dataset_queries(urn), indent=2))
