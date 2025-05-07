@@ -42,6 +42,15 @@ def _enable_cloud_fields(query: str) -> str:
     return query.replace("#[CLOUD]", "")
 
 
+def _is_datahub_cloud(graph: DataHubGraph) -> bool:
+    try:
+        # Only DataHub Cloud has a frontend base url.
+        _ = graph.frontend_base_url
+    except ValueError:
+        return False
+    return True
+
+
 def _execute_graphql(
     graph: DataHubGraph,
     *,
@@ -49,12 +58,7 @@ def _execute_graphql(
     operation_name: Optional[str] = None,
     variables: Optional[Dict[str, Any]] = None,
 ) -> Any:
-    try:
-        # Only DataHub Cloud has a frontend base url.
-        _ = graph.frontend_base_url
-    except ValueError:
-        pass
-    else:
+    if _is_datahub_cloud(graph):
         query = _enable_cloud_fields(query)
 
     return graph.execute_graphql(
@@ -65,16 +69,17 @@ def _execute_graphql(
 def _inject_urls_for_urns(
     graph: DataHubGraph, response: Any, json_paths: List[str]
 ) -> None:
-    try:
-        graph.frontend_base_url
-    except ValueError:
-        # Not DataHub Cloud, so we can't generate urls.
+    if not _is_datahub_cloud(graph):
         return
 
     for path in json_paths:
         for item in jmespath.search(path, response) if path else [response]:
             if isinstance(item, dict) and item.get("urn"):
-                item["url"] = graph.url_for(item["urn"])
+                # Update item in place with url, ensuring that urn and url are first.
+                new_item = {"urn": item["urn"], "url": graph.url_for(item["urn"])}
+                new_item.update({k: v for k, v in item.items() if k != "urn"})
+                item.clear()
+                item.update(new_item)
 
 
 search_gql = (pathlib.Path(__file__).parent / "gql/search.gql").read_text()
@@ -339,7 +344,7 @@ if __name__ == "__main__":
     print(json.dumps(get_entity(urn), indent=2))
     _divider()
     print("Getting lineage:", urn)
-    print(json.dumps(get_lineage(urn, upstream=False, max_hops="unlimited"), indent=2))
+    print(json.dumps(get_lineage(urn, upstream=False, max_hops=3), indent=2))
     _divider()
     print("Getting queries", urn)
     print(json.dumps(get_dataset_queries(urn), indent=2))
