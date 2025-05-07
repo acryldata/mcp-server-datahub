@@ -645,7 +645,7 @@ cli = [
 
 [[package]]
 name = "mcp-server-datahub"
-version = "0.2.1"
+version = "0.2.2"
 source = { editable = "." }
 dependencies = [
     { name = "acryl-datahub" },
@@ -658,6 +658,7 @@ dev = [
     { name = "mypy" },
     { name = "pytest" },
     { name = "ruff" },
+    { name = "types-jmespath" },
 ]
 
 [package.metadata]
@@ -672,6 +673,7 @@ dev = [
     { name = "mypy", specifier = ">=1.15.0" },
     { name = "pytest", specifier = ">=8.3.5" },
     { name = "ruff", specifier = ">=0.11.6" },
+    { name = "types-jmespath", specifier = "~=1.0.1" },
 ]
 
 [[package]]
@@ -1539,6 +1541,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/cb/ce/dca7b219718afd37a0068f4f2530a727c2b74a8b6e8e0c0080a4c0de4fcd/typer-0.15.1.tar.gz", hash = "sha256:a0588c0a7fa68a1978a069818657778f86abe6ff5ea6abf472f940a08bfe4f0a", size = 99789 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/d0/cc/0a838ba5ca64dc832aa43f727bd586309846b0ffb2ce52422543e6075e8a/typer-0.15.1-py3-none-any.whl", hash = "sha256:7994fb7b8155b64d3402518560648446072864beefd44aa2dc36972a5972e847", size = 44908 },
+]
+
+[[package]]
+name = "types-jmespath"
+version = "1.0.2.20240106"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/1b/e4/1f7414dbca03975f66f1ab1b3f7b3deb7c19b104ef14dd3c99036bbc39b2/types-jmespath-1.0.2.20240106.tar.gz", hash = "sha256:b4a65a116bfc1c700a4fd9d24e2e397f4a431122e0320a77b7f1989a6b5d819e", size = 5071 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f5/30/3d6443f782601dd88820ba31e7668abfec7e19d685ac7f6fbcfd6ebba519/types_jmespath-1.0.2.20240106-py3-none-any.whl", hash = "sha256:c3e715fcaae9e5f8d74e14328fdedc4f2b3f0e18df17f3e457ae0a18e245bde0", size = 6087 },
 ]
 
 [[package]]
