@@ -219,32 +219,38 @@ class AssetLineageDirective(BaseModel):
     urn: str
     upstream: bool
     downstream: bool
-    num_hops: int
+    max_hops: int
 
 
 class AssetLineageAPI:
     def __init__(self, graph: DataHubGraph) -> None:
         self.graph = graph
 
-    def get_degree_filter(self, num_hops: int) -> Optional[Filter]:
+    def get_degree_filter(self, max_hops: int) -> Optional[Filter]:
         """
-        num_hops: Number of hops to search for lineage
+        max_hops: Maximum number of hops to search for lineage
         """
-        if num_hops < 1:
-            return None
-        else:
+        if max_hops == 1 or max_hops == 2:
             return FilterDsl.custom_filter(
                 field="degree",
                 condition="EQUAL",
-                values=[str(i) for i in range(1, num_hops + 1)],
+                values=[str(i) for i in range(1, max_hops + 1)],
             )
+        elif max_hops >= 3:
+            return FilterDsl.custom_filter(
+                field="degree",
+                condition="EQUAL",
+                values=["1", "2", "3+"],
+            )
+        else:
+            raise ValueError(f"Invalid number of hops: {max_hops}")
 
     def get_lineage(
         self, asset_lineage_directive: AssetLineageDirective
-    ) -> Dict[str, Dict[str, Any]]:
-        result: Dict[str, Dict[str, Any]] = {asset_lineage_directive.urn: {}}
+    ) -> Dict[str, Any]:
+        result: Dict[str, Any] = {}
 
-        degree_filter = self.get_degree_filter(asset_lineage_directive.num_hops)
+        degree_filter = self.get_degree_filter(asset_lineage_directive.max_hops)
         types, compiled_filters = compile_filters(degree_filter)
         variables = {
             "urn": asset_lineage_directive.urn,
@@ -252,9 +258,10 @@ class AssetLineageAPI:
             "count": 30,
             "types": types,
             "orFilters": compiled_filters,
+            "searchFlags": {"skipHighlighting": True, "maxAggValues": 3},
         }
         if asset_lineage_directive.upstream:
-            result[asset_lineage_directive.urn]["upstreams"] = _clean_gql_response(
+            result["upstreams"] = _clean_gql_response(
                 _execute_graphql(
                     self.graph,
                     query=entity_details_fragment_gql,
@@ -265,10 +272,10 @@ class AssetLineageAPI:
                         }
                     },
                     operation_name="GetEntityLineage",
-                )
+                )["searchAcrossLineage"]
             )
         if asset_lineage_directive.downstream:
-            result[asset_lineage_directive.urn]["downstreams"] = _clean_gql_response(
+            result["downstreams"] = _clean_gql_response(
                 _execute_graphql(
                     self.graph,
                     query=entity_details_fragment_gql,
@@ -279,7 +286,7 @@ class AssetLineageAPI:
                         }
                     },
                     operation_name="GetEntityLineage",
-                )
+                )["searchAcrossLineage"]
             )
 
         return result
@@ -290,13 +297,15 @@ class AssetLineageAPI:
 Use this tool to get upstream or downstream lineage for any entity, including datasets, schemaFields, dashboards, charts, etc. \
 Set upstream to True for upstream lineage, False for downstream lineage."""
 )
-def get_lineage(urn: str, upstream: bool, num_hops: int = 1) -> dict:
+def get_lineage(urn: str, upstream: bool, max_hops: int = 1) -> dict:
     client = get_client()
     lineage_api = AssetLineageAPI(client._graph)
     asset_lineage_directive = AssetLineageDirective(
-        urn=urn, upstream=upstream, downstream=not upstream, num_hops=num_hops
+        urn=urn, upstream=upstream, downstream=not upstream, max_hops=max_hops
     )
-    return lineage_api.get_lineage(asset_lineage_directive)
+    lineage = lineage_api.get_lineage(asset_lineage_directive)
+    _inject_urls_for_urns(client._graph, lineage, ["*.searchResults[].entity"])
+    return lineage
 
 
 if __name__ == "__main__":
@@ -319,7 +328,7 @@ if __name__ == "__main__":
         search_data = search()
         for entity in search_data["searchResults"]:
             print(entity["entity"]["urn"])
-            urn = entity["entity"]["urn"]
+        urn = search_data["searchResults"][0]["entity"]["urn"]
     assert urn is not None
 
     def _divider() -> None:
@@ -330,7 +339,7 @@ if __name__ == "__main__":
     print(json.dumps(get_entity(urn), indent=2))
     _divider()
     print("Getting lineage:", urn)
-    print(json.dumps(get_lineage(urn, upstream=True), indent=2))
+    print(json.dumps(get_lineage(urn, upstream=False, max_hops="unlimited"), indent=2))
     _divider()
     print("Getting queries", urn)
     print(json.dumps(get_dataset_queries(urn), indent=2))
