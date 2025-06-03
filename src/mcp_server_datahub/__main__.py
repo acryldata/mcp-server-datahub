@@ -13,7 +13,7 @@ def main() -> None:
     mcp_version = importlib.metadata.version("mcp-server-datahub")
     graph = get_default_graph(
         client_mode=ClientMode.SDK,
-        datahub_component=f"mcp-server-datahub@{mcp_version}",
+        datahub_component=f"mcp-server-datahub/{mcp_version}",
     )
     set_client(DataHubClient(graph=graph))
     mcp.run()
