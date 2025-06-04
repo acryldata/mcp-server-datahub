@@ -1205,3 +1205,45 @@ query GetEntityLineage($input: SearchAcrossLineageInput!) {
     }
   }
 }
+
+query getSchemaVersionList($input: GetSchemaVersionListInput!) {
+  getSchemaVersionList(input: $input) {
+    latestVersion {
+      semanticVersion
+      semanticVersionTimestamp
+      versionStamp
+      __typename
+    }
+    semanticVersionList {
+      semanticVersion
+      semanticVersionTimestamp
+      versionStamp
+      __typename
+    }
+    __typename
+  }
+}
+
+
+query getSchemaBlame($input: GetSchemaBlameInput!) {
+  getSchemaBlame(input: $input) {
+    version {
+      semanticVersion
+      semanticVersionTimestamp
+      versionStamp
+      __typename
+    }
+    schemaFieldBlameList {
+      fieldPath
+      schemaFieldChange {
+        timestampMillis
+        lastSemanticVersion
+        lastSchemaFieldChange
+        versionStamp
+        __typename
+      }
+      __typename
+    }
+    __typename
+  }
+}

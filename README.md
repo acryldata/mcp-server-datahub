@@ -11,6 +11,7 @@ Supports both DataHub Core and DataHub Cloud.
 - Fetching metadata for any entity
 - Traversing the lineage graph, both upstream and downstream
 - Listing SQL queries associated with a dataset
+- Querying schema versions and schema blame.
 
 ## Demo
 

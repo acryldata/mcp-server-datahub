@@ -10,6 +10,8 @@ from mcp_server_datahub.mcp_server import (
     get_dataset_queries,
     get_entity,
     get_lineage,
+    get_schema_blame,
+    get_schema_versions,
     search,
     with_client,
 )
@@ -55,6 +57,16 @@ def test_search() -> None:
         query="*",
         filters=pydantic.TypeAdapter(Filter).validate_python(filters_json),
     )
+    assert res is not None
+
+
+def test_get_schema_version() -> None:
+    res = get_schema_versions(_test_urn)
+    assert res is not None
+
+
+def test_get_schema_blame() -> None:
+    res = get_schema_blame(_test_urn)
     assert res is not None
 
 

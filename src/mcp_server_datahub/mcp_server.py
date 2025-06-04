@@ -313,6 +313,47 @@ def get_lineage(urn: str, upstream: bool, max_hops: int = 1) -> dict:
     return lineage
 
 
+@mcp.tool(description="Retrieve schema versions for a given dataset URN.")
+def get_schema_versions(dataset_urn: str) -> List[Dict[str, Any]]:
+    client = get_client()
+
+    variables = {
+        "input": {
+            "datasetUrn": dataset_urn,
+        }
+    }
+
+    response = _execute_graphql(
+        client._graph,
+        query=entity_details_fragment_gql,
+        variables=variables,
+        operation_name="getSchemaVersionList",
+    )
+
+    return response.get("getSchemaVersionList", [])
+
+
+@mcp.tool(description="Use this tool to get a schema blame.")
+def get_schema_blame(datasetUrn: str, version: str) -> Dict[str, Any]:
+    client = get_client()
+
+    variables = {
+        "input": {
+            "datasetUrn": datasetUrn,
+            "version": version,
+        }
+    }
+
+    resp = _execute_graphql(
+        client._graph,
+        query=entity_details_fragment_gql,
+        variables=variables,
+        operation_name="getSchemaBlame",
+    )
+
+    return resp.get("getSchemaBlame", {})
+
+
 if __name__ == "__main__":
     import sys
 
@@ -348,3 +389,9 @@ if __name__ == "__main__":
     _divider()
     print("Getting queries", urn)
     print(json.dumps(get_dataset_queries(urn), indent=2))
+    _divider()
+    print("Getting schema versions", urn)
+    print(json.dumps(get_schema_versions(urn), indent=2))
+    _divider()
+    print("Getting schema blame", urn)
+    print(json.dumps(get_schema_blame(urn, "latest"), indent=2))
