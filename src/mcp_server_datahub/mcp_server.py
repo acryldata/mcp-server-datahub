@@ -1,5 +1,6 @@
 import contextlib
 import contextvars
+from functools import lru_cache
 import json
 import pathlib
 from typing import Any, Dict, Iterator, List, Optional
@@ -106,7 +107,54 @@ def _clean_gql_response(response: Any) -> Any:
         return response
 
 
-@mcp.tool(description="Get an entity by its DataHub URN.")
+class SemanticVersionStruct(BaseModel):
+    semantic_version: str
+    version_stamp: str
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "SemanticVersionStruct":
+        return cls(
+            semantic_version=data["semanticVersion"],
+            version_stamp=data["versionStamp"],
+        )
+
+
+class SchemaVersionList(BaseModel):
+    latest_version: SemanticVersionStruct
+    versions: list[SemanticVersionStruct]
+
+
+def _get_schema_version_list(
+    datahub_client: DataHubClient, dataset_urn: str
+) -> SchemaVersionList | None:
+    variables = {
+        "input": {
+            "datasetUrn": dataset_urn,
+        }
+    }
+    resp = _execute_graphql(
+        datahub_client._graph,
+        query=entity_details_fragment_gql,
+        variables=variables,
+        operation_name="getSchemaVersionList",
+    )
+    if not (raw_schema_versions := resp.get("getSchemaVersionList")):
+        return None
+
+    return SchemaVersionList(
+        latest_version=SemanticVersionStruct.from_dict(
+            raw_schema_versions.get("latestVersion", {})
+        ),
+        versions=[
+            SemanticVersionStruct.from_dict(structs)
+            for structs in raw_schema_versions.get("semanticVersionList", [])
+        ],
+    )
+
+
+@mcp.tool(
+    description="Get an entity by its DataHub URN. This also provide schema_version_list(latest version, all versions) if available."
+)
 def get_entity(urn: str) -> dict:
     client = get_client()
 
@@ -124,6 +172,12 @@ def get_entity(urn: str) -> dict:
     )["entity"]
 
     _inject_urls_for_urns(client._graph, result, [""])
+
+    if schema_version_list := _get_schema_version_list(client, urn):
+        result["schemaVersionList"] = {
+            "latestVersion": schema_version_list.latest_version.semantic_version,
+            "versions": sorted([v.semantic_version for v in schema_version_list.versions]),
+        }
 
     return _clean_gql_response(result)
 
@@ -313,6 +367,34 @@ def get_lineage(urn: str, upstream: bool, max_hops: int = 1) -> dict:
     return lineage
 
 
+@mcp.tool(description="Get schema from a dataset by its URN and version.")
+@lru_cache
+def get_versioned_dataset(dataset_urn: str, semantic_version: str) -> dict[str, Any]:
+    client = get_client()
+
+    if not (schema_version_list := _get_schema_version_list(client, dataset_urn)):
+        raise ValueError(f"No schema_version_list found for dataset {dataset_urn}")
+
+    version_stamp_mapping = {
+        struct.semantic_version: struct.version_stamp
+        for struct in schema_version_list.versions
+    }
+
+    if not (target_version_stamp := version_stamp_mapping.get(semantic_version)):
+        raise ValueError(
+            f"Version '{semantic_version}' not found for dataset '{dataset_urn}'"
+        )
+
+    variables = {"urn": dataset_urn, "versionStamp": target_version_stamp}
+    resp = _execute_graphql(
+        client._graph,
+        query=entity_details_fragment_gql,
+        variables=variables,
+        operation_name="getVersionedDataset",
+    )
+    return resp.get("versionedDataset", {})
+
+
 if __name__ == "__main__":
     import sys
 
@@ -348,3 +430,6 @@ if __name__ == "__main__":
     _divider()
     print("Getting queries", urn)
     print(json.dumps(get_dataset_queries(urn), indent=2))
+    _divider()
+    print(json.dumps(get_versioned_dataset(urn, sementic_version="0.0.0"), indent=2))
+    _divider()
