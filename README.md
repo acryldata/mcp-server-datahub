@@ -1,16 +1,28 @@
 # mcp-server-datahub
 
-A [Model Context Protocol](https://modelcontextprotocol.io/) server implementation for [DataHub](https://datahubproject.io/).
-This enables AI agents to query DataHub for metadata and context about your data ecosystem.
+A comprehensive [Model Context Protocol](https://modelcontextprotocol.io/) server implementation for [DataHub](https://datahubproject.io/).
+This enables AI agents to both query and manage DataHub metadata, providing full read and write capabilities for your data ecosystem.
 
 Supports both DataHub Core and DataHub Cloud.
 
 ## Features
 
-- Searching across all entity types and using arbitrary filters
-- Fetching metadata for any entity
-- Traversing the lineage graph, both upstream and downstream
-- Listing SQL queries associated with a dataset
+### Read Operations
+- Search across all entity types with advanced filtering
+- Fetch detailed metadata for any entity
+- Traverse the lineage graph, both upstream and downstream
+- List SQL queries associated with datasets
+
+### Write Operations
+- Update entity and field descriptions
+- Create and manage tags
+- Add and remove tags from entities and fields
+- Batch tag operations for multiple entities
+- Create and manage business domains
+- Assign entities to domains
+- Create and manage glossary terms
+- Link glossary terms to entities and fields
+- Add owners to entities
 
 ## Demo
 
