@@ -1,0 +1,69 @@
+# Mutation for creating tags
+mutation createTag($input: CreateTagInput!) {
+  createTag(input: $input)
+}
+
+# Mutation for updating entity descriptions
+mutation updateDescription($input: DescriptionUpdateInput!) {
+  updateDescription(input: $input)
+}
+
+# Mutation for adding tags to an entity
+mutation addTags($input: AddTagsInput!) {
+  addTags(input: $input)
+}
+
+# Mutation for removing a tag from an entity
+mutation removeTag($input: TagAssociationInput!) {
+  removeTag(input: $input)
+}
+
+# Mutation for batch adding tags to multiple entities
+mutation batchAddTags($input: BatchAddTagsInput!) {
+  batchAddTags(input: $input)
+}
+
+# Mutation for batch removing tags from multiple entities
+mutation batchRemoveTags($input: BatchRemoveTagsInput!) {
+  batchRemoveTags(input: $input)
+}
+
+# Mutation for setting the domain of an entity
+mutation setDomain($entityUrn: String!, $domainUrn: String!) {
+  setDomain(entityUrn: $entityUrn, domainUrn: $domainUrn)
+}
+
+# Mutation for unsetting the domain of an entity
+mutation unsetDomain($entityUrn: String!) {
+  unsetDomain(entityUrn: $entityUrn)
+}
+
+# Mutation for adding owners to an entity
+mutation addOwners($input: AddOwnersInput!) {
+  addOwners(input: $input)
+}
+
+# Mutation for removing owners from an entity - not available in DataHub API
+# mutation removeOwners($input: RemoveOwnersInput!) {
+#   removeOwners(input: $input)
+# }
+
+# Mutation for adding glossary terms to an entity
+mutation addTerms($input: AddTermsInput!) {
+  addTerms(input: $input)
+}
+
+# Mutation for removing glossary terms from an entity - using removeTerm for single term removal
+mutation removeTerm($input: TermAssociationInput!) {
+  removeTerm(input: $input)
+}
+
+# Mutation for creating a new domain
+mutation createDomain($input: CreateDomainInput!) {
+  createDomain(input: $input)
+}
+
+# Mutation for creating a new glossary term
+mutation createGlossaryTerm($input: CreateGlossaryEntityInput!) {
+  createGlossaryTerm(input: $input)
+}
