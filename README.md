@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/acryldata-mcp-server-datahub-badge.png)](https://mseep.ai/app/acryldata-mcp-server-datahub)
+
 # mcp-server-datahub
 
 A [Model Context Protocol](https://modelcontextprotocol.io/) server implementation for [DataHub](https://datahubproject.io/).
