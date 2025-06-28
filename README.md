@@ -10,6 +10,7 @@ Check out the [demo video](https://youtu.be/VXRvHIZ3Eww?t=1878), done in collabo
 - Fetching metadata for any entity
 - Traversing the lineage graph, both upstream and downstream
 - Listing SQL queries associated with a dataset
+- Listing schema versions(latest version, all versions) and fetching schema by specific version.
 
 ## Usage
 

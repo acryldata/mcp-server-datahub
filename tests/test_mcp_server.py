@@ -10,6 +10,7 @@ from mcp_server_datahub.mcp_server import (
     get_dataset_queries,
     get_entity,
     get_lineage,
+    get_versioned_dataset,
     search,
     with_client,
 )
@@ -55,6 +56,11 @@ def test_search() -> None:
         query="*",
         filters=pydantic.TypeAdapter(Filter).validate_python(filters_json),
     )
+    assert res is not None
+
+
+def test_get_versioned_dataset() -> None:
+    res = get_versioned_dataset(_test_urn, "0.0.0")
     assert res is not None
 
 
