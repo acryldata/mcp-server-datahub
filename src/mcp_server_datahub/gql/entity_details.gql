@@ -886,6 +886,13 @@ fragment entityPreview on Entity {
     }
     ...domainEntitiesFields
   }
+  ... on DataProduct {
+    urn
+    properties {
+      name
+      description
+    }
+  }
   # ... on Container {
   #     ...entityContainer
   # }
