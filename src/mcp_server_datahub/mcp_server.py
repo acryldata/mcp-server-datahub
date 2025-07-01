@@ -1,6 +1,5 @@
 import contextlib
 import contextvars
-import json
 import pathlib
 from typing import Any, Dict, Iterator, List, Optional
 
@@ -311,40 +310,3 @@ def get_lineage(urn: str, upstream: bool, max_hops: int = 1) -> dict:
     lineage = lineage_api.get_lineage(asset_lineage_directive)
     _inject_urls_for_urns(client._graph, lineage, ["*.searchResults[].entity"])
     return lineage
-
-
-if __name__ == "__main__":
-    import sys
-
-    set_client(DataHubClient.from_env())
-
-    if len(sys.argv) > 1:
-        urn_or_query = sys.argv[1]
-    else:
-        urn_or_query = "*"
-        print("No query provided, will use '*' query")
-    urn: Optional[str] = None
-    if urn_or_query.startswith("urn:"):
-        urn = urn_or_query
-    else:
-        urn = None
-        query = urn_or_query
-    if urn is None:
-        search_data = search()
-        for entity in search_data["searchResults"]:
-            print(entity["entity"]["urn"])
-        urn = search_data["searchResults"][0]["entity"]["urn"]
-    assert urn is not None
-
-    def _divider() -> None:
-        print("\n" + "-" * 80 + "\n")
-
-    _divider()
-    print("Getting entity:", urn)
-    print(json.dumps(get_entity(urn), indent=2))
-    _divider()
-    print("Getting lineage:", urn)
-    print(json.dumps(get_lineage(urn, upstream=False, max_hops=3), indent=2))
-    _divider()
-    print("Getting queries", urn)
-    print(json.dumps(get_dataset_queries(urn), indent=2))

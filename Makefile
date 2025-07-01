@@ -1,21 +1,23 @@
 .PHONY: setup lint test clean format format-check
 
+PY_FILES = src tests scripts
+
 # Setup development environment
 setup:
 	uv sync
 
 # Format code with ruff
 format:
-	uv run ruff format src tests
+	uv run ruff format $(PY_FILES)
 
 # Check code formatting with ruff
 format-check:
-	uv run ruff format --check src tests
+	uv run ruff format --check $(PY_FILES)
 
 # Lint with ruff and mypy
 lint:
-	uv run ruff check src tests
-	uv run mypy src tests
+	uv run ruff check $(PY_FILES)
+	uv run mypy $(PY_FILES)
 
 # Run tests
 test:
