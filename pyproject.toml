@@ -1,6 +1,6 @@
 [project]
 name = "mcp-server-datahub"
-version = "0.2.5"
+dynamic = ["version"]
 description = "A Model Context Protocol (MCP) server for DataHub"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -26,11 +26,19 @@ dev = [
 mcp-server-datahub = "mcp_server_datahub.__main__:main"
 
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["setuptools>=64", "setuptools-scm>=8"]
+build-backend = "setuptools.build_meta"
 
-[tool.hatch.build.targets.wheel]
-packages = ["src/mcp_server_datahub"]
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools_scm]
+version_file = "src/mcp_server_datahub/_version.py"
+fallback_version = "0.0.0"
+local_scheme = "no-local-version"
+
+[tool.uv]
+cache-keys = [{ file = "pyproject.toml" }, { git = true }]
 
 #[tool.uv.sources]
 #acryl-datahub = { path = "../datahub/metadata-ingestion", editable = true }
