@@ -94,11 +94,16 @@ def _clean_gql_response(response: Any) -> Any:
         banned_keys = {
             "__typename",
         }
-        return {
-            k: _clean_gql_response(v)
-            for k, v in response.items()
-            if v is not None and k not in banned_keys
-        }
+
+        cleaned_response = {}
+        for k, v in response.items():
+            if k in banned_keys or v is None or v == []:
+                continue
+            cleaned_v = _clean_gql_response(v)
+            if cleaned_v is not None and cleaned_v != {}:
+                cleaned_response[k] = cleaned_v
+
+        return cleaned_response
     elif isinstance(response, list):
         return [_clean_gql_response(item) for item in response]
     else:
@@ -192,19 +197,18 @@ def get_dataset_queries(dataset_urn: str, start: int = 0, count: int = 10) -> di
     variables = {"input": {"start": start, "count": count, "datasetUrn": dataset_urn}}
 
     # Execute the GraphQL query
-    raw_result = _execute_graphql(
+    result = _execute_graphql(
         client._graph,
         query=queries_gql,
         variables=variables,
         operation_name="listQueries",
-    )
-    result = _clean_gql_response(raw_result["listQueries"])
+    )["listQueries"]
 
     for query in result["queries"]:
         if query.get("subjects"):
             query["subjects"] = _deduplicate_subjects(query["subjects"])
 
-    return result
+    return _clean_gql_response(result)
 
 
 def _deduplicate_subjects(subjects: list[dict]) -> list[str]:
