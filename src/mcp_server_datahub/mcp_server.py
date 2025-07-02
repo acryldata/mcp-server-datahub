@@ -110,6 +110,27 @@ def _clean_gql_response(response: Any) -> Any:
         return response
 
 
+def _clean_get_entity_response(raw_response: dict) -> dict:
+    response = _clean_gql_response(raw_response)
+
+    if response and (schema_metadata := response.get("schemaMetadata")):
+        # Remove empty platformSchema to reduce response clutter
+        if platform_schema := schema_metadata.get("platformSchema"):
+            schema_value = platform_schema.get("schema")
+            if not schema_value or schema_value == "":
+                del schema_metadata["platformSchema"]
+
+        # Remove default field attributes (false values) to keep only meaningful data
+        if fields := schema_metadata.get("fields"):
+            for field in fields:
+                if field.get("recursive") is False:
+                    field.pop("recursive", None)
+                if field.get("isPartOfKey") is False:
+                    field.pop("isPartOfKey", None)
+
+    return response
+
+
 @mcp.tool(description="Get an entity by its DataHub URN.")
 def get_entity(urn: str) -> dict:
     client = get_client()
@@ -129,7 +150,7 @@ def get_entity(urn: str) -> dict:
 
     _inject_urls_for_urns(client._graph, result, [""])
 
-    return _clean_gql_response(result)
+    return _clean_get_entity_response(result)
 
 
 @mcp.tool(

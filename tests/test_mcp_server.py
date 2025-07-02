@@ -15,6 +15,7 @@ from mcp_server_datahub.mcp_server import (
 )
 
 _test_urn = "urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.analytics.pet_details,PROD)"
+_test_domain = "urn:li:domain:0da1ef03-8870-45db-9f47-ef4f592f095c"
 
 
 @pytest.fixture(autouse=True, scope="session")
@@ -23,8 +24,15 @@ def setup_client() -> Iterable[None]:
         yield
 
 
-def test_get_entity() -> None:
+def test_get_dataset() -> None:
     res = get_entity(_test_urn)
+    assert res is not None
+
+    assert res["url"] is not None
+
+
+def test_get_domain() -> None:
+    res = get_entity(_test_domain)
     assert res is not None
 
     assert res["url"] is not None
