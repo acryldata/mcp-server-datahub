@@ -924,6 +924,12 @@ fragment entityPreview on Entity {
       description
     }
   }
+  ... on StructuredPropertyEntity {
+    definition {
+      displayName
+      description
+    }
+  }
   ... on DataPlatform {
     ...nonConflictingPlatformFields
   }
@@ -1004,6 +1010,15 @@ fragment businessAttribute on BusinessAttributeAssociation {
 
 fragment structuredPropertyFields on StructuredPropertyEntity {
   urn
+  definition {
+    displayName
+    qualifiedName
+  }
+  __typename
+}
+
+fragment structuredPropertyDetailsFields on StructuredPropertyEntity {
+  urn
   type
   definition {
     displayName
@@ -1013,18 +1028,12 @@ fragment structuredPropertyFields on StructuredPropertyEntity {
     immutable
     valueType {
       urn
-      type
       info {
-        type
         displayName
       }
     }
     entityTypes {
       urn
-      type
-      info {
-        type
-      }
     }
     cardinality
     typeQualifier {
@@ -1080,7 +1089,6 @@ fragment structuredPropertyFields on StructuredPropertyEntity {
 
 fragment structuredPropertiesFields on StructuredPropertiesEntry {
   structuredProperty {
-    exists
     ...structuredPropertyFields
   }
   values {
@@ -1214,6 +1222,10 @@ fragment datasetSchema on Dataset {
 fragment entityDetails on Entity {
   ... on Dataset {
     ...datasetSchema
+  }
+  ... on StructuredPropertyEntity {
+    ...structuredPropertyFields
+    ...structuredPropertyDetailsFields
   }
 }
 
