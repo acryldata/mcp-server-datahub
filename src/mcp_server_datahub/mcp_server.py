@@ -173,13 +173,13 @@ Here are some example filters:
 }
 ```
 
-- All Snowflake tables
+- All non-Snowflake tables
 ```
 {
-  "and_":[
+  "and":[
     {"entity_type": ["DATASET"]},
     {"entity_subtype": "Table"},
-    {"platform": ["snowflake"]}
+    {"not": {"platform": ["snowflake"]}}
   ]
 }
 ```
