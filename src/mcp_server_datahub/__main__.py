@@ -7,19 +7,19 @@ from datahub.sdk.main_client import DataHubClient
 from datahub.telemetry import telemetry
 from typing_extensions import Literal
 
-from mcp_server_datahub.mcp_server import mcp, with_client
+from mcp_server_datahub.mcp_server import mcp, with_datahub_client
 
 
 @click.command()
 @click.option(
     "--transport",
-    type=click.Choice(["stdio", "sse", "streamable-http"]),
+    type=click.Choice(["stdio", "sse", "http"]),
     default="stdio",
 )
 @telemetry.with_telemetry(
     capture_kwargs=["transport"],
 )
-def main(transport: Literal["stdio", "sse", "streamable-http"]) -> None:
+def main(transport: Literal["stdio", "sse", "http"]) -> None:
     # Because we want to override the datahub_component, we can't use DataHubClient.from_env()
     # and need to use the DataHubClient constructor directly.
     mcp_version = importlib.metadata.version("mcp-server-datahub")
@@ -29,8 +29,11 @@ def main(transport: Literal["stdio", "sse", "streamable-http"]) -> None:
     )
     client = DataHubClient(graph=graph)
 
-    with with_client(client):
-        mcp.run(transport=transport)
+    with with_datahub_client(client):
+        if transport == "http":
+            mcp.run(transport=transport, show_banner=False, stateless_http=True)
+        else:
+            mcp.run(transport=transport, show_banner=False)
 
 
 if __name__ == "__main__":

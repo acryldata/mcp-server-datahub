@@ -7,7 +7,7 @@ import click
 from datahub.sdk.main_client import DataHubClient
 from fastmcp import Client
 
-from mcp_server_datahub.mcp_server import mcp, set_client
+from mcp_server_datahub.mcp_server import mcp, set_datahub_client
 
 
 def _divider() -> None:
@@ -46,7 +46,7 @@ async def main(urn_or_query: Optional[str]) -> None:
         urn_or_query = "*"
         print("No query provided, will use '*' query")
 
-    set_client(DataHubClient.from_env())
+    set_datahub_client(DataHubClient.from_env())
     async with Client(mcp) as mcp_client:
         tools = await mcp_client.list_tools()
         print(f"Found {len(tools)} tools")

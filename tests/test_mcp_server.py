@@ -10,7 +10,7 @@ from mcp_server_datahub.mcp_server import (
     get_entity,
     get_lineage,
     mcp,
-    with_client,
+    with_datahub_client,
 )
 
 _test_urn = "urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.analytics.pet_details,PROD)"
@@ -19,7 +19,7 @@ _test_domain = "urn:li:domain:0da1ef03-8870-45db-9f47-ef4f592f095c"
 
 @pytest.fixture(autouse=True, scope="session")
 def setup_client() -> Iterable[None]:
-    with with_client(DataHubClient.from_env()):
+    with with_datahub_client(DataHubClient.from_env()):
         yield
 
 
@@ -75,6 +75,7 @@ async def test_search(mcp_client: Client) -> None:
         "search",
         arguments={"query": "*", "filters": filters_json},
     )
+    assert res.is_error is False
     assert res.data is not None
 
 
