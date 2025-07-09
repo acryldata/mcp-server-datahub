@@ -8,10 +8,12 @@ This is a Model Context Protocol (MCP) server implementation for DataHub. The se
 
 ## Development Commands
 
+See [DEVELOPING.md](DEVELOPING.md) and [Makefile](Makefile) for more details.
+
+A quick summary is below:
+
 - `make setup` - Set up development environment (requires uv)
-- `make lint` - Run ruff linting and mypy type checking  
-- `make format` - Format code with ruff
-- `make format-check` - Check code formatting without making changes
+- `make lint` - Run ruff formatting, linting and type checking
 - `make test` - Run pytest tests (requires live DataHub instance)
 - `make clean` - Clean up build artifacts
 
@@ -24,6 +26,7 @@ This is a Model Context Protocol (MCP) server implementation for DataHub. The se
 ## Development Setup
 
 Run the server using MCP inspector for development:
+
 ```bash
 source .venv/bin/activate
 mcp dev src/mcp_server_datahub/__main__.py
@@ -34,14 +37,16 @@ mcp dev src/mcp_server_datahub/__main__.py
 ### Core Components
 
 - **mcp_server.py**: Main server implementation with MCP tools
+
   - `get_entity()`: Fetch entity metadata by URN
   - `search()`: Search across DataHub entities with filters
   - `get_dataset_queries()`: Get SQL queries for datasets
   - `get_lineage()`: Traverse upstream/downstream lineage
 
 - **GraphQL Integration**: Uses GraphQL fragments for efficient queries
+
   - `gql/search.gql`: Search queries
-  - `gql/entity_details.gql`: Entity metadata queries  
+  - `gql/entity_details.gql`: Entity metadata queries
   - `gql/queries.gql`: SQL query retrieval
 
 - **Client Management**: Context-aware DataHub client handling
@@ -58,6 +63,7 @@ mcp dev src/mcp_server_datahub/__main__.py
 ## Authentication
 
 Server requires DataHub authentication via:
+
 - Environment variables: `DATAHUB_GMS_URL`, `DATAHUB_GMS_TOKEN`
 - Or `~/.datahubenv` configuration file
 

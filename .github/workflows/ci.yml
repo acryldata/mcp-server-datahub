@@ -23,11 +23,8 @@ jobs:
       - name: Install dependencies
         run: make setup
 
-      - name: Check formatting
-        run: make format-check
-
-      - name: Lint
-        run: make lint
+      - name: Checks
+        run: make lint-check
 
       # Tests don't run without credentials yet.
       # - name: Test

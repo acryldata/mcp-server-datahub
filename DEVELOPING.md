@@ -41,6 +41,16 @@ Use this configuration in your MCP client e.g. Claude Desktop, Cursor, etc.
 }
 ```
 
+### Run linting
+
+```bash
+# Check linting
+make lint-check
+
+# Fix linting
+make lint
+```
+
 ### Run tests
 
 The test suite is currently very simplistic, and requires a live DataHub instance.

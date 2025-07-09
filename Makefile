@@ -1,4 +1,4 @@
-.PHONY: setup lint test clean format format-check
+.PHONY: setup clean format format-check lint lint-check test
 
 PY_FILES = src tests scripts
 
@@ -9,13 +9,14 @@ setup:
 # Format code with ruff
 format:
 	uv run ruff format $(PY_FILES)
-
-# Check code formatting with ruff
 format-check:
 	uv run ruff format --check $(PY_FILES)
 
 # Lint with ruff and mypy
-lint:
+lint: format
+	uv run ruff check --fix $(PY_FILES)
+	uv run mypy $(PY_FILES)
+lint-check: format-check
 	uv run ruff check $(PY_FILES)
 	uv run mypy $(PY_FILES)
 

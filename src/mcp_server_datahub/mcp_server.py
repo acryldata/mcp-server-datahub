@@ -10,10 +10,10 @@ from datahub.sdk.main_client import DataHubClient
 from datahub.sdk.search_client import compile_filters
 from datahub.sdk.search_filters import Filter, FilterDsl
 from datahub.utilities.ordered_set import OrderedSet
-from mcp.server.fastmcp import FastMCP
+from fastmcp import FastMCP
 from pydantic import BaseModel
 
-mcp = FastMCP(name="datahub", stateless_http=True)
+mcp = FastMCP[None](name="datahub", stateless_http=True)
 
 
 _mcp_dh_client = contextvars.ContextVar[DataHubClient]("_mcp_dh_client")
