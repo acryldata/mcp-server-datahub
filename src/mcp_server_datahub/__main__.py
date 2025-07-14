@@ -1,9 +1,7 @@
-import importlib.metadata
 import logging
 
 import click
 import mcp.types as mt
-from datahub.ingestion.graph.client import get_default_graph
 from datahub.ingestion.graph.config import ClientMode
 from datahub.sdk.main_client import DataHubClient
 from datahub.telemetry import telemetry
@@ -12,9 +10,13 @@ from fastmcp.server.middleware import CallNext, Middleware, MiddlewareContext
 from fastmcp.server.middleware.logging import LoggingMiddleware
 from typing_extensions import Literal
 
+from mcp_server_datahub._version import __version__
 from mcp_server_datahub.mcp_server import mcp, with_datahub_client
 
 logging.basicConfig(level=logging.INFO)
+telemetry.telemetry_instance.add_global_property(
+    "mcp_server_datahub_version", __version__
+)
 
 
 class TelemetryMiddleware(Middleware):
@@ -57,14 +59,10 @@ class TelemetryMiddleware(Middleware):
     capture_kwargs=["transport"],
 )
 def main(transport: Literal["stdio", "sse", "http"], debug: bool) -> None:
-    # Because we want to override the datahub_component, we can't use DataHubClient.from_env()
-    # and need to use the DataHubClient constructor directly.
-    mcp_version = importlib.metadata.version("mcp-server-datahub")
-    graph = get_default_graph(
+    client = DataHubClient.from_env(
         client_mode=ClientMode.SDK,
-        datahub_component=f"mcp-server-datahub/{mcp_version}",
+        datahub_component=f"mcp-server-datahub/{__version__}",
     )
-    client = DataHubClient(graph=graph)
 
     if debug:
         mcp.add_middleware(LoggingMiddleware(include_payloads=True))
