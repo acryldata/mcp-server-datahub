@@ -38,6 +38,12 @@ class TelemetryMiddleware(Middleware):
                 "type": context.type,
                 "method": context.method,
                 "duration_seconds": timer.elapsed_seconds(),
+                "tool_result_is_error": result.isError,
+                "tool_result_length": sum(
+                    len(block.text)
+                    for block in result.content
+                    if isinstance(block, mt.TextContent)
+                ),
             },
         )
 
@@ -45,6 +51,7 @@ class TelemetryMiddleware(Middleware):
 
 
 @click.command()
+@click.version_option(version=__version__)
 @click.option(
     "--transport",
     type=click.Choice(["stdio", "sse", "http"]),
