@@ -58,6 +58,11 @@ class TelemetryMiddleware(Middleware):
     default="stdio",
 )
 @click.option(
+    "--host",
+    type=click.STRING,
+    default="127.0.0.1",
+)
+@click.option(
     "--debug",
     is_flag=True,
     default=False,
@@ -65,7 +70,7 @@ class TelemetryMiddleware(Middleware):
 @telemetry.with_telemetry(
     capture_kwargs=["transport"],
 )
-def main(transport: Literal["stdio", "sse", "http"], debug: bool) -> None:
+def main(transport: Literal["stdio", "sse", "http"], host:str, debug: bool) -> None:
     client = DataHubClient.from_env(
         client_mode=ClientMode.SDK,
         datahub_component=f"mcp-server-datahub/{__version__}",
@@ -77,9 +82,9 @@ def main(transport: Literal["stdio", "sse", "http"], debug: bool) -> None:
 
     with with_datahub_client(client):
         if transport == "http":
-            mcp.run(transport=transport, show_banner=False, stateless_http=True)
+            mcp.run(transport=transport, show_banner=False, stateless_http=True, host=host)
         else:
-            mcp.run(transport=transport, show_banner=False)
+            mcp.run(transport=transport, show_banner=False, host=host)
 
 
 if __name__ == "__main__":
