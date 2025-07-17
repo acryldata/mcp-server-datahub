@@ -55,6 +55,8 @@ async def main(urn_or_query: Optional[str]) -> None:
         if urn_or_query.startswith("urn:"):
             urn = urn_or_query
         else:
+            _divider()
+            print(f"Searching for {urn_or_query}")
             search_data = await _call_tool(mcp_client, "search", query=urn_or_query)
             for entity in search_data["searchResults"]:
                 print(entity["entity"]["urn"])
