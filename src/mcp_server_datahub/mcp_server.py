@@ -157,7 +157,7 @@ def get_entity(urn: str) -> dict:
     description="""Search across DataHub entities.
 
 Returns both a truncated list of results and facets/aggregations that can be used to iteratively refine the search filters.
-To search for all entities, use the wildcard '*' as the query.
+To search for all entities, use the wildcard '*' as the query and set `filters: null`.
 
 A typical workflow will involve multiple calls to this search tool, with each call refining the filters based on the facets/aggregations returned in the previous call.
 After the final search is performed, you'll want to use the other tools to get more details about the relevant entities.
@@ -172,7 +172,6 @@ Here are some example filters:
   ]
 }
 ```
-
 - All non-Snowflake tables
 ```
 {
@@ -197,7 +196,7 @@ def search(
         "query": query,
         "types": types,
         "orFilters": compiled_filters,
-        "batchSize": num_results,
+        "count": max(num_results, 1),  # 0 is not a valid value for count.
     }
 
     response = _execute_graphql(
@@ -206,6 +205,11 @@ def search(
         variables=variables,
         operation_name="search",
     )["scrollAcrossEntities"]
+
+    if num_results == 0 and isinstance(response, dict):
+        # Hack to support num_results=0 without support for it in the backend.
+        response.pop("searchResults", None)
+        response.pop("count", None)
 
     return _clean_gql_response(response)
 

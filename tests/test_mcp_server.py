@@ -11,6 +11,7 @@ from mcp_server_datahub.mcp_server import (
     get_entity,
     get_lineage,
     mcp,
+    search,
     with_datahub_client,
 )
 
@@ -38,6 +39,18 @@ async def mcp_client() -> AsyncGenerator[Client, None]:
 async def test_list_tools(mcp_client: Client) -> None:
     tools = await mcp_client.list_tools()
     assert len(tools) > 0
+
+
+def test_basic_search() -> None:
+    res = search.fn(query="*", num_results=10)
+    assert isinstance(res, dict)
+    assert list(res.keys()) == ["count", "total", "searchResults", "facets"]
+
+
+def test_search_no_results() -> None:
+    res = search.fn(query="*", num_results=0)
+    assert isinstance(res, dict)
+    assert list(res.keys()) == ["total", "facets"]
 
 
 def test_get_dataset() -> None:
