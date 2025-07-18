@@ -85,7 +85,7 @@ async def test_search(mcp_client: Client) -> None:
     filters_json = {
         "and": [
             {"entity_type": ["DATASET"]},
-            {"entity_subtype": "Table"},
+            {"entity_subtype": ["Table"]},
             {"not": {"platform": ["snowflake"]}},
         ]
     }

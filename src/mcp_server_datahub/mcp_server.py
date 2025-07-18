@@ -177,7 +177,7 @@ Here are some example filters:
 {
   "and":[
     {"entity_type": ["DATASET"]},
-    {"entity_subtype": "Table"},
+    {"entity_subtype": ["Table"]},
     {"not": {"platform": ["snowflake"]}}
   ]
 }
