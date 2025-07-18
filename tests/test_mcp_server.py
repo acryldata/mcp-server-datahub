@@ -5,6 +5,7 @@ import pytest
 from datahub.sdk.main_client import DataHubClient
 from fastmcp import Client
 
+from mcp_server_datahub._telemetry import TelemetryMiddleware
 from mcp_server_datahub.mcp_server import (
     get_dataset_queries,
     get_entity,
@@ -15,6 +16,10 @@ from mcp_server_datahub.mcp_server import (
 
 _test_urn = "urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.analytics.pet_details,PROD)"
 _test_domain = "urn:li:domain:0da1ef03-8870-45db-9f47-ef4f592f095c"
+
+# Add telemetry middleware to the MCP server.
+# This way our tests also validate that the telemetry generation does not break anything else.
+mcp.add_middleware(TelemetryMiddleware())
 
 
 @pytest.fixture(autouse=True, scope="session")
