@@ -22,7 +22,7 @@ lint-check: format-check
 
 # Run tests
 test:
-	uv run pytest tests/
+	uv run pytest
 
 # Clean up build artifacts
 clean:
