@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "acryl-datahub==1.2.0.1",
+    "asyncer>=0.0.8",
     "fastmcp==2.10.5",
     "jmespath~=1.0.1",
 ]

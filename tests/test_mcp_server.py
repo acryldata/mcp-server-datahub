@@ -25,7 +25,13 @@ mcp.add_middleware(TelemetryMiddleware())
 
 @pytest.fixture(autouse=True, scope="session")
 def setup_client() -> Iterable[None]:
-    with with_datahub_client(DataHubClient.from_env()):
+    try:
+        client = DataHubClient.from_env()
+    except Exception as e:
+        if "`datahub init`" in str(e):
+            pytest.skip("No credentials available, skipping tests")
+        raise
+    with with_datahub_client(client):
         yield
 
 
@@ -95,9 +101,3 @@ async def test_search(mcp_client: Client) -> None:
     )
     assert res.is_error is False
     assert res.data is not None
-
-
-if __name__ == "__main__":
-    import pytest
-
-    pytest.main()

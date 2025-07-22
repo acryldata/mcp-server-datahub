@@ -26,6 +26,6 @@ jobs:
       - name: Checks
         run: make lint-check
 
-      # Tests don't run without credentials yet.
-      # - name: Test
-      #   run: make test
+      # Note that some tests require credentials that aren't available in CI environment.
+      - name: Test
+        run: make test

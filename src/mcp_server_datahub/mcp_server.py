@@ -1,8 +1,21 @@
 import contextlib
 import contextvars
+import functools
+import inspect
 import pathlib
-from typing import Any, Dict, Iterator, List, Optional
+from typing import (
+    Any,
+    Awaitable,
+    Callable,
+    Dict,
+    Iterator,
+    List,
+    Optional,
+    ParamSpec,
+    TypeVar,
+)
 
+import asyncer
 import jmespath
 from datahub.errors import ItemNotFoundError
 from datahub.ingestion.graph.client import DataHubGraph
@@ -12,6 +25,23 @@ from datahub.sdk.search_filters import Filter, FilterDsl
 from datahub.utilities.ordered_set import OrderedSet
 from fastmcp import FastMCP
 from pydantic import BaseModel
+
+_P = ParamSpec("_P")
+_R = TypeVar("_R")
+
+
+# See https://github.com/jlowin/fastmcp/issues/864#issuecomment-3103678258
+# for why we need to wrap sync functions with asyncify.
+def async_background(fn: Callable[_P, _R]) -> Callable[_P, Awaitable[_R]]:
+    if inspect.iscoroutinefunction(fn):
+        raise RuntimeError("async_background can only be used on non-async functions")
+
+    @functools.wraps(fn)
+    async def wrapper(*args: _P.args, **kwargs: _P.kwargs) -> _R:
+        return await asyncer.asyncify(fn)(*args, **kwargs)
+
+    return wrapper
+
 
 mcp = FastMCP[None](name="datahub")
 
@@ -132,6 +162,7 @@ def _clean_get_entity_response(raw_response: dict) -> dict:
 
 
 @mcp.tool(description="Get an entity by its DataHub URN.")
+@async_background
 def get_entity(urn: str) -> dict:
     client = get_datahub_client()
 
@@ -184,6 +215,7 @@ Here are some example filters:
 ```
 """
 )
+@async_background
 def search(
     query: str = "*",
     filters: Optional[Filter] = None,
@@ -215,6 +247,7 @@ def search(
 
 
 @mcp.tool(description="Use this tool to get the SQL queries associated with a dataset.")
+@async_background
 def get_dataset_queries(dataset_urn: str, start: int = 0, count: int = 10) -> dict:
     client = get_datahub_client()
 
@@ -330,6 +363,7 @@ class AssetLineageAPI:
 Use this tool to get upstream or downstream lineage for any entity, including datasets, schemaFields, dashboards, charts, etc. \
 Set upstream to True for upstream lineage, False for downstream lineage."""
 )
+@async_background
 def get_lineage(urn: str, upstream: bool, max_hops: int = 1) -> dict:
     client = get_datahub_client()
     lineage_api = AssetLineageAPI(client._graph)
