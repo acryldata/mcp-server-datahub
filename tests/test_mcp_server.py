@@ -62,6 +62,45 @@ async def test_search_no_results() -> None:
 
 
 @pytest.mark.anyio
+async def test_search_simple_filter(mcp_client: Client) -> None:
+    filters_json = {"platform": ["looker"]}
+    res = await mcp_client.call_tool(
+        "search",
+        arguments={"query": "*", "filters": filters_json},
+    )
+    assert res.is_error is False
+    assert res.data is not None
+
+
+@pytest.mark.anyio
+async def test_search_string_filter(mcp_client: Client) -> None:
+    filters_json = {"platform": ["looker"]}
+    res = await mcp_client.call_tool(
+        "search",
+        arguments={"query": "*", "filters": json.dumps(filters_json)},
+    )
+    assert res.is_error is False
+    assert res.data is not None
+
+
+@pytest.mark.anyio
+async def test_search_complex_filter(mcp_client: Client) -> None:
+    filters_json = {
+        "and": [
+            {"entity_type": ["DATASET"]},
+            {"entity_subtype": ["Table"]},
+            {"not": {"platform": ["snowflake"]}},
+        ]
+    }
+    res = await mcp_client.call_tool(
+        "search",
+        arguments={"query": "*", "filters": filters_json},
+    )
+    assert res.is_error is False
+    assert res.data is not None
+
+
+@pytest.mark.anyio
 async def test_get_dataset() -> None:
     res = await get_entity.fn(_test_urn)
     assert res is not None
@@ -90,20 +129,3 @@ async def test_get_lineage() -> None:
 async def test_get_dataset_queries() -> None:
     res = await get_dataset_queries.fn(_test_urn)
     assert res is not None
-
-
-@pytest.mark.anyio
-async def test_search(mcp_client: Client) -> None:
-    filters_json = {
-        "and": [
-            {"entity_type": ["DATASET"]},
-            {"entity_subtype": ["Table"]},
-            {"not": {"platform": ["snowflake"]}},
-        ]
-    }
-    res = await mcp_client.call_tool(
-        "search",
-        arguments={"query": "*", "filters": filters_json},
-    )
-    assert res.is_error is False
-    assert res.data is not None
