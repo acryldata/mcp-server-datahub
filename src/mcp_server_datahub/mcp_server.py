@@ -409,32 +409,9 @@ class AssetLineageAPI:
     description="""\
 Use this tool to get upstream or downstream lineage for any entity, including datasets, schemaFields, dashboards, charts, etc. \
 Set upstream to True for upstream lineage, False for downstream lineage.
-Set max_hops to 3 to find all upstream/downstream entities.
 Set `column: null` to get lineage for entire dataset or for entity type other than dataset.
-
-Here are some example filters:
-- All Looker assets
-```
-{"platform": ["looker"]}
-```
-- Production environment warehouse assets
-```
-{
-  "and": [
-    {"env": ["PROD"]},
-    {"platform": ["snowflake", "bigquery", "redshift"]}
-  ]
-}
-```
-- All non-Snowflake tables
-```
-{
-  "and":[
-    {"entity_type": ["DATASET"]},
-    {"entity_subtype": ["Table"]},
-    {"not": {"platform": ["snowflake"]}}
-  ]
-}
+Setting max_hops to 3 is equivalent to unlimited hops.
+Usage and format of filters is same as that in search tool.
 """
 )
 @async_background

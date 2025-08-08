@@ -118,7 +118,7 @@ async def test_get_domain() -> None:
 
 @pytest.mark.anyio
 async def test_get_lineage() -> None:
-    res = await get_lineage.fn(_test_urn, upstream=True, max_hops=1)
+    res = await get_lineage.fn(_test_urn, column=None, upstream=True, max_hops=1)
     assert res is not None
 
     # Ensure that URL injection did something.

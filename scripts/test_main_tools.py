@@ -76,7 +76,12 @@ async def main(urn_or_query: Optional[str]) -> None:
         print(
             json.dumps(
                 await _call_tool(
-                    mcp_client, "get_lineage", urn=urn, upstream=False, max_hops=3
+                    mcp_client,
+                    "get_lineage",
+                    urn=urn,
+                    column=None,
+                    upstream=False,
+                    max_hops=3,
                 ),
                 indent=2,
             )
