@@ -25,7 +25,8 @@ from datahub.sdk.search_client import compile_filters
 from datahub.sdk.search_filters import Filter, FilterDsl, load_filters
 from datahub.utilities.ordered_set import OrderedSet
 from fastmcp import FastMCP
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+from functools import lru_cache
 
 _P = ParamSpec("_P")
 _R = TypeVar("_R")
@@ -173,7 +174,80 @@ def _clean_get_entity_response(raw_response: dict) -> dict:
     return response
 
 
-@mcp.tool(description="Get an entity by its DataHub URN.")
+class SemanticVersionStruct(BaseModel):
+    semantic_version: str = Field(alias="semanticVersion")
+    version_stamp: str = Field(alias="versionStamp")
+
+
+class SchemaVersionList(BaseModel):
+    latest_version: SemanticVersionStruct
+    versions: list[SemanticVersionStruct]
+
+
+class DatasetSchemaAPI:
+    def __init__(self, graph: DataHubGraph) -> None:
+        self._graph = graph
+
+    def get_schema_version_list(self, dataset_urn: str) -> SchemaVersionList | None:
+        variables = {
+            "input": {
+                "datasetUrn": dataset_urn,
+            }
+        }
+        resp = _execute_graphql(
+            self._graph,
+            query=entity_details_fragment_gql,
+            variables=variables,
+            operation_name="getSchemaVersionList",
+        )
+
+        if not (raw_schema_versions := resp.get("getSchemaVersionList")):
+            return None
+
+        return SchemaVersionList(
+            latest_version=SemanticVersionStruct.model_validate(
+                raw_schema_versions.get("latestVersion", {})
+            ),
+            versions=[
+                SemanticVersionStruct.model_validate(structs)
+                for structs in raw_schema_versions.get("semanticVersionList", [])
+            ],
+        )
+
+    def get_versioned_dataset(
+        self, dataset_urn: str, semantic_version: str
+    ) -> dict[str, Any]:
+        variables = {
+            "urn": dataset_urn,
+            "versionStamp": self._get_version_timestamp(dataset_urn, semantic_version),
+        }
+        resp = _execute_graphql(
+            self._graph,
+            query=entity_details_fragment_gql,
+            variables=variables,
+            operation_name="getVersionedDataset",
+        )
+        return _clean_gql_response(resp.get("versionedDataset", {}))
+
+    def _get_version_timestamp(self, dataset_urn: str, semantic_version: str):
+        if not (schema_version_list := self.get_schema_version_list(dataset_urn)):
+            raise ValueError(f"No schema_version_list found for dataset {dataset_urn}")
+
+        version_stamp_mapping = {
+            struct.semantic_version: struct.version_stamp
+            for struct in schema_version_list.versions
+        }
+
+        if not (version_stamp := version_stamp_mapping.get(semantic_version)):
+            raise ValueError(
+                f"Version '{semantic_version}' not found for dataset '{dataset_urn}'"
+            )
+        return version_stamp
+
+
+@mcp.tool(
+    description="Get an entity by its DataHub URN. This also provide schema_version_list(latest version, all versions) if available."
+)
 @async_background
 def get_entity(urn: str) -> dict:
     client = get_datahub_client()
@@ -192,6 +266,22 @@ def get_entity(urn: str) -> dict:
     )["entity"]
 
     _inject_urls_for_urns(client._graph, result, [""])
+
+    if result.get("urn", "").startswith("urn:li:dataset:"):
+        schema_api = DatasetSchemaAPI(client._graph)
+
+        if schema_version_list := schema_api.get_schema_version_list(urn):
+            sorted_versions = sorted(
+                [v.semantic_version for v in schema_version_list.versions]
+            )
+            latest_semantic_version = (
+                schema_version_list.latest_version.semantic_version
+            )
+
+            result["schemaVersionList"] = {
+                "latestVersion": latest_semantic_version,
+                "versions": sorted_versions,
+            }
 
     return _clean_get_entity_response(result)
 
@@ -441,3 +531,13 @@ def get_lineage(
     lineage = lineage_api.get_lineage(asset_lineage_directive)
     _inject_urls_for_urns(client._graph, lineage, ["*.searchResults[].entity"])
     return lineage
+
+
+@mcp.tool(description="Get schema from a dataset by its URN and version.")
+@async_background
+@lru_cache(maxsize=20)
+def get_versioned_dataset(dataset_urn: str, semantic_version: str) -> dict:
+    client = get_datahub_client()
+    schema_api = DatasetSchemaAPI(client._graph)
+
+    return schema_api.get_versioned_dataset(dataset_urn, semantic_version)
