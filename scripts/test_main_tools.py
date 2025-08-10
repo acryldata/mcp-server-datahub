@@ -94,6 +94,19 @@ async def main(urn_or_query: Optional[str]) -> None:
                 indent=2,
             )
         )
+        _divider()
+        print(f"Getting versioned_dataset: {urn}")
+        print(
+            json.dumps(
+                await _call_tool(
+                    mcp_client,
+                    "get_versioned_dataset",
+                    dataset_urn=urn_or_query,
+                    semantic_version="0.0.0",
+                ),
+                indent=2,
+            )
+        )
 
 
 if __name__ == "__main__":

@@ -1302,3 +1302,59 @@ query GetEntityLineage($input: SearchAcrossLineageInput!) {
     }
   }
 }
+
+
+query getSchemaVersionList($input: GetSchemaVersionListInput!) {
+  getSchemaVersionList(input: $input) {
+    latestVersion {
+      semanticVersion
+      versionStamp
+      __typename
+    }
+    semanticVersionList {
+      semanticVersion
+      versionStamp
+      __typename
+    }
+    __typename
+  }
+}
+
+
+query getVersionedDataset($urn: String!, $versionStamp: String) {
+  versionedDataset(urn: $urn, versionStamp: $versionStamp) {
+    schema {
+      fields {
+        fieldPath
+        jsonPath
+        nullable
+        description
+        type
+        nativeDataType
+        recursive
+        isPartOfKey
+        isPartitioningKey
+        __typename
+      }
+      lastObserved
+      __typename
+    }
+    editableSchemaMetadata {
+      editableSchemaFieldInfo {
+        fieldPath
+        description
+        globalTags {
+          ...globalTagsFields
+          __typename
+        }
+        glossaryTerms {
+          ...glossaryTerms
+          __typename
+        }
+        __typename
+      }
+      __typename
+    }
+    __typename
+  }
+}

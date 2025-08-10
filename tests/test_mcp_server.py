@@ -10,6 +10,7 @@ from mcp_server_datahub.mcp_server import (
     get_dataset_queries,
     get_entity,
     get_lineage,
+    get_versioned_dataset,
     mcp,
     search,
     with_datahub_client,
@@ -131,3 +132,9 @@ async def test_get_dataset_queries() -> None:
     assert res is not None
     assert res.get("queries") is not None
     assert len(res.get("queries")) > 0
+
+
+@pytest.mark.anyio
+async def test_get_versioned_datset() -> None:
+    res = await get_versioned_dataset.fn(_test_urn, "0.0.0")
+    assert res is not None
