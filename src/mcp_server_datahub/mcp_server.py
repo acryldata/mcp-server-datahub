@@ -96,7 +96,7 @@ def _execute_graphql(
     )
 
 
-def _inject_urls_for_urns(
+def inject_urls_for_urns(
     graph: DataHubGraph, response: Any, json_paths: List[str]
 ) -> None:
     if not _is_datahub_cloud(graph):
@@ -112,7 +112,7 @@ def _inject_urls_for_urns(
                 item.update(new_item)
 
 
-def _maybe_convert_to_schema_field_urn(urn: str, column: Optional[str]) -> str:
+def maybe_convert_to_schema_field_urn(urn: str, column: Optional[str]) -> str:
     if column is not None:
         maybe_dataset_urn = Urn.from_string(urn)
         if not isinstance(maybe_dataset_urn, DatasetUrn):
@@ -131,7 +131,7 @@ entity_details_fragment_gql = (
 queries_gql = (pathlib.Path(__file__).parent / "gql/queries.gql").read_text()
 
 
-def _clean_gql_response(response: Any) -> Any:
+def clean_gql_response(response: Any) -> Any:
     if isinstance(response, dict):
         banned_keys = {
             "__typename",
@@ -141,19 +141,19 @@ def _clean_gql_response(response: Any) -> Any:
         for k, v in response.items():
             if k in banned_keys or v is None or v == []:
                 continue
-            cleaned_v = _clean_gql_response(v)
+            cleaned_v = clean_gql_response(v)
             if cleaned_v is not None and cleaned_v != {}:
                 cleaned_response[k] = cleaned_v
 
         return cleaned_response
     elif isinstance(response, list):
-        return [_clean_gql_response(item) for item in response]
+        return [clean_gql_response(item) for item in response]
     else:
         return response
 
 
-def _clean_get_entity_response(raw_response: dict) -> dict:
-    response = _clean_gql_response(raw_response)
+def clean_get_entity_response(raw_response: dict) -> dict:
+    response = clean_gql_response(raw_response)
 
     if response and (schema_metadata := response.get("schemaMetadata")):
         # Remove empty platformSchema to reduce response clutter
@@ -191,9 +191,9 @@ def get_entity(urn: str) -> dict:
         operation_name="GetEntity",
     )["entity"]
 
-    _inject_urls_for_urns(client._graph, result, [""])
+    inject_urls_for_urns(client._graph, result, [""])
 
-    return _clean_get_entity_response(result)
+    return clean_get_entity_response(result)
 
 
 @mcp.tool(
@@ -274,7 +274,7 @@ def search(
         response.pop("searchResults", None)
         response.pop("count", None)
 
-    return _clean_gql_response(response)
+    return clean_gql_response(response)
 
 
 @mcp.tool(
@@ -286,7 +286,7 @@ def get_dataset_queries(
 ) -> dict:
     client = get_datahub_client()
 
-    urn = _maybe_convert_to_schema_field_urn(urn, column)
+    urn = maybe_convert_to_schema_field_urn(urn, column)
 
     entities_filter = FilterDsl.custom_filter(
         field="entities", condition="EQUAL", values=[urn]
@@ -310,7 +310,7 @@ def get_dataset_queries(
         if query.get("subjects"):
             query["subjects"] = _deduplicate_subjects(query["subjects"])
 
-    return _clean_gql_response(result)
+    return clean_gql_response(result)
 
 
 def _deduplicate_subjects(subjects: list[dict]) -> list[str]:
@@ -374,7 +374,7 @@ class AssetLineageAPI:
             "searchFlags": {"skipHighlighting": True, "maxAggValues": 3},
         }
         if asset_lineage_directive.upstream:
-            result["upstreams"] = _clean_gql_response(
+            result["upstreams"] = clean_gql_response(
                 _execute_graphql(
                     self.graph,
                     query=entity_details_fragment_gql,
@@ -388,7 +388,7 @@ class AssetLineageAPI:
                 )["searchAcrossLineage"]
             )
         if asset_lineage_directive.downstream:
-            result["downstreams"] = _clean_gql_response(
+            result["downstreams"] = clean_gql_response(
                 _execute_graphql(
                     self.graph,
                     query=entity_details_fragment_gql,
@@ -430,7 +430,7 @@ def get_lineage(
 
     lineage_api = AssetLineageAPI(client._graph)
 
-    urn = _maybe_convert_to_schema_field_urn(urn, column)
+    urn = maybe_convert_to_schema_field_urn(urn, column)
     asset_lineage_directive = AssetLineageDirective(
         urn=urn,
         upstream=upstream,
@@ -439,5 +439,5 @@ def get_lineage(
         extra_filters=filters,
     )
     lineage = lineage_api.get_lineage(asset_lineage_directive)
-    _inject_urls_for_urns(client._graph, lineage, ["*.searchResults[].entity"])
+    inject_urls_for_urns(client._graph, lineage, ["*.searchResults[].entity"])
     return lineage
