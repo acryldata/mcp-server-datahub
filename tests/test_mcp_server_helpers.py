@@ -26,7 +26,7 @@ def test_inject_urls_for_urns():
                 },
                 {
                     "entity": {
-                        "urn": "urn:li:chart:(looker, baz)",
+                        "urn": "urn:li:chart:(looker,baz)",
                         "name": "baz",
                     }
                 },
@@ -46,8 +46,8 @@ def test_inject_urls_for_urns():
                 },
                 {
                     "entity": {
-                        "urn": "urn:li:chart:(looker, baz)",
-                        "url": "https://xyz.com/chart/urn%3Ali%3Achart%3A%28looker%2C%20baz%29/",
+                        "urn": "urn:li:chart:(looker,baz)",
+                        "url": "https://xyz.com/chart/urn%3Ali%3Achart%3A%28looker%2Cbaz%29/",
                         "name": "baz",
                     }
                 },
