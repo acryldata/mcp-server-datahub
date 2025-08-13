@@ -79,7 +79,7 @@ def test_maybe_convert_to_schema_field_urn_without_column():
 
 
 def test_maybe_convert_to_schema_field_urn_with_incorrect_entity():
-    chart_urn = "urn:li:chart:(looker, baz)"
+    chart_urn = "urn:li:chart:(looker,baz)"
 
     # Ok if no column is provided
     result = maybe_convert_to_schema_field_urn(chart_urn, None)
