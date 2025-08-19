@@ -35,12 +35,10 @@ class TelemetryMiddleware(Middleware):
                 # This method typically returns fastmcp.tools.tool.ToolResult.
                 if isinstance(result, mt.CallToolResult):
                     telemetry_data["tool_result_is_error"] = result.isError
-                telemetry_data["tool_result_length"] = (
-                    sum(
-                        len(block.text)
-                        for block in result.content
-                        if isinstance(block, mt.TextContent)
-                    ),
+                telemetry_data["tool_result_length"] = sum(
+                    len(block.text)
+                    for block in result.content
+                    if isinstance(block, mt.TextContent)
                 )
 
                 return result
