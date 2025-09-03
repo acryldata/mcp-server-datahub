@@ -203,7 +203,9 @@ def maybe_convert_to_schema_field_urn(urn: str, column: Optional[str]) -> str:
 
 
 search_gql = (pathlib.Path(__file__).parent / "gql/search.gql").read_text()
-semantic_search_gql = (pathlib.Path(__file__).parent / "gql/semantic_search.gql").read_text()
+semantic_search_gql = (
+    pathlib.Path(__file__).parent / "gql/semantic_search.gql"
+).read_text()
 entity_details_fragment_gql = (
     pathlib.Path(__file__).parent / "gql/entity_details.gql"
 ).read_text()

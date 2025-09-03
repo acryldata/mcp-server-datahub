@@ -38,7 +38,7 @@ class TestSemanticSearchConfig:
     def test_semantic_search_case_insensitive(self):
         """Test that env var is case insensitive."""
         test_cases = ["TRUE", "True", "true", "FALSE", "False", "false"]
-        
+
         for value in ["TRUE", "True", "true"]:
             with mock.patch.dict(os.environ, {"SEMANTIC_SEARCH_ENABLED": value}):
                 assert _is_semantic_search_enabled() is True
@@ -50,7 +50,7 @@ class TestSemanticSearchConfig:
     def test_semantic_search_invalid_values(self):
         """Test that invalid values default to disabled."""
         invalid_values = ["yes", "no", "1", "0", "enabled", "disabled", ""]
-        
+
         for value in invalid_values:
             with mock.patch.dict(os.environ, {"SEMANTIC_SEARCH_ENABLED": value}):
                 assert _is_semantic_search_enabled() is False
@@ -59,22 +59,24 @@ class TestSemanticSearchConfig:
 class TestSearchImplementation:
     """Test the core search implementation logic."""
 
-    @mock.patch('mcp_server_datahub.mcp_server.get_datahub_client')
-    @mock.patch('mcp_server_datahub.mcp_server._execute_graphql')
-    def test_search_implementation_semantic_strategy(self, mock_execute_graphql, mock_get_client):
+    @mock.patch("mcp_server_datahub.mcp_server.get_datahub_client")
+    @mock.patch("mcp_server_datahub.mcp_server._execute_graphql")
+    def test_search_implementation_semantic_strategy(
+        self, mock_execute_graphql, mock_get_client
+    ):
         """Test that semantic strategy uses the correct GraphQL query and parameters."""
         # Setup mocks
         mock_graph = mock.Mock()
         mock_client = mock.Mock()
         mock_client._graph = mock_graph
         mock_get_client.return_value = mock_client
-        
+
         mock_response = {
             "semanticSearchAcrossEntities": {
                 "count": 5,
                 "total": 100,
                 "searchResults": [],
-                "facets": []
+                "facets": [],
             }
         }
         mock_execute_graphql.return_value = mock_response
@@ -84,17 +86,17 @@ class TestSearchImplementation:
             query="customer data",
             filters=None,
             num_results=10,
-            search_strategy="semantic"
+            search_strategy="semantic",
         )
 
         # Verify correct GraphQL query was used
         mock_execute_graphql.assert_called_once()
         call_args = mock_execute_graphql.call_args
-        
+
         assert call_args[0][0] == mock_graph  # First arg is the graph
         assert call_args[1]["query"] == semantic_search_gql  # Semantic GraphQL query
         assert call_args[1]["operation_name"] == "semanticSearch"
-        
+
         # Verify variables
         variables = call_args[1]["variables"]
         assert variables["query"] == "customer data"
@@ -105,74 +107,72 @@ class TestSearchImplementation:
         assert result["count"] == 5
         assert result["total"] == 100
 
-    @mock.patch('mcp_server_datahub.mcp_server.get_datahub_client')
-    @mock.patch('mcp_server_datahub.mcp_server._execute_graphql')
-    def test_search_implementation_keyword_strategy(self, mock_execute_graphql, mock_get_client):
+    @mock.patch("mcp_server_datahub.mcp_server.get_datahub_client")
+    @mock.patch("mcp_server_datahub.mcp_server._execute_graphql")
+    def test_search_implementation_keyword_strategy(
+        self, mock_execute_graphql, mock_get_client
+    ):
         """Test that keyword strategy uses the correct GraphQL query and parameters."""
         # Setup mocks
         mock_graph = mock.Mock()
         mock_client = mock.Mock()
         mock_client._graph = mock_graph
         mock_get_client.return_value = mock_client
-        
+
         mock_response = {
             "scrollAcrossEntities": {
                 "count": 3,
                 "total": 50,
                 "searchResults": [],
-                "facets": []
+                "facets": [],
             }
         }
         mock_execute_graphql.return_value = mock_response
 
         # Call the function
         result = _search_implementation(
-            query="user_events",
-            filters=None,
-            num_results=5,
-            search_strategy="keyword"
+            query="user_events", filters=None, num_results=5, search_strategy="keyword"
         )
 
         # Verify correct GraphQL query was used
         mock_execute_graphql.assert_called_once()
         call_args = mock_execute_graphql.call_args
-        
+
         assert call_args[0][0] == mock_graph
         assert call_args[1]["query"] == search_gql  # Keyword GraphQL query
         assert call_args[1]["operation_name"] == "search"
-        
+
         # Verify variables
         variables = call_args[1]["variables"]
         assert variables["query"] == "user_events"
         assert variables["count"] == 5
         assert variables["scrollId"] is None  # Keyword search includes scrollId
 
-    @mock.patch('mcp_server_datahub.mcp_server.get_datahub_client')
-    @mock.patch('mcp_server_datahub.mcp_server._execute_graphql')
-    def test_search_implementation_default_strategy(self, mock_execute_graphql, mock_get_client):
+    @mock.patch("mcp_server_datahub.mcp_server.get_datahub_client")
+    @mock.patch("mcp_server_datahub.mcp_server._execute_graphql")
+    def test_search_implementation_default_strategy(
+        self, mock_execute_graphql, mock_get_client
+    ):
         """Test that None/default strategy defaults to keyword search."""
         # Setup mocks
         mock_graph = mock.Mock()
         mock_client = mock.Mock()
         mock_client._graph = mock_graph
         mock_get_client.return_value = mock_client
-        
+
         mock_response = {
             "scrollAcrossEntities": {
                 "count": 1,
                 "total": 10,
                 "searchResults": [],
-                "facets": []
+                "facets": [],
             }
         }
         mock_execute_graphql.return_value = mock_response
 
         # Call without search_strategy (should default to keyword)
         result = _search_implementation(
-            query="test",
-            filters=None,
-            num_results=1,
-            search_strategy=None
+            query="test", filters=None, num_results=1, search_strategy=None
         )
 
         # Should use keyword search
@@ -180,80 +180,87 @@ class TestSearchImplementation:
         assert call_args[1]["query"] == search_gql
         assert call_args[1]["operation_name"] == "search"
 
-    @mock.patch('mcp_server_datahub.mcp_server.get_datahub_client')
-    @mock.patch('mcp_server_datahub.mcp_server._execute_graphql')
-    @mock.patch('mcp_server_datahub.mcp_server.load_filters')
-    @mock.patch('mcp_server_datahub.mcp_server.compile_filters')
-    def test_search_implementation_with_filters(self, mock_compile_filters, mock_load_filters, mock_execute_graphql, mock_get_client):
+    @mock.patch("mcp_server_datahub.mcp_server.get_datahub_client")
+    @mock.patch("mcp_server_datahub.mcp_server._execute_graphql")
+    @mock.patch("mcp_server_datahub.mcp_server.load_filters")
+    @mock.patch("mcp_server_datahub.mcp_server.compile_filters")
+    def test_search_implementation_with_filters(
+        self,
+        mock_compile_filters,
+        mock_load_filters,
+        mock_execute_graphql,
+        mock_get_client,
+    ):
         """Test that filters are properly processed and passed through."""
         # Setup mocks
         mock_graph = mock.Mock()
         mock_client = mock.Mock()
         mock_client._graph = mock_graph
         mock_get_client.return_value = mock_client
-        
+
         mock_response = {
             "semanticSearchAcrossEntities": {
                 "count": 2,
                 "total": 20,
                 "searchResults": [],
-                "facets": []
+                "facets": [],
             }
         }
         mock_execute_graphql.return_value = mock_response
 
         # Mock filter compilation
         mock_compile_filters.return_value = (["DATASET"], [{"platform": "snowflake"}])
-        
+
         # Test with filter string (gets parsed)
         filters = '{"platform": ["snowflake"]}'
-        
+
         result = _search_implementation(
             query="analytics",
             filters=filters,
             num_results=10,
-            search_strategy="semantic"
+            search_strategy="semantic",
         )
 
         # Verify filters were processed
         mock_load_filters.assert_called_once_with(filters)
         mock_compile_filters.assert_called_once()
-        
+
         call_args = mock_execute_graphql.call_args
         variables = call_args[1]["variables"]
-        
+
         # Should have compiled filters
         assert "orFilters" in variables
         assert variables["query"] == "analytics"
         assert variables["types"] == ["DATASET"]
         assert variables["orFilters"] == [{"platform": "snowflake"}]
 
-    @mock.patch('mcp_server_datahub.mcp_server.get_datahub_client')
-    @mock.patch('mcp_server_datahub.mcp_server._execute_graphql')
-    def test_search_implementation_num_results_zero_hack(self, mock_execute_graphql, mock_get_client):
+    @mock.patch("mcp_server_datahub.mcp_server.get_datahub_client")
+    @mock.patch("mcp_server_datahub.mcp_server._execute_graphql")
+    def test_search_implementation_num_results_zero_hack(
+        self, mock_execute_graphql, mock_get_client
+    ):
         """Test the num_results=0 hack works correctly."""
         # Setup mocks
         mock_graph = mock.Mock()
         mock_client = mock.Mock()
         mock_client._graph = mock_graph
         mock_get_client.return_value = mock_client
-        
+
         mock_response = {
             "semanticSearchAcrossEntities": {
                 "count": 5,
                 "total": 100,
                 "searchResults": [{"entity": {"urn": "test"}}],
-                "facets": [{"field": "platform", "displayName": "Platform", "aggregations": []}]
+                "facets": [
+                    {"field": "platform", "displayName": "Platform", "aggregations": []}
+                ],
             }
         }
         mock_execute_graphql.return_value = mock_response
 
         # Call with num_results=0
         result = _search_implementation(
-            query="test",
-            filters=None,
-            num_results=0,
-            search_strategy="semantic"
+            query="test", filters=None, num_results=0, search_strategy="semantic"
         )
 
         # Verify the hack: searchResults and count should be removed
@@ -274,7 +281,7 @@ async def test_tool_registration_without_semantic_search():
 
 @pytest.mark.anyio
 async def test_tool_registration_with_semantic_search():
-    """Test that enhanced search tool is available when semantic search is enabled.""" 
+    """Test that enhanced search tool is available when semantic search is enabled."""
     with mock.patch.dict(os.environ, {"SEMANTIC_SEARCH_ENABLED": "true"}):
         assert _is_semantic_search_enabled() is True
 
@@ -291,7 +298,7 @@ class TestGraphQLQueries:
     def test_search_gql_contains_correct_operation(self):
         """Test that regular search GraphQL contains the correct operation."""
         assert "scrollAcrossEntities" in search_gql
-        assert "query search" in search_gql  
+        assert "query search" in search_gql
         assert "SearchEntityInfo" in search_gql
 
     def test_gql_files_have_todo_comments(self):
@@ -299,9 +306,9 @@ class TestGraphQLQueries:
         expected_comments = [
             "TODO: Consider adding these fields",
             "score",
-            "scoringMethod"
+            "scoringMethod",
         ]
-        
+
         for comment in expected_comments:
             assert comment in semantic_search_gql
             assert comment in search_gql
