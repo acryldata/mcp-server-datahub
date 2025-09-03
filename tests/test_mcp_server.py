@@ -153,7 +153,7 @@ async def test_get_dataset_queries() -> None:
 
 @pytest.mark.skipif(
     not os.environ.get("TEST_SEMANTIC_SEARCH", "false").lower() == "true",
-    reason="Semantic search integration test disabled. Set TEST_SEMANTIC_SEARCH=true to enable."
+    reason="Semantic search integration test disabled. Set TEST_SEMANTIC_SEARCH=true to enable.",
 )
 @pytest.mark.anyio
 async def test_semantic_search_integration() -> None:
