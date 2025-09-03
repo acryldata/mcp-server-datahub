@@ -334,7 +334,7 @@ async def test_tool_binding_enhanced_search() -> None:
 
     This test requires running with SEMANTIC_SEARCH_ENABLED=true environment variable.
     Enable with: SEMANTIC_SEARCH_ENABLED=true pytest
-    
+
     This test includes module reloading at the start to verify the conditional registration
     logic works correctly with a fresh module state. It also verifies that the search_strategy
     parameter is correctly passed through to the _search_implementation function.
@@ -342,26 +342,22 @@ async def test_tool_binding_enhanced_search() -> None:
     # Reload the module at the beginning to ensure fresh state
     print("Reloading mcp_server module for fresh state...")
     importlib.reload(mcp_server_module)
-    
+
     # Re-import the reloaded objects
     from mcp_server_datahub.mcp_server import (
-        mcp as reloaded_mcp, 
-        _is_semantic_search_enabled as reloaded_is_semantic_search_enabled, 
+        mcp as reloaded_mcp,
+        _is_semantic_search_enabled as reloaded_is_semantic_search_enabled,
         with_datahub_client as reloaded_with_datahub_client,
-        _search_implementation
+        _search_implementation,
     )
-    
+
     # Verify we're in enhanced mode
     assert reloaded_is_semantic_search_enabled() is True, (
         "This test requires SEMANTIC_SEARCH_ENABLED=true"
     )
 
     # Mock response for search implementation
-    mock_search_response = {
-        "count": 5,
-        "total": 100,
-        "searchResults": []
-    }
+    mock_search_response = {"count": 5, "total": 100, "searchResults": []}
 
     # Create mock with automatic call tracking
     mock_search_impl = mock.Mock(return_value=mock_search_response)
@@ -379,11 +375,14 @@ async def test_tool_binding_enhanced_search() -> None:
             assert search_tools[0].name == "search"
 
             # Mock the search implementation function
-            with mock.patch('mcp_server_datahub.mcp_server._search_implementation', mock_search_impl):
+            with mock.patch(
+                "mcp_server_datahub.mcp_server._search_implementation", mock_search_impl
+            ):
                 # Test keyword search strategy
                 print("Testing keyword search strategy parameter passing...")
                 result = await mcp_client.call_tool(
-                    "search", {"query": "*", "search_strategy": "keyword", "num_results": 3}
+                    "search",
+                    {"query": "*", "search_strategy": "keyword", "num_results": 3},
                 )
                 assert result.content, "Tool result should have content"
                 content = assert_type(TextContent, result.content[0])
@@ -394,21 +393,38 @@ async def test_tool_binding_enhanced_search() -> None:
 
                 # Verify keyword search passed correct parameters to _search_implementation
                 calls = mock_search_impl.call_args_list
-                assert len(calls) == 1, "Should have made exactly one search implementation call"
+                assert len(calls) == 1, (
+                    "Should have made exactly one search implementation call"
+                )
                 keyword_call = calls[0]
-                assert keyword_call.args[0] == "*", "Query should be passed through correctly"
-                assert keyword_call.args[1] is None, "Filters should be passed through correctly"
-                assert keyword_call.args[2] == 3, "num_results should be passed through correctly"
-                assert keyword_call.args[3] == "keyword", "search_strategy should be 'keyword'"
+                assert keyword_call.args[0] == "*", (
+                    "Query should be passed through correctly"
+                )
+                assert keyword_call.args[1] is None, (
+                    "Filters should be passed through correctly"
+                )
+                assert keyword_call.args[2] == 3, (
+                    "num_results should be passed through correctly"
+                )
+                assert keyword_call.args[3] == "keyword", (
+                    "search_strategy should be 'keyword'"
+                )
 
                 mock_search_impl.reset_mock()  # Reset for semantic search test
 
                 # Test semantic search strategy
                 print("Testing semantic search strategy parameter passing...")
                 result = await mcp_client.call_tool(
-                    "search", {"query": "customer data", "search_strategy": "semantic", "num_results": 5}
+                    "search",
+                    {
+                        "query": "customer data",
+                        "search_strategy": "semantic",
+                        "num_results": 5,
+                    },
                 )
-                assert result.content, "Tool result should have content for semantic search"
+                assert result.content, (
+                    "Tool result should have content for semantic search"
+                )
                 content = assert_type(TextContent, result.content[0])
                 res = json.loads(content.text)
                 assert isinstance(res, dict)
@@ -417,12 +433,22 @@ async def test_tool_binding_enhanced_search() -> None:
 
                 # Verify semantic search passed correct parameters to _search_implementation
                 calls = mock_search_impl.call_args_list
-                assert len(calls) == 1, "Should have made exactly one search implementation call"
+                assert len(calls) == 1, (
+                    "Should have made exactly one search implementation call"
+                )
                 semantic_call = calls[0]
-                assert semantic_call.args[0] == "customer data", "Query should be passed through correctly"
-                assert semantic_call.args[1] is None, "Filters should be passed through correctly"
-                assert semantic_call.args[2] == 5, "num_results should be passed through correctly"
-                assert semantic_call.args[3] == "semantic", "search_strategy should be 'semantic'"
+                assert semantic_call.args[0] == "customer data", (
+                    "Query should be passed through correctly"
+                )
+                assert semantic_call.args[1] is None, (
+                    "Filters should be passed through correctly"
+                )
+                assert semantic_call.args[2] == 5, (
+                    "num_results should be passed through correctly"
+                )
+                assert semantic_call.args[3] == "semantic", (
+                    "search_strategy should be 'semantic'"
+                )
 
                 mock_search_impl.reset_mock()  # Reset for default strategy test
 
@@ -431,16 +457,28 @@ async def test_tool_binding_enhanced_search() -> None:
                 result = await mcp_client.call_tool(
                     "search", {"query": "test", "num_results": 2}
                 )
-                assert result.content, "Tool result should have content for default search"
-                
+                assert result.content, (
+                    "Tool result should have content for default search"
+                )
+
                 # Verify default search behavior
                 calls = mock_search_impl.call_args_list
-                assert len(calls) == 1, "Should have made exactly one search implementation call"
+                assert len(calls) == 1, (
+                    "Should have made exactly one search implementation call"
+                )
                 default_call = calls[0]
-                assert default_call.args[0] == "test", "Query should be passed through correctly"
-                assert default_call.args[1] is None, "Filters should be passed through correctly"
-                assert default_call.args[2] == 2, "num_results should be passed through correctly"
-                assert default_call.args[3] is None, "search_strategy should be None when not specified"
+                assert default_call.args[0] == "test", (
+                    "Query should be passed through correctly"
+                )
+                assert default_call.args[1] is None, (
+                    "Filters should be passed through correctly"
+                )
+                assert default_call.args[2] == 2, (
+                    "num_results should be passed through correctly"
+                )
+                assert default_call.args[3] is None, (
+                    "search_strategy should be None when not specified"
+                )
 
     print("Search strategy parameter verification completed successfully!")
     print("Module reload test completed successfully!")

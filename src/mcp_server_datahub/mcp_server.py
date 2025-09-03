@@ -215,26 +215,26 @@ queries_gql = (pathlib.Path(__file__).parent / "gql/queries.gql").read_text()
 
 def _is_semantic_search_enabled() -> bool:
     """Check if semantic search is enabled via environment variable.
-    
-    IMPORTANT: Semantic search is an EXPERIMENTAL feature that is ONLY available on 
-    DataHub Cloud deployments with specific versions and configurations. This feature 
+
+    IMPORTANT: Semantic search is an EXPERIMENTAL feature that is ONLY available on
+    DataHub Cloud deployments with specific versions and configurations. This feature
     must be explicitly enabled by the DataHub team for your Cloud instance.
-    
+
     Requirements:
     - DataHub Cloud deployment (not on-premises/self-hosted)
     - Feature explicitly enabled by DataHub team for your instance
     - Compatible DataHub Cloud version with semantic search support
-    
+
     Usage:
     - Set SEMANTIC_SEARCH_ENABLED=true environment variable to enable
     - Only use after confirming feature availability with DataHub team
     - Will be validated at runtime to ensure DataHub Cloud deployment
-    
+
     Returns:
         bool: True if semantic search should be enabled, False otherwise
-        
+
     Note:
-        This function only checks the environment variable. Actual feature 
+        This function only checks the environment variable. Actual feature
         availability is validated when the DataHub client is used.
     """
     return os.environ.get("SEMANTIC_SEARCH_ENABLED", "false").lower() == "true"
@@ -334,7 +334,7 @@ def _search_implementation(
         "query": query,
         "types": types,
         "orFilters": compiled_filters,
-        "count": max(num_results, 1), # 0 is not a valid value for count.
+        "count": max(num_results, 1),  # 0 is not a valid value for count.
     }
 
     # Choose GraphQL query and operation based on strategy
@@ -556,7 +556,7 @@ if _is_semantic_search_enabled():
     # Note: Actual semantic search availability is validated at runtime when used
     # This allows the tool to be registered even if validation would fail,
     # but provides clear error messages when semantic search is actually attempted
-    
+
     # Register enhanced search tool with semantic capabilities (as "search")
     mcp.tool(
         name="search",
