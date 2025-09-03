@@ -1,4 +1,5 @@
 import json
+import os
 from typing import Any, AsyncGenerator, Iterable, Type, TypeVar
 
 import pytest
@@ -8,6 +9,7 @@ from mcp.types import TextContent
 
 from mcp_server_datahub._telemetry import TelemetryMiddleware
 from mcp_server_datahub.mcp_server import (
+    _search_implementation,
     get_dataset_queries,
     get_entity,
     get_lineage,
@@ -147,3 +149,28 @@ async def test_get_dataset_queries() -> None:
     assert res is not None
     assert res.get("queries") is not None
     assert len(res.get("queries")) > 0
+
+
+@pytest.mark.skipif(
+    not os.environ.get("TEST_SEMANTIC_SEARCH", "false").lower() == "true",
+    reason="Semantic search integration test disabled. Set TEST_SEMANTIC_SEARCH=true to enable."
+)
+@pytest.mark.anyio
+async def test_semantic_search_integration() -> None:
+    """Test that semantic search works end-to-end when enabled."""
+    # Test keyword strategy (should work like regular search)
+    res = _search_implementation(
+        query="*", filters=None, num_results=5, search_strategy="keyword"
+    )
+    assert isinstance(res, dict)
+    assert "count" in res
+    assert "total" in res
+
+    # Test semantic strategy - this will hit the actual semanticSearchAcrossEntities
+    res = _search_implementation(
+        query="data analytics", filters=None, num_results=3, search_strategy="semantic"
+    )
+    assert isinstance(res, dict)
+    assert "count" in res
+    assert "total" in res
+    print("✅ Semantic search integration test passed")
