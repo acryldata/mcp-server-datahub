@@ -1,9 +1,10 @@
 import json
-from typing import AsyncGenerator, Iterable
+from typing import Any, AsyncGenerator, Iterable, Type, TypeVar
 
 import pytest
 from datahub.sdk.main_client import DataHubClient
 from fastmcp import Client
+from mcp.types import TextContent
 
 from mcp_server_datahub._telemetry import TelemetryMiddleware
 from mcp_server_datahub.mcp_server import (
@@ -20,6 +21,16 @@ _test_domain = "urn:li:domain:0da1ef03-8870-45db-9f47-ef4f592f095c"
 # Add telemetry middleware to the MCP server.
 # This way our tests also validate that the telemetry generation does not break anything else.
 mcp.add_middleware(TelemetryMiddleware())
+
+T = TypeVar("T")
+
+
+def assert_type(expected_type: Type[T], obj: Any) -> T:
+    """Assert that obj is of expected_type and return it properly typed."""
+    assert isinstance(obj, expected_type), (
+        f"Expected {expected_type.__name__}, got {type(obj).__name__}"
+    )
+    return obj
 
 
 @pytest.fixture(autouse=True, scope="session")
@@ -49,8 +60,9 @@ async def test_list_tools(mcp_client: Client) -> None:
 @pytest.mark.anyio
 async def test_basic_search(mcp_client: Client) -> None:
     result = await mcp_client.call_tool("search", {"query": "*", "num_results": 10})
-    res = result.content[0].text
-    res = json.loads(res)
+    assert result.content, "Tool result should have content"
+    content = assert_type(TextContent, result.content[0])
+    res = json.loads(content.text)
     assert isinstance(res, dict)
     assert list(res.keys()) == ["count", "total", "searchResults", "facets"]
 
@@ -58,8 +70,9 @@ async def test_basic_search(mcp_client: Client) -> None:
 @pytest.mark.anyio
 async def test_search_no_results(mcp_client: Client) -> None:
     result = await mcp_client.call_tool("search", {"query": "*", "num_results": 0})
-    res = result.content[0].text
-    res = json.loads(res)
+    assert result.content, "Tool result should have content"
+    content = assert_type(TextContent, result.content[0])
+    res = json.loads(content.text)
     assert isinstance(res, dict)
     assert list(res.keys()) == ["total", "facets"]
 
