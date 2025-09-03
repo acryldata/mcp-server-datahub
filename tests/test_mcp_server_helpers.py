@@ -5,11 +5,12 @@ from mcp_server_datahub.mcp_server import (
     maybe_convert_to_schema_field_urn,
     clean_gql_response,
     clean_get_entity_response,
+    truncate_descriptions,
 )
 from datahub.ingestion.graph.links import make_url_for_urn
 
 
-def test_inject_urls_for_urns():
+def test_inject_urls_for_urns() -> None:
     mock_graph = Mock()
     mock_graph.url_for.side_effect = lambda urn: make_url_for_urn(
         "https://xyz.com", urn
@@ -58,7 +59,7 @@ def test_inject_urls_for_urns():
         assert mock_graph.url_for.call_count == 2
 
 
-def test_maybe_convert_to_schema_field_urn_with_column():
+def test_maybe_convert_to_schema_field_urn_with_column() -> None:
     dataset_urn = "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics_db.raw_schema.users,PROD)"
     column = "user_id"
 
@@ -70,7 +71,7 @@ def test_maybe_convert_to_schema_field_urn_with_column():
     )
 
 
-def test_maybe_convert_to_schema_field_urn_without_column():
+def test_maybe_convert_to_schema_field_urn_without_column() -> None:
     original_urn = "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics_db.raw_schema.users,PROD)"
 
     result = maybe_convert_to_schema_field_urn(original_urn, None)
@@ -78,7 +79,7 @@ def test_maybe_convert_to_schema_field_urn_without_column():
     assert result == original_urn
 
 
-def test_maybe_convert_to_schema_field_urn_with_incorrect_entity():
+def test_maybe_convert_to_schema_field_urn_with_incorrect_entity() -> None:
     chart_urn = "urn:li:chart:(looker,baz)"
 
     # Ok if no column is provided
@@ -91,8 +92,8 @@ def test_maybe_convert_to_schema_field_urn_with_incorrect_entity():
         maybe_convert_to_schema_field_urn(chart_urn, column)
 
 
-def test_clean_gql_response_with_dict():
-    response = {
+def test_clean_gql_response_with_dict() -> None:
+    response: dict = {
         "__typename": "Dataset",
         "urn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics_db.raw_schema.users,PROD)",
         "name": "users",
@@ -112,7 +113,7 @@ def test_clean_gql_response_with_dict():
     assert result == expected_result
 
 
-def test_clean_gql_response_with_nested_empty_objects():
+def test_clean_gql_response_with_nested_empty_objects() -> None:
     response = {
         "urn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics_db.raw_schema.users,PROD)",
         "name": "users",
@@ -141,7 +142,7 @@ def test_clean_gql_response_with_nested_empty_objects():
     assert result == expected_result
 
 
-def test_clean_get_entity_response_with_schema_metadata():
+def test_clean_get_entity_response_with_schema_metadata() -> None:
     raw_response = {
         "urn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics_db.raw_schema.users,PROD)",
         "name": "users",
@@ -195,3 +196,57 @@ def test_clean_get_entity_response_with_schema_metadata():
     }
 
     assert result == expected_result
+
+
+def test_truncate_descriptions() -> None:
+    result = {
+        "downstreams": {
+            "searchResults": [
+                {
+                    "entity": {
+                        "description": "Description with ![image](data:image/png;base64,encoded_data) and more content that exceeds the limit",
+                        "properties": {
+                            "description": "Description with image <img src='data:image/png;base64,encoded_data' /> and more content that exceeds the limit"
+                        },
+                        "fields": [
+                            {
+                                "fieldPath": "description",
+                                "description": "Description with image <img src='data:image/png;base64,encoded_data' /> and more content that exceeds the limit",
+                            },
+                            {
+                                "fieldPath": "description",
+                                "description": "Simple description",
+                            },
+                        ],
+                    }
+                }
+            ]
+        }
+    }
+
+    truncate_descriptions(result, 50)
+
+    assert result == {
+        "downstreams": {
+            "searchResults": [
+                {
+                    "entity": {
+                        "description": "Description with image and more content that exceeds the limit",
+                        "properties": {
+                            "description": "Description with image  and more content that exceeds the limit"
+                        },
+                        "fields": [
+                            {
+                                "fieldPath": "description",
+                                "description": "Description with image  and more content that exceeds the limit",
+                            },
+                            {
+                                "fieldPath": "description",
+                                "description": "Simple description",
+                            },
+                        ],
+                    }
+                }
+            ]
+        }
+    }

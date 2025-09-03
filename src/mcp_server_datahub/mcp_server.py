@@ -1,8 +1,10 @@
 import contextlib
 import contextvars
 import functools
+import html
 import inspect
 import pathlib
+import re
 from typing import (
     Any,
     Awaitable,
@@ -29,6 +31,80 @@ from pydantic import BaseModel
 
 _P = ParamSpec("_P")
 _R = TypeVar("_R")
+DESCRIPTION_LENGTH_HARD_LIMIT = 1000
+
+
+def sanitize_html_content(text: str) -> str:
+    """Remove HTML tags and decode HTML entities from text."""
+    if not text:
+        return text
+
+    # Remove HTML tags (including img tags)
+    text = re.sub(r"<[^>]+>", "", text)
+
+    # Decode HTML entities
+    text = html.unescape(text)
+
+    return text.strip()
+
+
+def truncate_with_ellipsis(text: str, max_length: int, suffix: str = "...") -> str:
+    """Truncate text to max_length and add suffix if truncated."""
+    if not text or len(text) <= max_length:
+        return text
+
+    # Account for suffix length
+    actual_max = max_length - len(suffix)
+    return text[:actual_max] + suffix
+
+
+def sanitize_markdown_content(text: str) -> str:
+    """Remove markdown-style embeds that contain encoded data from text, but preserve alt text."""
+    if not text:
+        return text
+
+    # Remove markdown embeds with data URLs (base64 encoded content) but preserve alt text
+    # Pattern: ![alt text](data:image/type;base64,encoded_data) -> alt text
+    text = re.sub(r"!\[([^\]]*)\]\(data:[^)]+\)", r"\1", text)
+
+    return text.strip()
+
+
+def sanitize_and_truncate_description(text: str, max_length: int) -> str:
+    """Sanitize HTML content and truncate to specified length."""
+    if not text:
+        return text
+
+    try:
+        # First sanitize HTML content
+        sanitized = sanitize_html_content(text)
+
+        # Then sanitize markdown content (preserving alt text)
+        sanitized = sanitize_markdown_content(sanitized)
+
+        # Then truncate if needed
+        return truncate_with_ellipsis(sanitized, max_length)
+    except Exception:
+        # logger.warning(f"Error sanitizing and truncating description: {e}")
+        return text[:max_length] if len(text) > max_length else text
+
+
+def truncate_descriptions(
+    data: dict | list, max_length: int = DESCRIPTION_LENGTH_HARD_LIMIT
+) -> None:
+    """
+    Recursively truncates values of keys named 'description' in a dictionary in place.
+    """
+    # TODO: path-aware truncate, for different length limits per entity type
+    if isinstance(data, dict):
+        for key, value in data.items():
+            if key == "description" and isinstance(value, str):
+                data[key] = sanitize_and_truncate_description(value, max_length)
+            elif isinstance(value, (dict, list)):
+                truncate_descriptions(value)
+    elif isinstance(data, list):
+        for item in data:
+            truncate_descriptions(item)
 
 
 # See https://github.com/jlowin/fastmcp/issues/864#issuecomment-3103678258
@@ -192,6 +268,7 @@ def get_entity(urn: str) -> dict:
     )["entity"]
 
     inject_urls_for_urns(client._graph, result, [""])
+    truncate_descriptions(result)
 
     return clean_get_entity_response(result)
 
@@ -440,4 +517,5 @@ def get_lineage(
     )
     lineage = lineage_api.get_lineage(asset_lineage_directive)
     inject_urls_for_urns(client._graph, lineage, ["*.searchResults[].entity"])
+    truncate_descriptions(lineage)
     return lineage
