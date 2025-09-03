@@ -1,5 +1,6 @@
 import json
 from typing import AsyncGenerator, Iterable
+import json
 
 import pytest
 from datahub.sdk.main_client import DataHubClient
@@ -48,15 +49,19 @@ async def test_list_tools(mcp_client: Client) -> None:
 
 
 @pytest.mark.anyio
-async def test_basic_search() -> None:
-    res = await search.fn(query="*", num_results=10)
+async def test_basic_search(mcp_client: Client) -> None:
+    result = await mcp_client.call_tool("search", {"query": "*", "num_results": 10})
+    res = result.content[0].text
+    res = json.loads(res)
     assert isinstance(res, dict)
     assert list(res.keys()) == ["count", "total", "searchResults", "facets"]
 
 
 @pytest.mark.anyio
-async def test_search_no_results() -> None:
-    res = await search.fn(query="*", num_results=0)
+async def test_search_no_results(mcp_client: Client) -> None:
+    result = await mcp_client.call_tool("search", {"query": "*", "num_results": 0})
+    res = result.content[0].text
+    res = json.loads(res)
     assert isinstance(res, dict)
     assert list(res.keys()) == ["total", "facets"]
 
