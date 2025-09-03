@@ -315,7 +315,18 @@ def _search_implementation(
     """Core search implementation that can use either semantic or keyword search."""
     client = get_datahub_client()
 
-    # Parse filters (same logic as original search function)
+    # As of 2025-07-25: Our Filter type is a tagged/discriminated union.
+    #
+    # We've observed that some tools (e.g. Cursor) don't support discriminated
+    # unions in their JSON schema validation, and hence reject valid tool calls
+    # before they're even passed to our MCP server.
+    # Beyond that, older LLMs (e.g. Claude Desktop w/ Sonnet 3.5) have a tendency
+    # to pass tool args as JSON-encoded strings instead of proper objects.
+    #
+    # To work around these issues, we allow stringified JSON filters that we
+    # parse on our end. The FastMCP library used to have built-in support for
+    # handling this, but removed it in
+    # https://github.com/jlowin/fastmcp/commit/7b9696405b1427f4dc5430891166286744b3dab5
     if isinstance(filters, str):
         filters = load_filters(filters)
     types, compiled_filters = compile_filters(filters)
@@ -323,7 +334,7 @@ def _search_implementation(
         "query": query,
         "types": types,
         "orFilters": compiled_filters,
-        "count": max(num_results, 1),
+        "count": max(num_results, 1), # 0 is not a valid value for count.
     }
 
     # Choose GraphQL query and operation based on strategy
