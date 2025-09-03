@@ -347,7 +347,7 @@ async def test_tool_binding_enhanced_search() -> None:
     from mcp_server_datahub.mcp_server import (
         mcp as reloaded_mcp,
         _is_semantic_search_enabled as reloaded_is_semantic_search_enabled,
-        with_datahub_client as reloaded_with_datahub_client
+        with_datahub_client as reloaded_with_datahub_client,
     )
 
     # Verify we're in enhanced mode
