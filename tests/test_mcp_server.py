@@ -1,6 +1,5 @@
 import json
 from typing import AsyncGenerator, Iterable
-import json
 
 import pytest
 from datahub.sdk.main_client import DataHubClient
@@ -12,7 +11,6 @@ from mcp_server_datahub.mcp_server import (
     get_entity,
     get_lineage,
     mcp,
-    search,
     with_datahub_client,
 )
 

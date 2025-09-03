@@ -1,19 +1,15 @@
 """Tests for semantic search functionality in the MCP server."""
 
 import os
-import json
-from typing import AsyncGenerator, Dict, Any
 from unittest import mock
 
 import pytest
-from fastmcp import Client
 
 from mcp_server_datahub.mcp_server import (
     _is_semantic_search_enabled,
     _search_implementation,
     search_gql,
     semantic_search_gql,
-    mcp,
 )
 
 
@@ -37,8 +33,6 @@ class TestSemanticSearchConfig:
 
     def test_semantic_search_case_insensitive(self):
         """Test that env var is case insensitive."""
-        test_cases = ["TRUE", "True", "true", "FALSE", "False", "false"]
-
         for value in ["TRUE", "True", "true"]:
             with mock.patch.dict(os.environ, {"SEMANTIC_SEARCH_ENABLED": value}):
                 assert _is_semantic_search_enabled() is True
@@ -49,9 +43,7 @@ class TestSemanticSearchConfig:
 
     def test_semantic_search_invalid_values(self):
         """Test that invalid values default to disabled."""
-        invalid_values = ["yes", "no", "1", "0", "enabled", "disabled", ""]
-
-        for value in invalid_values:
+        for value in ["yes", "no", "1", "0", "enabled", "disabled", ""]:
             with mock.patch.dict(os.environ, {"SEMANTIC_SEARCH_ENABLED": value}):
                 assert _is_semantic_search_enabled() is False
 
@@ -130,7 +122,7 @@ class TestSearchImplementation:
         mock_execute_graphql.return_value = mock_response
 
         # Call the function
-        result = _search_implementation(
+        _search_implementation(
             query="user_events", filters=None, num_results=5, search_strategy="keyword"
         )
 
@@ -171,7 +163,7 @@ class TestSearchImplementation:
         mock_execute_graphql.return_value = mock_response
 
         # Call without search_strategy (should default to keyword)
-        result = _search_implementation(
+        _search_implementation(
             query="test", filters=None, num_results=1, search_strategy=None
         )
 
@@ -214,7 +206,7 @@ class TestSearchImplementation:
         # Test with filter string (gets parsed)
         filters = '{"platform": ["snowflake"]}'
 
-        result = _search_implementation(
+        _search_implementation(
             query="analytics",
             filters=filters,
             num_results=10,
