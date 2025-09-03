@@ -214,7 +214,29 @@ queries_gql = (pathlib.Path(__file__).parent / "gql/queries.gql").read_text()
 
 
 def _is_semantic_search_enabled() -> bool:
-    """Check if semantic search is enabled via environment variable."""
+    """Check if semantic search is enabled via environment variable.
+    
+    IMPORTANT: Semantic search is an EXPERIMENTAL feature that is ONLY available on 
+    DataHub Cloud deployments with specific versions and configurations. This feature 
+    must be explicitly enabled by the DataHub team for your Cloud instance.
+    
+    Requirements:
+    - DataHub Cloud deployment (not on-premises/self-hosted)
+    - Feature explicitly enabled by DataHub team for your instance
+    - Compatible DataHub Cloud version with semantic search support
+    
+    Usage:
+    - Set SEMANTIC_SEARCH_ENABLED=true environment variable to enable
+    - Only use after confirming feature availability with DataHub team
+    - Will be validated at runtime to ensure DataHub Cloud deployment
+    
+    Returns:
+        bool: True if semantic search should be enabled, False otherwise
+        
+    Note:
+        This function only checks the environment variable. Actual feature 
+        availability is validated when the DataHub client is used.
+    """
     return os.environ.get("SEMANTIC_SEARCH_ENABLED", "false").lower() == "true"
 
 
@@ -333,7 +355,6 @@ def _search_implementation(
 
 
 # Define enhanced search tool when semantic search is enabled
-@async_background
 def enhanced_search(
     query: str = "*",
     search_strategy: Optional[Literal["semantic", "keyword"]] = None,
@@ -344,7 +365,6 @@ def enhanced_search(
 
 
 # Define original search tool for backward compatibility
-@async_background
 def search(
     query: str = "*",
     filters: Optional[Filter | str] = None,
@@ -522,8 +542,13 @@ def get_lineage(
 
 # Conditionally register search tools based on environment configuration
 if _is_semantic_search_enabled():
-    # Register enhanced search tool with semantic capabilities
+    # Note: Actual semantic search availability is validated at runtime when used
+    # This allows the tool to be registered even if validation would fail,
+    # but provides clear error messages when semantic search is actually attempted
+    
+    # Register enhanced search tool with semantic capabilities (as "search")
     mcp.tool(
+        name="search",
         description="""Enhanced search across DataHub entities with semantic and keyword capabilities.
 
 This tool supports two search strategies with different strengths:
@@ -585,11 +610,12 @@ SEARCH STRATEGY EXAMPLES:
 - Keyword: "customer_behavior" → finds tables with exact name "customer_behavior"
 - Semantic: "financial performance metrics" → finds revenue_kpis, profit_analysis, financial_dashboards
 - Keyword: "financial_performance_metrics" → finds exact table name matches
-"""
-    )(enhanced_search)
+""",
+    )(async_background(enhanced_search))
 else:
-    # Register original search tool for backward compatibility
+    # Register original search tool for backward compatibility (as "search")
     mcp.tool(
+        name="search",
         description="""Search across DataHub entities.
 
 Returns both a truncated list of results and facets/aggregations that can be used to iteratively refine the search filters.
@@ -622,5 +648,5 @@ Here are some example filters:
   ]
 }
 ```
-"""
-    )(search)
+""",
+    )(async_background(search))

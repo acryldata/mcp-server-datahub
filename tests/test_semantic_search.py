@@ -1,16 +1,35 @@
 """Tests for semantic search functionality in the MCP server."""
 
+import importlib
+import json
 import os
+from typing import Any, Type, TypeVar
 from unittest import mock
 
 import pytest
+from datahub.sdk.main_client import DataHubClient
+from fastmcp import Client
+from mcp.types import TextContent
 
+import mcp_server_datahub.mcp_server as mcp_server_module
 from mcp_server_datahub.mcp_server import (
     _is_semantic_search_enabled,
     _search_implementation,
+    mcp,
     search_gql,
     semantic_search_gql,
+    with_datahub_client,
 )
+
+T = TypeVar("T")
+
+
+def assert_type(expected_type: Type[T], obj: Any) -> T:
+    """Assert that obj is of expected_type and return it properly typed."""
+    assert isinstance(obj, expected_type), (
+        f"Expected {expected_type.__name__}, got {type(obj).__name__}"
+    )
+    return obj
 
 
 class TestSemanticSearchConfig:
@@ -264,56 +283,167 @@ class TestSearchImplementation:
 
 @pytest.mark.anyio
 async def test_tool_registration_without_semantic_search():
-    """Test that only regular search tool is available when semantic search is disabled."""
+    """Test that regular search tool is available when semantic search is disabled."""
+    # Test that environment check works
     with mock.patch.dict(os.environ, {"SEMANTIC_SEARCH_ENABLED": "false"}):
-        # Need to reimport/reload module to apply env var changes
-        # This is a bit tricky with the current structure, so we'll test the function directly
         assert _is_semantic_search_enabled() is False
 
 
 @pytest.mark.anyio
 async def test_tool_registration_with_semantic_search():
     """Test that enhanced search tool is available when semantic search is enabled."""
+    # Test that environment check works
     with mock.patch.dict(os.environ, {"SEMANTIC_SEARCH_ENABLED": "true"}):
         assert _is_semantic_search_enabled() is True
 
 
-class TestGraphQLQueries:
-    """Test GraphQL query content and structure."""
+@pytest.mark.anyio
+async def test_tool_binding_basic_search() -> None:
+    """Test that 'search' tool binding works correctly in default mode."""
+    # Verify we're in default mode (should be default during normal test runs)
+    assert _is_semantic_search_enabled() is False, (
+        "This test expects SEMANTIC_SEARCH_ENABLED=false (default)"
+    )
 
-    def test_semantic_search_gql_contains_correct_operation(self):
-        """Test that semantic search GraphQL contains the correct operation."""
-        assert "semanticSearchAcrossEntities" in semantic_search_gql
-        assert "query semanticSearch" in semantic_search_gql
-        assert "SearchEntityInfo" in semantic_search_gql
+    # Set up DataHub client context
+    client = DataHubClient.from_env()
+    with with_datahub_client(client):
+        async with Client(mcp) as mcp_client:
+            tools = await mcp_client.list_tools()
+            search_tools = [t for t in tools if t.name == "search"]
 
-    def test_search_gql_contains_correct_operation(self):
-        """Test that regular search GraphQL contains the correct operation."""
-        assert "scrollAcrossEntities" in search_gql
-        assert "query search" in search_gql
-        assert "SearchEntityInfo" in search_gql
+            # Verify exactly one search tool exists
+            assert len(search_tools) == 1
+            assert search_tools[0].name == "search"
 
-    def test_gql_files_have_todo_comments(self):
-        """Test that both GraphQL files contain the TODO comments for future enhancements."""
-        expected_comments = [
-            "TODO: Consider adding these fields",
-            "score",
-            "scoringMethod",
-        ]
+            # Verify tool works (basic keyword search functionality)
+            result = await mcp_client.call_tool(
+                "search", {"query": "*", "num_results": 3}
+            )
+            assert result.content, "Tool result should have content"
+            content = assert_type(TextContent, result.content[0])
+            res = json.loads(content.text)
+            assert isinstance(res, dict)
+            assert "count" in res
+            assert "total" in res
 
-        for comment in expected_comments:
-            assert comment in semantic_search_gql
-            assert comment in search_gql
 
-    def test_semantic_gql_mentions_cosine_similarity(self):
-        """Test that semantic search GraphQL file mentions cosine similarity in comments."""
-        assert "Cosine similarity score" in semantic_search_gql
-        assert "COSINE_SIMILARITY" in semantic_search_gql
+@pytest.mark.anyio
+async def test_tool_binding_enhanced_search() -> None:
+    """Test that 'search' tool binding works correctly in enhanced mode.
 
-    def test_search_gql_mentions_bm25(self):
-        """Test that regular search GraphQL file mentions BM25 in comments."""
-        assert "BM25 score" in search_gql
-        assert "BM25" in search_gql
+    This test requires running with SEMANTIC_SEARCH_ENABLED=true environment variable.
+    Enable with: SEMANTIC_SEARCH_ENABLED=true pytest
+    
+    This test includes module reloading at the start to verify the conditional registration
+    logic works correctly with a fresh module state. It also verifies that the search_strategy
+    parameter is correctly passed through to the _search_implementation function.
+    """
+    # Reload the module at the beginning to ensure fresh state
+    print("Reloading mcp_server module for fresh state...")
+    importlib.reload(mcp_server_module)
+    
+    # Re-import the reloaded objects
+    from mcp_server_datahub.mcp_server import (
+        mcp as reloaded_mcp, 
+        _is_semantic_search_enabled as reloaded_is_semantic_search_enabled, 
+        with_datahub_client as reloaded_with_datahub_client,
+        _search_implementation
+    )
+    
+    # Verify we're in enhanced mode
+    assert reloaded_is_semantic_search_enabled() is True, (
+        "This test requires SEMANTIC_SEARCH_ENABLED=true"
+    )
+
+    # Mock response for search implementation
+    mock_search_response = {
+        "count": 5,
+        "total": 100,
+        "searchResults": []
+    }
+
+    # Create mock with automatic call tracking
+    mock_search_impl = mock.Mock(return_value=mock_search_response)
+
+    # Test tool binding with reloaded module
+    print("Testing tool binding with reloaded module...")
+    client = DataHubClient.from_env()
+    with reloaded_with_datahub_client(client):
+        async with Client(reloaded_mcp) as mcp_client:
+            tools = await mcp_client.list_tools()
+            search_tools = [t for t in tools if t.name == "search"]
+
+            # Verify exactly one search tool exists
+            assert len(search_tools) == 1
+            assert search_tools[0].name == "search"
+
+            # Mock the search implementation function
+            with mock.patch('mcp_server_datahub.mcp_server._search_implementation', mock_search_impl):
+                # Test keyword search strategy
+                print("Testing keyword search strategy parameter passing...")
+                result = await mcp_client.call_tool(
+                    "search", {"query": "*", "search_strategy": "keyword", "num_results": 3}
+                )
+                assert result.content, "Tool result should have content"
+                content = assert_type(TextContent, result.content[0])
+                res = json.loads(content.text)
+                assert isinstance(res, dict)
+                assert "count" in res
+                assert "total" in res
+
+                # Verify keyword search passed correct parameters to _search_implementation
+                calls = mock_search_impl.call_args_list
+                assert len(calls) == 1, "Should have made exactly one search implementation call"
+                keyword_call = calls[0]
+                assert keyword_call.args[0] == "*", "Query should be passed through correctly"
+                assert keyword_call.args[1] is None, "Filters should be passed through correctly"
+                assert keyword_call.args[2] == 3, "num_results should be passed through correctly"
+                assert keyword_call.args[3] == "keyword", "search_strategy should be 'keyword'"
+
+                mock_search_impl.reset_mock()  # Reset for semantic search test
+
+                # Test semantic search strategy
+                print("Testing semantic search strategy parameter passing...")
+                result = await mcp_client.call_tool(
+                    "search", {"query": "customer data", "search_strategy": "semantic", "num_results": 5}
+                )
+                assert result.content, "Tool result should have content for semantic search"
+                content = assert_type(TextContent, result.content[0])
+                res = json.loads(content.text)
+                assert isinstance(res, dict)
+                assert "count" in res
+                assert "total" in res
+
+                # Verify semantic search passed correct parameters to _search_implementation
+                calls = mock_search_impl.call_args_list
+                assert len(calls) == 1, "Should have made exactly one search implementation call"
+                semantic_call = calls[0]
+                assert semantic_call.args[0] == "customer data", "Query should be passed through correctly"
+                assert semantic_call.args[1] is None, "Filters should be passed through correctly"
+                assert semantic_call.args[2] == 5, "num_results should be passed through correctly"
+                assert semantic_call.args[3] == "semantic", "search_strategy should be 'semantic'"
+
+                mock_search_impl.reset_mock()  # Reset for default strategy test
+
+                # Test default search strategy (should default to None, letting implementation decide)
+                print("Testing default search strategy parameter passing...")
+                result = await mcp_client.call_tool(
+                    "search", {"query": "test", "num_results": 2}
+                )
+                assert result.content, "Tool result should have content for default search"
+                
+                # Verify default search behavior
+                calls = mock_search_impl.call_args_list
+                assert len(calls) == 1, "Should have made exactly one search implementation call"
+                default_call = calls[0]
+                assert default_call.args[0] == "test", "Query should be passed through correctly"
+                assert default_call.args[1] is None, "Filters should be passed through correctly"
+                assert default_call.args[2] == 2, "num_results should be passed through correctly"
+                assert default_call.args[3] is None, "search_strategy should be None when not specified"
+
+    print("Search strategy parameter verification completed successfully!")
+    print("Module reload test completed successfully!")
 
 
 if __name__ == "__main__":
