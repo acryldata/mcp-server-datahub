@@ -9,6 +9,7 @@ dependencies = [
     "asyncer>=0.0.8",
     "fastmcp==2.10.5",
     "jmespath~=1.0.1",
+    "loguru",
 ]
 license = "Apache-2.0"
 

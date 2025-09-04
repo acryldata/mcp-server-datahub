@@ -27,6 +27,7 @@ from datahub.sdk.search_client import compile_filters
 from datahub.sdk.search_filters import Filter, FilterDsl, load_filters
 from datahub.utilities.ordered_set import OrderedSet
 from fastmcp import FastMCP
+from loguru import logger
 from pydantic import BaseModel
 
 _P = ParamSpec("_P")
@@ -84,8 +85,8 @@ def sanitize_and_truncate_description(text: str, max_length: int) -> str:
 
         # Then truncate if needed
         return truncate_with_ellipsis(sanitized, max_length)
-    except Exception:
-        # logger.warning(f"Error sanitizing and truncating description: {e}")
+    except Exception as e:
+        logger.warning(f"Error sanitizing and truncating description: {e}")
         return text[:max_length] if len(text) > max_length else text
 
 
