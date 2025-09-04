@@ -15,10 +15,8 @@ import mcp_server_datahub.mcp_server as mcp_server_module
 from mcp_server_datahub.mcp_server import (
     _is_semantic_search_enabled,
     _search_implementation,
-    mcp,
     search_gql,
     semantic_search_gql,
-    with_datahub_client,
 )
 
 T = TypeVar("T")
@@ -299,16 +297,34 @@ async def test_tool_registration_with_semantic_search():
 
 @pytest.mark.anyio
 async def test_tool_binding_basic_search() -> None:
-    """Test that 'search' tool binding works correctly in default mode."""
-    # Verify we're in default mode (should be default during normal test runs)
-    assert _is_semantic_search_enabled() is False, (
-        "This test expects SEMANTIC_SEARCH_ENABLED=false (default)"
+    """Test that 'search' tool binding works correctly in default mode.
+
+    This test sets SEMANTIC_SEARCH_ENABLED=false and reloads the module to verify
+    the conditional registration logic works correctly with basic search mode.
+    """
+    # Set environment variable for basic mode
+    os.environ["SEMANTIC_SEARCH_ENABLED"] = "false"
+
+    # Reload the module at the beginning to ensure fresh state
+    print("Reloading mcp_server module for fresh state...")
+    importlib.reload(mcp_server_module)
+
+    # Re-import the reloaded objects
+    from mcp_server_datahub.mcp_server import (
+        mcp as reloaded_mcp,
+        with_datahub_client as reloaded_with_datahub_client,
     )
+
+    # Mock response for search implementation
+    mock_search_response = {"count": 3, "total": 50, "searchResults": []}
+
+    # Create mock with automatic call tracking
+    mock_search_impl = mock.Mock(return_value=mock_search_response)
 
     # Set up DataHub client context
     client = DataHubClient.from_env()
-    with with_datahub_client(client):
-        async with Client(mcp) as mcp_client:
+    with reloaded_with_datahub_client(client):
+        async with Client(reloaded_mcp) as mcp_client:
             tools = await mcp_client.list_tools()
             search_tools = [t for t in tools if t.name == "search"]
 
@@ -316,16 +332,20 @@ async def test_tool_binding_basic_search() -> None:
             assert len(search_tools) == 1
             assert search_tools[0].name == "search"
 
-            # Verify tool works (basic keyword search functionality)
-            result = await mcp_client.call_tool(
-                "search", {"query": "*", "num_results": 3}
-            )
-            assert result.content, "Tool result should have content"
-            content = assert_type(TextContent, result.content[0])
-            res = json.loads(content.text)
-            assert isinstance(res, dict)
-            assert "count" in res
-            assert "total" in res
+            # Mock the search implementation function
+            with mock.patch(
+                "mcp_server_datahub.mcp_server._search_implementation", mock_search_impl
+            ):
+                # Verify tool works (basic keyword search functionality)
+                result = await mcp_client.call_tool(
+                    "search", {"query": "*", "num_results": 3}
+                )
+                assert result.content, "Tool result should have content"
+                content = assert_type(TextContent, result.content[0])
+                res = json.loads(content.text)
+                assert isinstance(res, dict)
+                assert "count" in res
+                assert "total" in res
 
 
 @pytest.mark.anyio
