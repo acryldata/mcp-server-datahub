@@ -21,6 +21,7 @@ from typing import (
 
 import asyncer
 import jmespath
+from datahub.cli.env_utils import get_boolean_env_variable
 from datahub.errors import ItemNotFoundError
 from datahub.ingestion.graph.client import DataHubGraph
 from datahub.metadata.urns import DatasetUrn, SchemaFieldUrn, Urn
@@ -224,7 +225,7 @@ def _is_semantic_search_enabled() -> bool:
         This function only checks the environment variable. Actual feature
         availability is validated when the DataHub client is used.
     """
-    return os.environ.get("SEMANTIC_SEARCH_ENABLED", "false").lower() == "true"
+    return get_boolean_env_variable("SEMANTIC_SEARCH_ENABLED", default=False)
 
 
 def clean_gql_response(response: Any) -> Any:
@@ -359,6 +360,68 @@ def enhanced_search(
     filters: Optional[Filter | str] = None,
     num_results: int = 10,
 ) -> dict:
+    """Enhanced search across DataHub entities with semantic and keyword capabilities.
+
+    This tool supports two search strategies with different strengths:
+
+    SEMANTIC SEARCH (search_strategy="semantic"):
+    - Uses AI embeddings to understand meaning and concepts, not just exact text matches
+    - Finds conceptually related results even when terminology differs
+    - Best for: exploratory queries, business-focused searches, finding related concepts
+    - Examples: "customer analytics", "financial reporting data", "ML training datasets"
+    - Will match: tables named "user_behavior", "client_metrics", "consumer_data" for "customer analytics"
+
+    KEYWORD SEARCH (search_strategy="keyword" or default):
+    - Traditional full-text search matching exact words and phrases
+    - Fast and precise when you know specific names or technical terms
+    - Best for: exact entity names, technical identifiers, known column names
+    - Examples: "user_transactions", "revenue_2024", "customer_id"
+    - Will match: exact text appearances of these terms
+
+    WHEN TO USE EACH:
+    - Use semantic when: user asks conceptual questions ("show me sales data", "find customer information")
+    - Use keyword when: user provides specific names ("find table user_events", "show dataset named revenue_jan_2024")
+    - Use keyword when: searching for technical terms, column names, or exact identifiers
+
+    Returns both a truncated list of results and facets/aggregations that can be used to iteratively refine the search filters.
+    To explore the data catalog and get aggregate statistics, use the wildcard '*' as the query and set `filters: null`. This provides 
+    facets showing platform distribution, entity types, and other aggregate insights across the entire catalog, plus a representative 
+    sample of entities.
+
+    A typical workflow will involve multiple calls to this search tool, with each call refining the filters based on the facets/aggregations returned in the previous call.
+    After the final search is performed, you'll want to use the other tools to get more details about the relevant entities.
+
+    Here are some example filters:
+    - All Looker assets
+    ```
+    {"platform": ["looker"]}
+    ```
+    - Production environment warehouse assets  
+    ```
+    {
+      "and": [
+        {"env": ["PROD"]},
+        {"platform": ["snowflake", "bigquery", "redshift"]}
+      ]
+    }
+    ```
+    - All non-Snowflake tables
+    ```
+    {
+      "and":[
+        {"entity_type": ["DATASET"]},
+        {"entity_subtype": ["Table"]},
+        {"not": {"platform": ["snowflake"]}}
+      ]
+    }
+    ```
+
+    SEARCH STRATEGY EXAMPLES:
+    - Semantic: "customer behavior data" → finds user_analytics, client_metrics, consumer_tracking
+    - Keyword: "customer_behavior" → finds tables with exact name "customer_behavior"
+    - Semantic: "financial performance metrics" → finds revenue_kpis, profit_analysis, financial_dashboards
+    - Keyword: "financial_performance_metrics" → finds exact table name matches
+    """
     return _search_implementation(query, filters, num_results, search_strategy)
 
 
@@ -368,6 +431,39 @@ def search(
     filters: Optional[Filter | str] = None,
     num_results: int = 10,
 ) -> dict:
+    """Search across DataHub entities.
+
+    Returns both a truncated list of results and facets/aggregations that can be used to iteratively refine the search filters.
+    To search for all entities, use the wildcard '*' as the query and set `filters: null`.
+
+    A typical workflow will involve multiple calls to this search tool, with each call refining the filters based on the facets/aggregations returned in the previous call.
+    After the final search is performed, you'll want to use the other tools to get more details about the relevant entities.
+
+    Here are some example filters:
+    - All Looker assets
+    ```
+    {"platform": ["looker"]}
+    ```
+    - Production environment warehouse assets
+    ```
+    {
+      "and": [
+        {"env": ["PROD"]},
+        {"platform": ["snowflake", "bigquery", "redshift"]}
+      ]
+    }
+    ```
+    - All non-Snowflake tables
+    ```
+    {
+      "and":[
+        {"entity_type": ["DATASET"]},
+        {"entity_subtype": ["Table"]},
+        {"not": {"platform": ["snowflake"]}}
+      ]
+    }
+    ```
+    """
     return _search_implementation(query, filters, num_results, "keyword")
 
 
@@ -538,113 +634,19 @@ def get_lineage(
     return lineage
 
 
-# Conditionally register search tools based on environment configuration
-if _is_semantic_search_enabled():
-    # Note: Actual semantic search availability is validated at runtime when used
-    # This allows the tool to be registered even if validation would fail,
-    # but provides clear error messages when semantic search is actually attempted
+def register_search_tools(mcp_instance: FastMCP) -> None:
+    """Register the appropriate search tool based on environment configuration."""
+    if _is_semantic_search_enabled():
+        # Note: Actual semantic search availability is validated at runtime when used
+        # This allows the tool to be registered even if validation would fail,
+        # but provides clear error messages when semantic search is actually attempted
 
-    # Register enhanced search tool with semantic capabilities (as "search")
-    mcp.tool(
-        name="search",
-        description="""Enhanced search across DataHub entities with semantic and keyword capabilities.
+        # Register enhanced search tool with semantic capabilities (as "search")
+        mcp_instance.tool(name="search", description=enhanced_search.__doc__)(async_background(enhanced_search))
+    else:
+        # Register original search tool for backward compatibility (as "search")
+        mcp_instance.tool(name="search", description=search.__doc__)(async_background(search))
 
-This tool supports two search strategies with different strengths:
 
-SEMANTIC SEARCH (search_strategy="semantic"):
-- Uses AI embeddings to understand meaning and concepts, not just exact text matches
-- Finds conceptually related results even when terminology differs
-- Best for: exploratory queries, business-focused searches, finding related concepts
-- Examples: "customer analytics", "financial reporting data", "ML training datasets"
-- Will match: tables named "user_behavior", "client_metrics", "consumer_data" for "customer analytics"
-
-KEYWORD SEARCH (search_strategy="keyword" or default):
-- Traditional full-text search matching exact words and phrases
-- Fast and precise when you know specific names or technical terms
-- Best for: exact entity names, technical identifiers, known column names
-- Examples: "user_transactions", "revenue_2024", "customer_id"
-- Will match: exact text appearances of these terms
-
-WHEN TO USE EACH:
-- Use semantic when: user asks conceptual questions ("show me sales data", "find customer information")
-- Use keyword when: user provides specific names ("find table user_events", "show dataset named revenue_jan_2024")
-- Use keyword when: searching for technical terms, column names, or exact identifiers
-
-Returns both a truncated list of results and facets/aggregations that can be used to iteratively refine the search filters.
-To explore the data catalog and get aggregate statistics, use the wildcard '*' as the query and set `filters: null`. This provides 
-facets showing platform distribution, entity types, and other aggregate insights across the entire catalog, plus a representative 
-sample of entities.
-
-A typical workflow will involve multiple calls to this search tool, with each call refining the filters based on the facets/aggregations returned in the previous call.
-After the final search is performed, you'll want to use the other tools to get more details about the relevant entities.
-
-Here are some example filters:
-- All Looker assets
-```
-{"platform": ["looker"]}
-```
-- Production environment warehouse assets  
-```
-{
-  "and": [
-    {"env": ["PROD"]},
-    {"platform": ["snowflake", "bigquery", "redshift"]}
-  ]
-}
-```
-- All non-Snowflake tables
-```
-{
-  "and":[
-    {"entity_type": ["DATASET"]},
-    {"entity_subtype": ["Table"]},
-    {"not": {"platform": ["snowflake"]}}
-  ]
-}
-```
-
-SEARCH STRATEGY EXAMPLES:
-- Semantic: "customer behavior data" → finds user_analytics, client_metrics, consumer_tracking
-- Keyword: "customer_behavior" → finds tables with exact name "customer_behavior"
-- Semantic: "financial performance metrics" → finds revenue_kpis, profit_analysis, financial_dashboards
-- Keyword: "financial_performance_metrics" → finds exact table name matches
-""",
-    )(async_background(enhanced_search))
-else:
-    # Register original search tool for backward compatibility (as "search")
-    mcp.tool(
-        name="search",
-        description="""Search across DataHub entities.
-
-Returns both a truncated list of results and facets/aggregations that can be used to iteratively refine the search filters.
-To search for all entities, use the wildcard '*' as the query and set `filters: null`.
-
-A typical workflow will involve multiple calls to this search tool, with each call refining the filters based on the facets/aggregations returned in the previous call.
-After the final search is performed, you'll want to use the other tools to get more details about the relevant entities.
-
-Here are some example filters:
-- All Looker assets
-```
-{"platform": ["looker"]}
-```
-- Production environment warehouse assets
-```
-{
-  "and": [
-    {"env": ["PROD"]},
-    {"platform": ["snowflake", "bigquery", "redshift"]}
-  ]
-}
-```
-- All non-Snowflake tables
-```
-{
-  "and":[
-    {"entity_type": ["DATASET"]},
-    {"entity_subtype": ["Table"]},
-    {"not": {"platform": ["snowflake"]}}
-  ]
-}
-```
-""",
-    )(async_background(search))
+# Register search tools on the global MCP instance
+register_search_tools(mcp)
