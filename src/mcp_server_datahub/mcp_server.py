@@ -220,19 +220,6 @@ def _is_semantic_search_enabled() -> bool:
     DataHub Cloud deployments with specific versions and configurations. This feature
     must be explicitly enabled by the DataHub team for your Cloud instance.
 
-    Requirements:
-    - DataHub Cloud deployment (not on-premises/self-hosted)
-    - Feature explicitly enabled by DataHub team for your instance
-    - Compatible DataHub Cloud version with semantic search support
-
-    Usage:
-    - Set SEMANTIC_SEARCH_ENABLED=true environment variable to enable
-    - Only use after confirming feature availability with DataHub team
-    - Will be validated at runtime to ensure DataHub Cloud deployment
-
-    Returns:
-        bool: True if semantic search should be enabled, False otherwise
-
     Note:
         This function only checks the environment variable. Actual feature
         availability is validated when the DataHub client is used.
