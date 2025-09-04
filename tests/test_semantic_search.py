@@ -14,6 +14,8 @@ from mcp_server_datahub.mcp_server import (
     _search_implementation,
     search_gql,
     semantic_search_gql,
+    register_search_tools,
+    with_datahub_client,
 )
 
 T = TypeVar("T")
@@ -30,22 +32,24 @@ def assert_type(expected_type: Type[T], obj: Any) -> T:
 @contextmanager
 def with_test_mcp_server(enabled: bool) -> Iterator[FastMCP]:
     """Create a test MCP server with desired semantic search configuration.
-    
+
     This creates a completely isolated MCP instance for testing, avoiding
     any global state modification or complex cleanup logic.
-    
+
     Args:
         enabled: Whether to mock semantic search as enabled or disabled
-        
+
     Yields:
         FastMCP: A test MCP server instance with the desired configuration
     """
-    from mcp_server_datahub.mcp_server import register_search_tools
-    
+
     # Create a completely separate MCP instance for testing
     test_mcp = FastMCP[None](name="test-datahub")
-    
-    with mock.patch('mcp_server_datahub.mcp_server._is_semantic_search_enabled', return_value=enabled):
+
+    with mock.patch(
+        "mcp_server_datahub.mcp_server._is_semantic_search_enabled",
+        return_value=enabled,
+    ):
         # Register tools on our test instance using production logic
         register_search_tools(test_mcp)
         yield test_mcp
@@ -266,7 +270,6 @@ class TestSearchImplementation:
         assert "facets" in result  # facets should remain (non-empty so not cleaned out)
 
 
-
 @pytest.mark.anyio
 async def test_tool_binding_basic_search() -> None:
     """Test that 'search' tool binding works correctly in basic search mode.
@@ -275,8 +278,6 @@ async def test_tool_binding_basic_search() -> None:
     to verify the registration logic correctly registers the basic search tool.
     """
     with with_test_mcp_server(enabled=False) as test_mcp:
-        from mcp_server_datahub.mcp_server import with_datahub_client
-
         # Mock response for search implementation
         mock_search_response = {"count": 3, "total": 50, "searchResults": []}
 
@@ -296,7 +297,8 @@ async def test_tool_binding_basic_search() -> None:
 
                 # Mock the search implementation function
                 with mock.patch(
-                    "mcp_server_datahub.mcp_server._search_implementation", mock_search_impl
+                    "mcp_server_datahub.mcp_server._search_implementation",
+                    mock_search_impl,
                 ):
                     # Verify tool works (basic keyword search functionality)
                     result = await mcp_client.call_tool(
@@ -320,8 +322,6 @@ async def test_tool_binding_enhanced_search() -> None:
     to the _search_implementation function.
     """
     with with_test_mcp_server(enabled=True) as test_mcp:
-        from mcp_server_datahub.mcp_server import with_datahub_client
-
         # Mock response for search implementation
         mock_search_response = {"count": 5, "total": 100, "searchResults": []}
 
@@ -342,7 +342,8 @@ async def test_tool_binding_enhanced_search() -> None:
 
                 # Mock the search implementation function
                 with mock.patch(
-                    "mcp_server_datahub.mcp_server._search_implementation", mock_search_impl
+                    "mcp_server_datahub.mcp_server._search_implementation",
+                    mock_search_impl,
                 ):
                     # Test keyword search strategy
                     print("Testing keyword search strategy parameter passing...")

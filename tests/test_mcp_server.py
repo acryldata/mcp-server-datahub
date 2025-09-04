@@ -155,8 +155,7 @@ async def test_get_dataset_queries() -> None:
     not os.environ.get("TEST_SEMANTIC_SEARCH", "false").lower() == "true",
     reason="Semantic search integration test disabled. Set TEST_SEMANTIC_SEARCH=true to enable.",
 )
-@pytest.mark.anyio
-async def test_semantic_search_integration() -> None:
+def test_semantic_search_integration() -> None:
     """Test that semantic search works end-to-end when enabled."""
     # Test keyword strategy (should work like regular search)
     res = _search_implementation(

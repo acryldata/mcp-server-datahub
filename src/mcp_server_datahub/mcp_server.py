@@ -3,7 +3,6 @@ import contextvars
 import functools
 import html
 import inspect
-import os
 import pathlib
 import re
 from typing import (
@@ -384,8 +383,8 @@ def enhanced_search(
     - Use keyword when: searching for technical terms, column names, or exact identifiers
 
     Returns both a truncated list of results and facets/aggregations that can be used to iteratively refine the search filters.
-    To explore the data catalog and get aggregate statistics, use the wildcard '*' as the query and set `filters: null`. This provides 
-    facets showing platform distribution, entity types, and other aggregate insights across the entire catalog, plus a representative 
+    To explore the data catalog and get aggregate statistics, use the wildcard '*' as the query and set `filters: null`. This provides
+    facets showing platform distribution, entity types, and other aggregate insights across the entire catalog, plus a representative
     sample of entities.
 
     A typical workflow will involve multiple calls to this search tool, with each call refining the filters based on the facets/aggregations returned in the previous call.
@@ -396,7 +395,7 @@ def enhanced_search(
     ```
     {"platform": ["looker"]}
     ```
-    - Production environment warehouse assets  
+    - Production environment warehouse assets
     ```
     {
       "and": [
@@ -642,10 +641,14 @@ def register_search_tools(mcp_instance: FastMCP) -> None:
         # but provides clear error messages when semantic search is actually attempted
 
         # Register enhanced search tool with semantic capabilities (as "search")
-        mcp_instance.tool(name="search", description=enhanced_search.__doc__)(async_background(enhanced_search))
+        mcp_instance.tool(name="search", description=enhanced_search.__doc__)(
+            async_background(enhanced_search)
+        )
     else:
         # Register original search tool for backward compatibility (as "search")
-        mcp_instance.tool(name="search", description=search.__doc__)(async_background(search))
+        mcp_instance.tool(name="search", description=search.__doc__)(
+            async_background(search)
+        )
 
 
 # Register search tools on the global MCP instance
