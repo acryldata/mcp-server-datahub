@@ -332,14 +332,14 @@ async def test_tool_binding_basic_search() -> None:
 async def test_tool_binding_enhanced_search() -> None:
     """Test that 'search' tool binding works correctly in enhanced mode.
 
-    This test sets SEMANTIC_SEARCH_ENABLED=true and reloads the module to verify 
-    the conditional registration logic works correctly with a fresh module state. 
-    It also verifies that the search_strategy parameter is correctly passed through 
+    This test sets SEMANTIC_SEARCH_ENABLED=true and reloads the module to verify
+    the conditional registration logic works correctly with a fresh module state.
+    It also verifies that the search_strategy parameter is correctly passed through
     to the _search_implementation function.
     """
     # Set environment variable for enhanced mode
     os.environ["SEMANTIC_SEARCH_ENABLED"] = "true"
-    
+
     # Reload the module at the beginning to ensure fresh state
     print("Reloading mcp_server module for fresh state...")
     importlib.reload(mcp_server_module)
@@ -347,7 +347,6 @@ async def test_tool_binding_enhanced_search() -> None:
     # Re-import the reloaded objects
     from mcp_server_datahub.mcp_server import (
         mcp as reloaded_mcp,
-        _is_semantic_search_enabled as reloaded_is_semantic_search_enabled,
         with_datahub_client as reloaded_with_datahub_client,
     )
 
