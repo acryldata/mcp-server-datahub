@@ -321,9 +321,9 @@ async def test_tool_binding_basic_search() -> None:
     # Create mock with automatic call tracking
     mock_search_impl = mock.Mock(return_value=mock_search_response)
 
-    # Set up DataHub client context
-    client = DataHubClient.from_env()
-    with reloaded_with_datahub_client(client):
+    # Set up mock DataHub client context
+    mock_client = mock.Mock(spec=DataHubClient)
+    with reloaded_with_datahub_client(mock_client):
         async with Client(reloaded_mcp) as mcp_client:
             tools = await mcp_client.list_tools()
             search_tools = [t for t in tools if t.name == "search"]
@@ -378,8 +378,8 @@ async def test_tool_binding_enhanced_search() -> None:
 
     # Test tool binding with reloaded module
     print("Testing tool binding with reloaded module...")
-    client = DataHubClient.from_env()
-    with reloaded_with_datahub_client(client):
+    mock_client = mock.Mock(spec=DataHubClient)
+    with reloaded_with_datahub_client(mock_client):
         async with Client(reloaded_mcp) as mcp_client:
             tools = await mcp_client.list_tools()
             search_tools = [t for t in tools if t.name == "search"]
