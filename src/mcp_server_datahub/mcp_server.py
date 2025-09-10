@@ -3,7 +3,6 @@ import contextvars
 import functools
 import html
 import inspect
-import json
 import pathlib
 import re
 from typing import (
