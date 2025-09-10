@@ -3,6 +3,7 @@ import contextvars
 import functools
 import html
 import inspect
+import json
 import pathlib
 import re
 from typing import (
@@ -376,10 +377,9 @@ def enhanced_search(
     - Examples:
       • "/q user_transactions" → exact terms (AND is default)
       • "/q wizard OR pet" → entities containing either term
-      • "/q sales AND revenue" → both terms (explicit AND)
+      • "/q revenue_*" → wildcard matching (revenue_2023, revenue_2024, revenue_monthly, etc.)
       • "/q \"user data table\"" → exact phrase matching
       • "/q (sales OR revenue) AND quarterly" → complex boolean combinations
-      • "/q name:dataset* AND platform:snowflake" → field-specific searches
     - Fast and precise for exact matching, technical terms, and complex queries
     - Best for: entity names, identifiers, column names, or any search needing boolean logic
 
