@@ -930,6 +930,7 @@ dependencies = [
     { name = "fastmcp" },
     { name = "jmespath" },
     { name = "loguru" },
+    { name = "pydantic" },
 ]
 
 [package.dev-dependencies]
@@ -948,6 +949,7 @@ requires-dist = [
     { name = "fastmcp", specifier = "==2.10.5" },
     { name = "jmespath", specifier = "~=1.0.1" },
     { name = "loguru" },
+    { name = "pydantic", specifier = ">=2.0,<2.12" },
 ]
 
 [package.metadata.requires-dev]
