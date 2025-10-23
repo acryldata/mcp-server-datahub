@@ -33,11 +33,13 @@ Use this configuration in your MCP client e.g. Claude Desktop, Cursor, etc.
         "--directory",
         "path/to/mcp-server-datahub",  // update this with an absolute path
         "run",
-        "mcp-server-datahub"
+        "mcp-server-datahub",
+        "--disable-ssl-verification"  // optional: add this flag to disable SSL verification
       ],
       "env": {  // required if ~/.datahubenv does not exist
         "DATAHUB_GMS_URL": "<your-datahub-url>",
-        "DATAHUB_GMS_TOKEN": "<your-datahub-token>"
+        "DATAHUB_GMS_TOKEN": "<your-datahub-token>",
+        "DATAHUB_DISABLE_SSL_VERIFICATION": "true"  // optional: disable SSL verification for self-signed certs
       }
     }
   }
