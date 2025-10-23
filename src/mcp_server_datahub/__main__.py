@@ -1,10 +1,13 @@
 import logging
+import os
 
 import click
-from datahub.ingestion.graph.config import ClientMode
+from datahub.ingestion.graph.client import DataHubGraph
+from datahub.ingestion.graph.config import ClientMode, DatahubClientConfig
 from datahub.sdk.main_client import DataHubClient
 from datahub.telemetry import telemetry
 from fastmcp.server.middleware.logging import LoggingMiddleware
+from loguru import logger
 from typing_extensions import Literal
 
 from mcp_server_datahub._telemetry import TelemetryMiddleware
@@ -26,14 +29,57 @@ logging.basicConfig(level=logging.INFO)
     is_flag=True,
     default=False,
 )
+@click.option(
+    "--disable-ssl-verification",
+    is_flag=True,
+    default=False,
+    help="Disable SSL certificate verification for DataHub client connections. Use with caution.",
+)
 @telemetry.with_telemetry(
     capture_kwargs=["transport"],
 )
-def main(transport: Literal["stdio", "sse", "http"], debug: bool) -> None:
-    client = DataHubClient.from_env(
-        client_mode=ClientMode.SDK,
-        datahub_component=f"mcp-server-datahub/{__version__}",
-    )
+def main(
+    transport: Literal["stdio", "sse", "http"],
+    debug: bool,
+    disable_ssl_verification: bool,
+) -> None:
+    # Check if SSL verification should be disabled via environment variable or CLI flag
+    disable_ssl = disable_ssl_verification or os.getenv(
+        "DATAHUB_DISABLE_SSL_VERIFICATION", "false"
+    ).lower() in ("true", "1", "yes")
+
+    if disable_ssl:
+        logger.warning(
+            "SSL certificate verification is disabled. This is not recommended for production use."
+        )
+
+        # Get environment variables for DataHub connection
+        server = os.getenv("DATAHUB_GMS_URL")
+        token = os.getenv("DATAHUB_GMS_TOKEN")
+
+        if not server:
+            raise ValueError(
+                "DATAHUB_GMS_URL environment variable is required when using custom configuration"
+            )
+
+        # Create custom config with SSL verification disabled
+        config = DatahubClientConfig(
+            server=server,
+            token=token,
+            disable_ssl_verification=True,
+            client_mode=ClientMode.SDK,
+            datahub_component=f"mcp-server-datahub/{__version__}",
+        )
+
+        # Create client with custom config
+        graph = DataHubGraph(config)
+        client = DataHubClient(graph=graph)
+    else:
+        # Use the default from_env method
+        client = DataHubClient.from_env(
+            client_mode=ClientMode.SDK,
+            datahub_component=f"mcp-server-datahub/{__version__}",
+        )
 
     if debug:
         # logging.getLogger("datahub").setLevel(logging.DEBUG)
