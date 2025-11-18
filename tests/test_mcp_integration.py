@@ -149,7 +149,7 @@ async def test_get_lineage_tool(mcp_client: Client) -> None:
     """Test get_lineage tool via MCP protocol."""
     result = await mcp_client.call_tool(
         "get_lineage",
-        {"urn": _test_urn, "column": None, "upstream": True, "max_hops": 1}
+        {"urn": _test_urn, "column": None, "upstream": True, "max_hops": 1},
     )
     assert result.content, "Tool result should have content"
     content = assert_type(TextContent, result.content[0])
@@ -163,10 +163,7 @@ async def test_get_lineage_tool(mcp_client: Client) -> None:
 @pytest.mark.anyio
 async def test_get_dataset_queries_tool(mcp_client: Client) -> None:
     """Test get_dataset_queries tool via MCP protocol."""
-    result = await mcp_client.call_tool(
-        "get_dataset_queries",
-        {"urn": _test_urn}
-    )
+    result = await mcp_client.call_tool("get_dataset_queries", {"urn": _test_urn})
     assert result.content, "Tool result should have content"
     content = assert_type(TextContent, result.content[0])
     res = json.loads(content.text)
