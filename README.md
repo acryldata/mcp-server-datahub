@@ -99,16 +99,12 @@ Retrieve the exact lineage paths between two assets or columns, including interm
 
 This example illustrates how an AI agent could orchestrate DataHub MCP tools to answer a user's data question. It demonstrates the decision-making flow, which tools are called, and how responses are used.
 
----
-
 ### 1. User Asks a Question
 
 **Example:**
 > "How can I find out how many pets were adopted last month?"
 
 The agent recognizes this as a **data discovery → query construction** workflow. It needs to (a) find relevant datasets, (b) inspect metadata, (c) construct a correct SQL query.
-
----
 
 ### 2. Search for Relevant Datasets
 
@@ -125,8 +121,6 @@ The agent begins with the `search` tool (semantic or keyword depending on config
 ```
 
 **Purpose:** Identify datasets like `adoptions`, `pet_profiles`, `pet_details`.
-
----
 
 ### 3. Inspect Candidate Datasets
 
@@ -155,19 +149,15 @@ Example:
 **Tool:** `get_dataset_queries`  
 **Purpose:** Learn typical usage patterns and query templates for the dataset.
 
----
-
 ### 4. Understand Entity Relationships
 
 If the question requires joining or entity navigation (e.g., connecting pets → adoptions):
 
-### get_entities
+#### get_entities
 To retrieve entities related to a given URN, such as upstream/downstream tables.
 
-### get_lineage_paths_between
+#### get_lineage_paths_between
 To calculate exact lineage paths between datasets if needed (e.g., between `pet_profiles` and `adoptions`).
-
----
 
 ### 5. Construct a Query
 
@@ -190,8 +180,6 @@ WHERE adoption_date >= DATE_TRUNC('month', CURRENT_DATE - INTERVAL '1' MONTH)
   AND adoption_date < DATE_TRUNC('month', CURRENT_DATE);
 ```
 
----
-
 ### 6. Return the Final Answer
 
 The agent may either:
@@ -199,8 +187,6 @@ The agent may either:
 - return the SQL directly,
 - run it (if in an environment where query execution is allowed), or
 - provide a natural-language answer based on query output.
-
----
 
 ### Summary of Tools Used
 
