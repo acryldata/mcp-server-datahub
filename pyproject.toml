@@ -7,6 +7,7 @@ requires-python = ">=3.10"
 dependencies = [
     "acryl-datahub==1.2.0.2",
     "asyncer>=0.0.8",
+    "cachetools>=5.0.0",
     "fastmcp==2.10.5",
     "jmespath~=1.0.1",
     "loguru",
@@ -20,6 +21,7 @@ dev = [
     "mypy>=1.15.0",
     "pytest>=8.3.5",
     "ruff>=0.11.6",
+    "types-cachetools",
     "types-jmespath~=1.0.1",
 ]
 
