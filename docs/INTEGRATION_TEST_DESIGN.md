@@ -230,8 +230,8 @@ Key components:
    - Split lint and integration tests into separate jobs
    - Added matrix strategy testing 3 configurations:
      - Longtail (Cloud instance)
-     - OSS v0.14.1
-     - OSS head (latest)
+     - OSS v1.3.0 (latest stable release)
+     - OSS head (bleeding edge)
    - Conditional execution (longtail tests skip on fork PRs without secrets)
    - Graceful cleanup with `datahub docker nuke`
 
@@ -262,7 +262,32 @@ Key components:
 
 ### 🔄 Phase 2: Future Enhancements (Not Yet Implemented)
 
-Potential improvements for future iterations:
+#### Missing MCP Tool Coverage
+
+Several MCP tool features are currently **not tested** in CI:
+
+**Untested Tool Features:**
+- [ ] **Column-level lineage:** `get_lineage` with `column` parameter
+  - Currently only tests entity-level lineage
+  - Important for field-level lineage tracking
+
+- [ ] **Column-level queries:** `get_dataset_queries` with `column` parameter
+  - Currently only tests dataset-level queries
+  - Important for column-specific SQL query tracking
+
+- [ ] **Downstream lineage:** `get_lineage` with `upstream=False`
+  - Currently only tests upstream direction
+  - Need to validate downstream consumers
+
+- [ ] **Multi-hop lineage:** `get_lineage` with `max_hops > 1`
+  - Currently only tests 1-hop lineage
+  - Important for deep lineage traversal (2-3+ hops)
+
+- [ ] **Filtered lineage:** `get_lineage` with `filters` parameter
+  - Currently no tests for lineage filtering
+  - Important for platform-specific or type-specific lineage
+
+#### Additional Enhancements
 
 - [ ] Add more OSS versions to matrix (e.g., v0.13.x, v0.12.x)
 - [ ] Separate test directories if test complexity grows

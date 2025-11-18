@@ -77,7 +77,7 @@ jobs:
 
       # Run tests based on environment
       - name: Run integration tests (longtail)
-        if: matrix.test_env == 'longtail' && secrets.LONGTAIL_GMS_TOKEN != ''
+        if: matrix.test_env == 'longtail'
         env:
           DATAHUB_GMS_URL: ${{ secrets.LONGTAIL_GMS_URL }}
           DATAHUB_GMS_TOKEN: ${{ secrets.LONGTAIL_GMS_TOKEN }}
