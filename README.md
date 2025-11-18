@@ -95,6 +95,125 @@ List schema fields for a dataset with keyword filtering and pagination, useful w
 Retrieve the exact lineage paths between two assets or columns, including intermediate transformations and SQL query information.
 
 
+## Example: Data Discovery & Understanding Flow (for Agents Using DataHub Tools)
+
+This example illustrates how an AI agent could orchestrate DataHub MCP tools to answer a user's data question. It demonstrates the decision-making flow, which tools are called, and how responses are used.
+
+---
+
+### 1. User Asks a Question
+
+**Example:**
+> "How can I find out how many pets were adopted last month?"
+
+The agent recognizes this as a **data discovery → query construction** workflow. It needs to (a) find relevant datasets, (b) inspect metadata, (c) construct a correct SQL query.
+
+---
+
+### 2. Search for Relevant Datasets
+
+The agent begins with the `search` tool (semantic or keyword depending on configuration).
+
+**Tool:** `search`  
+**Input:** natural-language query
+
+**Example Call:**
+```json
+{
+  "query": "pet adoptions"
+}
+```
+
+**Purpose:** Identify datasets like `adoptions`, `pet_profiles`, `pet_details`.
+
+---
+
+### 3. Inspect Candidate Datasets
+
+For each dataset returned by search, the agent may fetch metadata.
+
+#### 3.1 List Schema Fields
+
+**Tool:** `list_schema_fields`  
+**Input:** URN of dataset  
+**Purpose:** Understand schema, datatype, candidate fields for querying.
+
+Example:
+```json
+{
+  "urn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,mydb.public.adoptions,PROD)"
+}
+```
+
+#### 3.2 Fetch Lineage (optional)
+
+**Tool:** `get_lineage`  
+**Purpose:** Determine whether dataset is derived or authoritative.
+
+#### 3.3 Get Example Queries
+
+**Tool:** `get_dataset_queries`  
+**Purpose:** Learn typical usage patterns and query templates for the dataset.
+
+---
+
+### 4. Understand Entity Relationships
+
+If the question requires joining or entity navigation (e.g., connecting pets → adoptions):
+
+### get_entities
+To retrieve entities related to a given URN, such as upstream/downstream tables.
+
+### get_lineage_paths_between
+To calculate exact lineage paths between datasets if needed (e.g., between `pet_profiles` and `adoptions`).
+
+---
+
+### 5. Construct a Query
+
+The agent now has:
+
+- The correct dataset
+- Its schema
+- Key fields
+- Sample queries
+- Relationship and lineage context
+
+The agent constructs an accurate SQL query.
+
+Example:
+
+```sql
+SELECT COUNT(*)
+FROM mydb.public.adoptions
+WHERE adoption_date >= DATE_TRUNC('month', CURRENT_DATE - INTERVAL '1' MONTH)
+  AND adoption_date < DATE_TRUNC('month', CURRENT_DATE);
+```
+
+---
+
+### 6. Return the Final Answer
+
+The agent may either:
+
+- return the SQL directly,
+- run it (if in an environment where query execution is allowed), or
+- provide a natural-language answer based on query output.
+
+---
+
+### Summary of Tools Used
+
+| Tool Name | Purpose |
+|-----------|---------|
+| `search` | Find relevant datasets for the question. |
+| `list_schema_fields` | Understand dataset structure. |
+| `get_lineage` | Assess data authority and provenance. |
+| `get_dataset_queries` | Learn how the dataset is typically queried. |
+| `get_entities` | Retrieve related entities for context. |
+| `get_lineage_paths_between` | Understand deeper relationships between datasets. |
+
+
 ## Developing
 
 See [DEVELOPING.md](DEVELOPING.md).
