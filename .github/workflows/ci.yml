@@ -34,10 +34,10 @@ jobs:
           # Test against longtail (Cloud instance)
           - test_env: "longtail"
             datahub_version: "cloud"
-          # Test against OSS v1.3.0
+          # Test against OSS v1.3.0 (latest stable)
           - test_env: "oss"
-            datahub_version: "v0.14.1"
-          # Test against latest OSS
+            datahub_version: "v1.3.0"
+          # Test against latest OSS (head)
           - test_env: "oss"
             datahub_version: "head"
       fail-fast: false

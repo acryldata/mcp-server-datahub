@@ -284,44 +284,11 @@ Potential improvements for future iterations:
 
 | Risk | Mitigation |
 |------|------------|
-| GitHub runner disk space | ~~Free up space before starting containers~~ Not needed for current setup |
+| GitHub runner disk space | Not needed for current setup (sufficient space available) |
 | Flaky tests due to timing | Add retries and proper wait conditions |
-| ~~Long test duration~~ | ✅ Running all tests on every PR - acceptable duration |
-| Credentials exposure | Use GitHub secrets + conditional execution (see Security below) |
+| Long test duration | Running all tests on every PR - acceptable duration (~10-15 min) |
+| Credentials exposure | Use GitHub secrets with conditional execution for fork PRs |
 | Test data drift | Use deterministic sample data for OSS |
-
-## Security: GitHub Secrets Best Practices
-
-**Secrets Required:**
-- `LONGTAIL_GMS_URL` - URL to longtail Cloud instance
-- `LONGTAIL_GMS_TOKEN` - Read-only access token for longtail
-
-**⚠️ Critical Security Considerations:**
-
-1. **Fork PR Protection:**
-   - ✅ Secrets are NOT exposed to fork PRs by default (GitHub behavior)
-   - ✅ Added check: `if: secrets.LONGTAIL_GMS_TOKEN != ''` to gracefully skip
-   - ❌ **NEVER** use `pull_request_target` - it exposes secrets to forks!
-
-2. **Token Permissions:**
-   - ✅ Use **read-only** token for CI testing
-   - ✅ Create dedicated "CI Bot" user with minimal permissions
-   - ❌ Never use personal or admin tokens
-
-3. **Log Safety:**
-   - ✅ GitHub automatically masks secrets in logs
-   - ⚠️ Be cautious with debug output and error messages
-   - ❌ Never echo/print env vars containing secrets
-
-4. **Audit & Monitoring:**
-   - Regular review of GitHub audit logs for secret access
-   - Monitor DataHub access logs for CI user activity
-   - Rotate tokens every 90 days
-
-5. **Repository Settings:**
-   - Enable "Require approval for all outside collaborators" in Actions settings
-   - Review "Fork pull request workflows" configuration
-   - Restrict who can approve workflow runs from forks
 
 ## Open Questions
 
