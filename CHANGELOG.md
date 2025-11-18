@@ -79,12 +79,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Breaking Changes
 
-#### Test API Changes
-- `clean_get_entity_response()` renamed to `clean_get_entities_response()` (plural)
-- `get_entity()` is now an MCP tool (accessed via MCP protocol, not direct import)
-- Tool function signatures may have changed (e.g., additional parameters)
+#### Tests Synced from Integrations Service
+**Added**: Comprehensive test suite synced from internal integrations service (12 test files in `tests/mcp/`):
+- Entity retrieval and queries
+- Column lineage extraction
+- Filter conversion logic
+- Schema field operations
+- Tag processing
+- Lineage path calculations
+- Helper function tests
 
-**Migration**: Update tests to use the MCP client interface rather than directly importing functions.
+**Not Synced**: `test_mcp_telemetry.py` and `test_mcp_server.py` (service-specific)
+
+**Note**: Tests use `datahub_integrations` imports to remain identical to source. These are reference implementations - adaptation needed to run in OSS.
 
 #### GraphQL Query Changes
 - `scrollAcrossEntities` → `searchAcrossEntities`

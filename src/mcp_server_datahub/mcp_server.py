@@ -1,8 +1,6 @@
 """DataHub MCP Server Implementation.
 
-IMPORTANT: This file is kept in sync between two repositories:
-- datahub-integrations-service: src/datahub_integrations/mcp/mcp_server.py
-- mcp-server-datahub: src/mcp_server_datahub/mcp_server.py
+IMPORTANT: This file is kept in sync between two repositories.
 
 When making changes, ensure both versions remain identical. Use relative imports
 (e.g., `from ._token_estimator import ...`) instead of absolute imports to maintain
