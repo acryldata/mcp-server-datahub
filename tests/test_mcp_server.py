@@ -132,16 +132,22 @@ async def test_get_dataset() -> None:
     res = await get_entity.fn(_test_urn)
     assert res is not None
 
-    assert res["url"] is not None
+    # Cloud instances inject URLs, OSS does not
+    if not _is_oss:
+        assert res["url"] is not None
 
 
 @pytest.mark.anyio
-@pytest.mark.skipif(_is_oss and _test_domain is None, reason="OSS sample data doesn't include domains")
+@pytest.mark.skipif(
+    _is_oss and _test_domain is None, reason="OSS sample data doesn't include domains"
+)
 async def test_get_domain() -> None:
     res = await get_entity.fn(_test_domain)
     assert res is not None
 
-    assert res["url"] is not None
+    # Cloud instances inject URLs, OSS does not
+    if not _is_oss:
+        assert res["url"] is not None
 
 
 @pytest.mark.anyio
