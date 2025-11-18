@@ -4,6 +4,8 @@
 
 This document describes the design for adding robust integration tests to the MCP Server DataHub project. The goal is to test MCP tools against real DataHub instances (both OSS and Cloud) using a CI/CD matrix strategy.
 
+**Status:** ✅ **Phase 1 (MVP) Implemented** - Basic integration testing with OSS and Cloud instances is now live in CI.
+
 ## Current State
 
 **What we have:**
@@ -45,6 +47,17 @@ strategy:
 ```
 
 ### 2. Test Suite Organization
+
+**Implementation Note:** For MVP, we took a simpler approach than the original design:
+
+- **Single test file** (`tests/test_mcp_server.py`) with environment-aware URNs
+- Tests automatically detect OSS vs Cloud based on `DATAHUB_GMS_URL`
+- Tests skip gracefully when environment doesn't support specific features
+- **Rationale:** Simpler to maintain, easier to extend, reuses existing test infrastructure
+
+**Future:** We can migrate to separate test directories if complexity grows.
+
+**Original Design** (kept for reference):
 
 ```
 tests/
@@ -207,31 +220,56 @@ Key components:
    - `fail-fast: false` to see all failures
    - Conditional execution (Cloud tests only nightly)
 
-## Implementation Phases
+## Implementation Status
 
-### Phase 1: Basic OSS Integration (MVP)
-- [ ] Create test directory structure
-- [ ] Add GitHub Actions workflow for OSS testing
-- [ ] Implement basic test fixtures
-- [ ] Write core tests (search, get_entity)
-- [ ] Test against single OSS version (v0.14.1)
+### ✅ Phase 1: MVP - COMPLETED
 
-### Phase 2: Multi-Version Testing
-- [ ] Add matrix strategy for multiple OSS versions
-- [ ] Add version-specific test variations
-- [ ] Implement compatibility testing
+**What was implemented:**
 
-### Phase 3: Cloud Integration
-- [ ] Set up Cloud staging credentials
-- [ ] Create Cloud-specific test suite
-- [ ] Add nightly Cloud test job
-- [ ] Implement Cloud feature tests
+1. **GitHub Actions Workflow** (`.github/workflows/ci.yml`):
+   - Split lint and integration tests into separate jobs
+   - Added matrix strategy testing 3 configurations:
+     - Longtail (Cloud instance)
+     - OSS v0.14.1
+     - OSS head (latest)
+   - Conditional execution (longtail tests skip on fork PRs without secrets)
+   - Graceful cleanup with `datahub docker nuke`
 
-### Phase 4: Enhancements
+2. **Environment-Aware Tests** (`tests/test_mcp_server.py`):
+   - Auto-detect OSS vs Cloud based on `DATAHUB_GMS_URL`
+   - Dynamic test URNs:
+     - OSS: `urn:li:dataset:(urn:li:dataPlatform:hive,SampleHiveDataset,PROD)`
+     - Cloud: `urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.analytics.pet_details,PROD)`
+   - Skip tests that don't apply to current environment:
+     - `test_get_domain` (skipped on OSS - no sample domains)
+     - `test_get_dataset_queries` (skipped on OSS - no query history)
+   - Environment-aware assertions in `test_get_lineage`
+
+3. **Key Implementation Decisions:**
+   - **Simpler than original design:** Single test file instead of separate directories
+   - **Run on every PR:** Both OSS and Cloud tests provide fast feedback
+   - **Secrets safety:** Added `secrets.LONGTAIL_GMS_TOKEN != ''` check to gracefully skip on fork PRs
+
+**Differences from Original Design:**
+
+| Original Plan | Actual Implementation | Rationale |
+|---------------|----------------------|-----------|
+| Separate test directories | Single file with env detection | Simpler, easier to maintain |
+| Nightly Cloud tests only | Cloud tests on every PR | Faster feedback loop |
+| 4-phase rollout | Phase 1 includes multi-version | User wanted v1.3.0 immediately |
+
+---
+
+### 🔄 Phase 2: Future Enhancements (Not Yet Implemented)
+
+Potential improvements for future iterations:
+
+- [ ] Add more OSS versions to matrix (e.g., v0.13.x, v0.12.x)
+- [ ] Separate test directories if test complexity grows
 - [ ] Add performance benchmarks
-- [ ] Implement test data generation
+- [ ] Implement test data generation for Cloud
 - [ ] Add test coverage reporting
-- [ ] Create test documentation
+- [ ] Create test documentation/runbooks
 
 ## Benefits
 
@@ -246,11 +284,44 @@ Key components:
 
 | Risk | Mitigation |
 |------|------------|
-| GitHub runner disk space | Free up space before starting containers |
+| GitHub runner disk space | ~~Free up space before starting containers~~ Not needed for current setup |
 | Flaky tests due to timing | Add retries and proper wait conditions |
-| Long test duration | Run Cloud tests nightly, not on every PR |
-| Credentials exposure | Use GitHub secrets, never commit credentials |
+| ~~Long test duration~~ | ✅ Running all tests on every PR - acceptable duration |
+| Credentials exposure | Use GitHub secrets + conditional execution (see Security below) |
 | Test data drift | Use deterministic sample data for OSS |
+
+## Security: GitHub Secrets Best Practices
+
+**Secrets Required:**
+- `LONGTAIL_GMS_URL` - URL to longtail Cloud instance
+- `LONGTAIL_GMS_TOKEN` - Read-only access token for longtail
+
+**⚠️ Critical Security Considerations:**
+
+1. **Fork PR Protection:**
+   - ✅ Secrets are NOT exposed to fork PRs by default (GitHub behavior)
+   - ✅ Added check: `if: secrets.LONGTAIL_GMS_TOKEN != ''` to gracefully skip
+   - ❌ **NEVER** use `pull_request_target` - it exposes secrets to forks!
+
+2. **Token Permissions:**
+   - ✅ Use **read-only** token for CI testing
+   - ✅ Create dedicated "CI Bot" user with minimal permissions
+   - ❌ Never use personal or admin tokens
+
+3. **Log Safety:**
+   - ✅ GitHub automatically masks secrets in logs
+   - ⚠️ Be cautious with debug output and error messages
+   - ❌ Never echo/print env vars containing secrets
+
+4. **Audit & Monitoring:**
+   - Regular review of GitHub audit logs for secret access
+   - Monitor DataHub access logs for CI user activity
+   - Rotate tokens every 90 days
+
+5. **Repository Settings:**
+   - Enable "Require approval for all outside collaborators" in Actions settings
+   - Review "Fork pull request workflows" configuration
+   - Restrict who can approve workflow runs from forks
 
 ## Open Questions
 
