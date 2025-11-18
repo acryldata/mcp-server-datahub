@@ -17,8 +17,17 @@ from mcp_server_datahub.mcp_server import (
     with_datahub_client,
 )
 
-_test_urn = "urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.analytics.pet_details,PROD)"
-_test_domain = "urn:li:domain:0da1ef03-8870-45db-9f47-ef4f592f095c"
+# Environment-aware test URNs
+_is_oss = os.environ.get("DATAHUB_GMS_URL", "").startswith("http://localhost")
+
+if _is_oss:
+    # OSS sample data URN (from datahub docker ingest-sample-data)
+    _test_urn = "urn:li:dataset:(urn:li:dataPlatform:hive,SampleHiveDataset,PROD)"
+    _test_domain = None  # OSS sample data doesn't have domains by default
+else:
+    # Longtail URNs
+    _test_urn = "urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.analytics.pet_details,PROD)"
+    _test_domain = "urn:li:domain:0da1ef03-8870-45db-9f47-ef4f592f095c"
 
 # Add telemetry middleware to the MCP server.
 # This way our tests also validate that the telemetry generation does not break anything else.
@@ -123,15 +132,22 @@ async def test_get_dataset() -> None:
     res = await get_entity.fn(_test_urn)
     assert res is not None
 
-    assert res["url"] is not None
+    # Cloud instances inject URLs, OSS does not
+    if not _is_oss:
+        assert res["url"] is not None
 
 
 @pytest.mark.anyio
+@pytest.mark.skipif(
+    _is_oss and _test_domain is None, reason="OSS sample data doesn't include domains"
+)
 async def test_get_domain() -> None:
     res = await get_entity.fn(_test_domain)
     assert res is not None
 
-    assert res["url"] is not None
+    # Cloud instances inject URLs, OSS does not
+    if not _is_oss:
+        assert res["url"] is not None
 
 
 @pytest.mark.anyio
@@ -139,11 +155,17 @@ async def test_get_lineage() -> None:
     res = await get_lineage.fn(_test_urn, column=None, upstream=True, max_hops=1)
     assert res is not None
 
-    # Ensure that URL injection did something.
-    assert "https://longtailcompanions.acryl.io/" in json.dumps(res)
+    # Environment-aware URL check
+    if _is_oss:
+        # OSS runs on localhost - just verify we got lineage data back
+        assert res is not None
+    else:
+        # Longtail - ensure URL injection worked
+        assert "https://longtailcompanions.acryl.io/" in json.dumps(res)
 
 
 @pytest.mark.anyio
+@pytest.mark.skipif(_is_oss, reason="OSS sample data may not have query history")
 async def test_get_dataset_queries() -> None:
     res = await get_dataset_queries.fn(_test_urn)
     assert res is not None
