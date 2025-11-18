@@ -1,4 +1,4 @@
-# mcp-server-datahub
+# DataHub MCP Server
 
 A [Model Context Protocol](https://modelcontextprotocol.io/) server implementation for [DataHub](https://datahub.com/).
 
