@@ -18,7 +18,7 @@ The DataHub MCP Server enables AI agents to:
 
 - **Understand your business**: Navigate important organizational context like business glossaries, data domains, data products products, _and_ data assets. Understand how key metrics, business processes, and data relate to one another. 
 
-- **Explain & Generate SQL Queries**: Generate accurate SQL queries to answer your most important questions with the help of critical context like data documentation, data lineage, and popular queries across the organization. 
+- **Explain & generate SQL queries**: Generate accurate SQL queries to answer your most important questions with the help of critical context like data documentation, data lineage, and popular queries across the organization. 
 
 ## Why DataHub MCP Server?
 
