@@ -52,6 +52,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **ReDoS protection** in HTML sanitization with bounded regex patterns
 - **Query truncation** function (configurable via `QUERY_LENGTH_HARD_LIMIT`, default: 5,000 chars)
 
+#### Default Views Support
+- **Automatic default view application** for all search operations
+- Fetches organization's default global view from DataHub
+- **5-minute caching** (configurable via `VIEW_CACHE_TTL_SECONDS`)
+- Can be disabled via `DATAHUB_MCP_DISABLE_DEFAULT_VIEW` environment variable
+- Ensures search results respect organization's data governance policies
+
 ### Dependencies
 
 - **Added** `cachetools>=5.0.0`: For GMS field detection caching
@@ -83,6 +90,9 @@ export ENTITY_SCHEMA_TOKEN_BUDGET=16000
 
 # Disable newer GMS field detection if needed
 export DISABLE_NEWER_GMS_FIELD_DETECTION=true
+
+# Disable default view application (optional)
+export DATAHUB_MCP_DISABLE_DEFAULT_VIEW=true
 ```
 
 ### Search Examples (New in 0.4.0)
