@@ -90,7 +90,7 @@ jobs:
           DATAHUB_GMS_URL: "http://localhost:8080"
           DATAHUB_GMS_TOKEN: ""
         run: |
-          uv run pytest tests/test_mcp_server.py -v
+          uv run pytest tests/test_mcp_integration.py -v
 
       # Cleanup
       - name: Cleanup DataHub (OSS only)

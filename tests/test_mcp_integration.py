@@ -19,7 +19,7 @@ from mcp_server_datahub.mcp_server import mcp, register_all_tools, with_datahub_
 register_all_tools(is_oss=True)
 
 _test_urn = "urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.analytics.pet_details,PROD)"
-_test_domain = "urn:li:domain:7186eeff-a860-4b0a-989f-69473a0c9c67"#"urn:li:domain:0da1ef03-8870-45db-9f47-ef4f592f095c"
+_test_domain = "urn:li:domain:0da1ef03-8870-45db-9f47-ef4f592f095c"  # "urn:li:domain:7186eeff-a860-4b0a-989f-69473a0c9c67"
 _test_datahub_url = "https://longtailcompanions.acryl.io/"
 _test_platform_looker = "looker"
 _test_platform_snowflake = "snowflake"
