@@ -733,126 +733,131 @@ async def test_list_schema_fields_combined(mcp_client: Client) -> None:
 @pytest.mark.anyio
 async def test_get_lineage_paths_between_dataset_level(mcp_client: Client) -> None:
     """Test get_lineage_paths_between for dataset-level paths."""
-    result = await mcp_client.call_tool(
-        "get_lineage_paths_between",
-        {
-            "source_urn": _test_source_urn,
-            "target_urn": _test_target_urn,
-        },
-    )
+    try:
+        result = await mcp_client.call_tool(
+            "get_lineage_paths_between",
+            {
+                "source_urn": _test_source_urn,
+                "target_urn": _test_target_urn,
+            },
+        )
+        assert result.content, "Tool result should have content"
+        content = assert_type(TextContent, result.content[0])
+        res = json.loads(content.text)
 
-    # Skip if no lineage path exists between these entities
-    if result.is_error:
-        pytest.skip("No lineage path exists between test entities")
-
-    assert result.content, "Tool result should have content"
-    content = assert_type(TextContent, result.content[0])
-    res = json.loads(content.text)
-
-    assert res is not None
-    assert "paths" in res
-    assert isinstance(res["paths"], list)
-    assert "pathCount" in res
+        assert res is not None
+        assert "paths" in res
+        assert isinstance(res["paths"], list)
+        assert "pathCount" in res
+    except Exception as e:
+        # Skip if no lineage path exists between these entities
+        if "No lineage" in str(e):
+            pytest.skip("No lineage path exists between test entities")
+        raise
 
 
 @pytest.mark.anyio
 async def test_get_lineage_paths_between_column_level(mcp_client: Client) -> None:
     """Test get_lineage_paths_between for column-level paths."""
-    result = await mcp_client.call_tool(
-        "get_lineage_paths_between",
-        {
-            "source_urn": _test_source_urn,
-            "target_urn": _test_target_urn,
-            "source_column": "color",
-            "target_column": "color",
-        },
-    )
+    try:
+        result = await mcp_client.call_tool(
+            "get_lineage_paths_between",
+            {
+                "source_urn": _test_source_urn,
+                "target_urn": _test_target_urn,
+                "source_column": "color",
+                "target_column": "color",
+            },
+        )
+        assert result.content, "Tool result should have content"
+        content = assert_type(TextContent, result.content[0])
+        res = json.loads(content.text)
 
-    # Skip if no lineage path exists between these columns
-    if result.is_error:
-        pytest.skip("No column-level lineage path exists between test columns")
-
-    assert result.content, "Tool result should have content"
-    content = assert_type(TextContent, result.content[0])
-    res = json.loads(content.text)
-
-    assert res is not None
-    assert "paths" in res
-    assert isinstance(res["paths"], list)
-    assert "pathCount" in res
+        assert res is not None
+        assert "paths" in res
+        assert isinstance(res["paths"], list)
+        assert "pathCount" in res
+    except Exception as e:
+        # Skip if no lineage path exists between these columns
+        if "No lineage" in str(e):
+            pytest.skip("No column-level lineage path exists between test columns")
+        raise
 
 
 @pytest.mark.anyio
 async def test_get_lineage_paths_between_auto_direction(mcp_client: Client) -> None:
     """Test get_lineage_paths_between with auto-discover direction."""
-    result = await mcp_client.call_tool(
-        "get_lineage_paths_between",
-        {
-            "source_urn": _test_source_urn,
-            "target_urn": _test_target_urn,
-            "source_column": "color",
-            "target_column": "color",
-            "direction": None,
-        },
-    )
+    try:
+        result = await mcp_client.call_tool(
+            "get_lineage_paths_between",
+            {
+                "source_urn": _test_source_urn,
+                "target_urn": _test_target_urn,
+                "source_column": "color",
+                "target_column": "color",
+                "direction": None,
+            },
+        )
+        assert result.content, "Tool result should have content"
+        content = assert_type(TextContent, result.content[0])
+        res = json.loads(content.text)
 
-    # Skip if no lineage path exists (auto-discovery failed)
-    if result.is_error:
-        pytest.skip("No lineage path found in either direction")
-
-    assert result.content, "Tool result should have content"
-    content = assert_type(TextContent, result.content[0])
-    res = json.loads(content.text)
-
-    assert res is not None
-    assert "paths" in res
-    assert isinstance(res["paths"], list)
+        assert res is not None
+        assert "paths" in res
+        assert isinstance(res["paths"], list)
+    except Exception as e:
+        # Skip if no lineage path exists (auto-discovery failed)
+        if "No lineage" in str(e):
+            pytest.skip("No lineage path found in either direction")
+        raise
 
 
 @pytest.mark.anyio
 async def test_get_lineage_paths_between_downstream(mcp_client: Client) -> None:
     """Test get_lineage_paths_between with explicit downstream direction."""
-    result = await mcp_client.call_tool(
-        "get_lineage_paths_between",
-        {
-            "source_urn": _test_source_urn,
-            "target_urn": _test_target_urn,
-            "source_column": "color",
-            "target_column": "color",
-            "direction": "downstream",
-        },
-    )
+    try:
+        result = await mcp_client.call_tool(
+            "get_lineage_paths_between",
+            {
+                "source_urn": _test_source_urn,
+                "target_urn": _test_target_urn,
+                "source_column": "color",
+                "target_column": "color",
+                "direction": "downstream",
+            },
+        )
+        assert result.content, "Tool result should have content"
+        content = assert_type(TextContent, result.content[0])
+        res = json.loads(content.text)
 
-    # Skip if no downstream lineage path exists
-    if result.is_error:
-        pytest.skip("No downstream lineage path exists")
-
-    assert result.content, "Tool result should have content"
-    content = assert_type(TextContent, result.content[0])
-    res = json.loads(content.text)
-
-    assert res is not None
-    assert "paths" in res
-    assert isinstance(res["paths"], list)
+        assert res is not None
+        assert "paths" in res
+        assert isinstance(res["paths"], list)
+    except Exception as e:
+        # Skip if no downstream lineage path exists
+        if "No lineage" in str(e):
+            pytest.skip("No downstream lineage path exists")
+        raise
 
 
 @pytest.mark.anyio
 async def test_get_lineage_paths_between_upstream(mcp_client: Client) -> None:
     """Test get_lineage_paths_between with explicit upstream direction."""
-    result = await mcp_client.call_tool(
-        "get_lineage_paths_between",
-        {
-            "source_urn": _test_target_urn,
-            "target_urn": _test_source_urn,
-            "source_column": "color",
-            "target_column": "color",
-            "direction": "upstream",
-        },
-    )
-
-    # Skip if no upstream lineage path exists
-    if result.is_error:
-        pytest.skip("No upstream lineage path exists")
-
-    # If successful, validate the tool accepts the parameter
-    assert result.content, "Tool result should have content"
+    try:
+        result = await mcp_client.call_tool(
+            "get_lineage_paths_between",
+            {
+                "source_urn": _test_target_urn,
+                "target_urn": _test_source_urn,
+                "source_column": "color",
+                "target_column": "color",
+                "direction": "upstream",
+            },
+        )
+        # If successful, validate the tool accepts the parameter
+        assert result.content, "Tool result should have content"
+    except Exception as e:
+        # Skip if no upstream lineage path exists
+        if "No lineage" in str(e):
+            pytest.skip("No upstream lineage path exists")
+        raise
