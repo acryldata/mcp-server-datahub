@@ -2510,6 +2510,8 @@ def register_all_tools(is_oss: bool = False) -> None:
       search(query="*", filters={"entity_type": ["DATASET"]}, sort_by="lastOperationTime", sort_order="desc", num_results=10)"""
 
     # Build full description with interpolated sorting docs using Template
+    if search.__doc__ is None:
+        raise ValueError("search function must have a docstring")
     search_description = string.Template(search.__doc__).substitute(
         SORTING_FIELDS_DOCS=sorting_docs
     )

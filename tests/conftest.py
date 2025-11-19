@@ -35,12 +35,12 @@ if using_oss:
     # Create datahub_integrations.mcp submodule
     mcp_module = types.ModuleType("datahub_integrations.mcp")
     sys.modules["datahub_integrations.mcp"] = mcp_module
-    datahub_integrations.mcp = mcp_module  # Also set as attribute
+    datahub_integrations.mcp = mcp_module  # type: ignore[attr-defined]  # Dynamic attribute
 
     # Import and expose mcp_server
     from mcp_server_datahub import mcp_server
 
-    mcp_module.mcp_server = mcp_server
+    mcp_module.mcp_server = mcp_server  # type: ignore[attr-defined]  # Dynamic attribute
     sys.modules["datahub_integrations.mcp.mcp_server"] = mcp_server
 
 # === End Compatibility Layer ===
