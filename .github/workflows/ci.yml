@@ -82,7 +82,7 @@ jobs:
           DATAHUB_GMS_URL: ${{ secrets.LONGTAIL_GMS_URL }}
           DATAHUB_GMS_TOKEN: ${{ secrets.LONGTAIL_GMS_TOKEN }}
         run: |
-          uv run pytest tests/test_mcp_server.py -v
+          uv run pytest tests/test_mcp_integration.py -v
 
       - name: Run integration tests (OSS)
         if: matrix.test_env == 'oss'
