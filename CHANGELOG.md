@@ -52,19 +52,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **ReDoS protection** in HTML sanitization with bounded regex patterns
 - **Query truncation** function (configurable via `QUERY_LENGTH_HARD_LIMIT`, default: 5,000 chars)
 
-#### New Files
-- `_token_estimator.py`: Token counting utilities
-- `gql/query_entity.gql`: Specialized query for QueryEntity type
-
-### Changed
-
-- **Complete rewrite of `mcp_server.py`** (2,513 lines vs 662 in previous version)
-- **GraphQL API migration**: `scrollAcrossEntities` → `searchAcrossEntities`
-  - Replaced `scrollId` parameter with `start` for pagination
-  - Added `viewUrn` and `sortInput` parameters
-- **Updated `gql/search.gql`**: Modern search API with pagination
-- **Updated `gql/entity_details.gql`**: Reformatted `#[CLOUD]` markers for better maintainability
-
 ### Dependencies
 
 - **Added** `cachetools>=5.0.0`: For GMS field detection caching
@@ -76,47 +63,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Caching**: GMS version detection cached per graph instance
 - **Fast token estimation**: Character-based heuristic (no tokenizer overhead)
 - **Smart truncation**: Truncates less important schema fields first
-
-### Breaking Changes
-
-#### Tests Synced from Integrations Service
-**Added**: Comprehensive test suite synced from internal integrations service (12 test files in `tests/mcp/`):
-- Entity retrieval and queries
-- Column lineage extraction
-- Filter conversion logic
-- Schema field operations
-- Tag processing
-- Lineage path calculations
-- Helper function tests
-
-**Not Synced**: `test_mcp_telemetry.py` and `test_mcp_server.py` (service-specific)
-
-**Note**: Tests use `datahub_integrations` imports to remain identical to source. These are reference implementations - adaptation needed to run in OSS.
-
-#### GraphQL Query Changes
-- `scrollAcrossEntities` → `searchAcrossEntities`
-- `scrollId` parameter removed (use `start` instead)
-- New required parameter: `start` (integer offset)
-- New optional parameters: `viewUrn`, `sortInput`
-
-**Migration**: See examples in README or documentation.
-
-### Documentation
-
-- Added module docstrings explaining repository sync requirements
-- Inline comments documenting the importance of relative imports for cross-repo compatibility
-
-### Compatibility
-
-- **DataHub OSS**: Full compatibility (cloud-specific fields automatically disabled)
-- **DataHub Cloud**: Enhanced features when cloud fields available
-- **GMS Versions**: Adaptive compatibility with version detection
-- **MCP Protocol**: Compatible with MCP 2.0+ (uses FastMCP 2.10.5)
-
-### Internal
-
-- Synced from internal DataHub integrations service (commit: 7077a9ce72)
-- Service-specific files (`router.py`, `mcp_telemetry.py`) intentionally not included in open source version
 
 ---
 
