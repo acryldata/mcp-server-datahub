@@ -9,9 +9,12 @@ from typing_extensions import Literal
 
 from mcp_server_datahub._telemetry import TelemetryMiddleware
 from mcp_server_datahub._version import __version__
-from mcp_server_datahub.mcp_server import mcp, with_datahub_client
+from mcp_server_datahub.mcp_server import mcp, register_all_tools, with_datahub_client
 
 logging.basicConfig(level=logging.INFO)
+
+# Register tools with OSS-compatible descriptions
+register_all_tools(is_oss=True)
 
 
 @click.command()

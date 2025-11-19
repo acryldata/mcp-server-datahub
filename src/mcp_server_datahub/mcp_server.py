@@ -16,6 +16,7 @@ import json
 import os
 import pathlib
 import re
+import string
 from typing import (
     Any,
     Awaitable,
@@ -1590,19 +1591,7 @@ def search(
     - sort_by: Field name to sort by (optional)
     - sort_order: "desc" (default) or "asc"
 
-    Available sort fields for datasets:
-    - queryCountLast30DaysFeature: Number of queries in last 30 days
-    - rowCountFeature: Table row count
-    - sizeInBytesFeature: Table size in bytes
-    - writeCountLast30DaysFeature: Number of writes/updates in last 30 days
-
-    Sorting examples:
-    - Most queried datasets:
-      search(query="*", filters={"entity_type": ["DATASET"]}, sort_by="queryCountLast30DaysFeature", num_results=10)
-    - Largest tables:
-      search(query="*", filters={"entity_type": ["DATASET"]}, sort_by="sizeInBytesFeature", num_results=10)
-    - Smallest tables first:
-      search(query="*", filters={"entity_type": ["DATASET"]}, sort_by="sizeInBytesFeature", sort_order="asc", num_results=10)
+    $SORTING_FIELDS_DOCS
 
     Note: If sort_by is not provided, search results use default ranking by relevance and
     importance. When using sort_by, results are strictly ordered by that field.
@@ -2476,48 +2465,92 @@ def _find_upstream_lineage_path(
     }
 
 
-def register_search_tools(mcp_instance: FastMCP) -> None:
-    """Register the appropriate search tool based on environment configuration."""
+# Track if tools have been registered to prevent duplicate registration
+_tools_registered = False
+
+
+def register_all_tools(is_oss: bool = False) -> None:
+    """Register all MCP tools with deployment-specific descriptions.
+
+    Args:
+        is_oss: If True, use OSS-compatible tool descriptions (limited sorting fields).
+                If False, use Cloud descriptions (full sorting features).
+
+    Note: Can only be called once. Subsequent calls are no-ops to prevent duplicate registration.
+    """
+    global _tools_registered
+    if _tools_registered:
+        logger.debug("Tools already registered, skipping duplicate registration")
+        return
+
+    _tools_registered = True
+    logger.info(f"Registering MCP tools (is_oss={is_oss})")
+
+    # Choose sorting documentation based on deployment type
+    if not is_oss:
+        sorting_docs = """Available sort fields for datasets:
+    - queryCountLast30DaysFeature: Number of queries in last 30 days
+    - rowCountFeature: Table row count
+    - sizeInBytesFeature: Table size in bytes
+    - writeCountLast30DaysFeature: Number of writes/updates in last 30 days
+
+    Sorting examples:
+    - Most queried datasets:
+      search(query="*", filters={"entity_type": ["DATASET"]}, sort_by="queryCountLast30DaysFeature", num_results=10)
+    - Largest tables:
+      search(query="*", filters={"entity_type": ["DATASET"]}, sort_by="sizeInBytesFeature", num_results=10)
+    - Smallest tables first:
+      search(query="*", filters={"entity_type": ["DATASET"]}, sort_by="sizeInBytesFeature", sort_order="asc", num_results=10)"""
+    else:
+        sorting_docs = """Available sort fields:
+    - lastOperationTime: Last modified timestamp in source system
+
+    Sorting examples:
+    - Most recently updated:
+      search(query="*", filters={"entity_type": ["DATASET"]}, sort_by="lastOperationTime", sort_order="desc", num_results=10)"""
+
+    # Build full description with interpolated sorting docs using Template
+    search_description = string.Template(search.__doc__).substitute(
+        SORTING_FIELDS_DOCS=sorting_docs
+    )
+
+    # Register search tool
     if _is_semantic_search_enabled():
         # Note: Actual semantic search availability is validated at runtime when used
         # This allows the tool to be registered even if validation would fail,
         # but provides clear error messages when semantic search is actually attempted
 
         # Register enhanced search tool with semantic capabilities (as "search")
-        mcp_instance.tool(name="search", description=enhanced_search.__doc__)(
+        mcp.tool(name="search", description=enhanced_search.__doc__)(
             async_background(enhanced_search)
         )
     else:
-        # Register original search tool for backward compatibility (as "search")
-        mcp_instance.tool(name="search", description=search.__doc__)(
+        # Register original search tool with deployment-specific description
+        mcp.tool(name="search", description=search_description)(
             async_background(search)
         )
 
+    # Register get_lineage tool
+    mcp.tool(name="get_lineage", description=get_lineage.__doc__)(
+        async_background(get_lineage)
+    )
 
-# Register search tools on the global MCP instance
-register_search_tools(mcp)
+    # Register get_dataset_queries tool
+    mcp.tool(name="get_dataset_queries", description=get_dataset_queries.__doc__)(
+        async_background(get_dataset_queries)
+    )
 
-# Register get_lineage tool
-mcp.tool(name="get_lineage", description=get_lineage.__doc__)(
-    async_background(get_lineage)
-)
+    # Register get_entities tool
+    mcp.tool(name="get_entities", description=get_entities.__doc__)(
+        async_background(get_entities)
+    )
 
-# Register get_dataset_queries tool
-mcp.tool(name="get_dataset_queries", description=get_dataset_queries.__doc__)(
-    async_background(get_dataset_queries)
-)
+    # Register list_schema_fields tool
+    mcp.tool(name="list_schema_fields", description=list_schema_fields.__doc__)(
+        async_background(list_schema_fields)
+    )
 
-# Register get_entities tool
-mcp.tool(name="get_entities", description=get_entities.__doc__)(
-    async_background(get_entities)
-)
-
-# Register list_schema_fields tool
-mcp.tool(name="list_schema_fields", description=list_schema_fields.__doc__)(
-    async_background(list_schema_fields)
-)
-
-# Register get_lineage_paths_between tool
-mcp.tool(
-    name="get_lineage_paths_between", description=get_lineage_paths_between.__doc__
-)(async_background(get_lineage_paths_between))
+    # Register get_lineage_paths_between tool
+    mcp.tool(
+        name="get_lineage_paths_between", description=get_lineage_paths_between.__doc__
+    )(async_background(get_lineage_paths_between))
