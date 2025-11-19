@@ -1,3 +1,12 @@
+# Note: The following entity types are not currently included:
+# - DataJob
+# - DataFlow
+# - ML entities (MLModel, MLModelGroup, MLFeature, MLFeatureTable, MLPrimaryKey)
+# - Tag
+# - StructuredProperty
+# - CorpUser
+# - CorpGroup
+
 fragment SearchEntityInfo on Entity {
   urn
 
@@ -72,18 +81,23 @@ query search(
   $query: String!
   $orFilters: [AndFilterInput!]
   $count: Int!
-  $scrollId: String
+  $start: Int!
+  $viewUrn: String
+  $sortInput: SearchSortInput
 ) {
-  scrollAcrossEntities(
+  searchAcrossEntities(
     input: {
       query: $query
       count: $count
-      scrollId: $scrollId
+      start: $start
       types: $types
       orFilters: $orFilters
+      viewUrn: $viewUrn
+      sortInput: $sortInput
       searchFlags: { skipHighlighting: true, maxAggValues: 5 }
     }
   ) {
+    start
     count
     total
     searchResults {
