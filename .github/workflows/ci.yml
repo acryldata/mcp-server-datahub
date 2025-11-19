@@ -64,6 +64,9 @@ jobs:
 
       - name: Ingest sample data (OSS only)
         if: matrix.test_env == 'oss'
+        env:
+          DATAHUB_GMS_URL: "http://localhost:8080"
+          DATAHUB_GMS_TOKEN: ""
         run: |
           datahub docker ingest-sample-data
           datahub ingest mcps tests/addon_bootstrap_mce.json
