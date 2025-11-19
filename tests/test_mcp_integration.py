@@ -11,7 +11,7 @@ import pytest
 from datahub.sdk.main_client import DataHubClient
 from fastmcp import Client
 from mcp.types import TextContent
-
+from loguru import logger
 from mcp_server_datahub._telemetry import TelemetryMiddleware
 from mcp_server_datahub.mcp_server import mcp, register_all_tools, with_datahub_client
 
@@ -466,6 +466,7 @@ async def test_get_dataset_queries_basic(mcp_client: Client) -> None:
 
     # Skip test if no queries exist
     if res.get("total", 0) == 0:
+        logger.info("Skipping test_get_dataset_queries_basic because no queries exist")
         pytest.skip("No queries available for this dataset")
 
     assert "queries" in res
@@ -486,6 +487,9 @@ async def test_get_dataset_queries_manual(mcp_client: Client) -> None:
 
     # Skip test if no queries exist
     if res.get("total", 0) == 0:
+        logger.info(
+            "Skipping test_get_dataset_queries_manual because no MANUAL queries exist"
+        )
         pytest.skip("No MANUAL queries available for this dataset")
 
     assert "queries" in res
@@ -506,6 +510,9 @@ async def test_get_dataset_queries_system(mcp_client: Client) -> None:
 
     # Skip test if no queries exist
     if res.get("total", 0) == 0:
+        logger.info(
+            "Skipping test_get_dataset_queries_system because no SYSTEM queries exist"
+        )
         pytest.skip("No SYSTEM queries available for this dataset")
 
     assert "queries" in res
@@ -526,6 +533,9 @@ async def test_get_dataset_queries_column(mcp_client: Client) -> None:
 
     # Skip test if no queries exist
     if res.get("total", 0) == 0:
+        logger.info(
+            "Skipping test_get_dataset_queries_column because no queries exist for this column"
+        )
         pytest.skip("No queries available for this column")
 
     assert "queries" in res
@@ -537,7 +547,7 @@ async def test_get_dataset_queries_pagination(mcp_client: Client) -> None:
     """Test get_dataset_queries with pagination parameters."""
     # First page
     result_page1 = await mcp_client.call_tool(
-        "get_dataset_queries", {"urn": _test_urn, "start": 0, "count": 5}
+        "get_dataset_queries", {"urn": _test_urn, "start": 0, "count": 1}
     )
     assert result_page1.content, "Tool result should have content"
     content_page1 = assert_type(TextContent, result_page1.content[0])
@@ -545,6 +555,9 @@ async def test_get_dataset_queries_pagination(mcp_client: Client) -> None:
 
     # Skip test if no queries exist
     if res_page1.get("total", 0) == 0:
+        logger.info(
+            "Skipping test_get_dataset_queries_pagination because no queries exist"
+        )
         pytest.skip("No queries available for pagination test")
 
     assert res_page1 is not None
@@ -553,7 +566,7 @@ async def test_get_dataset_queries_pagination(mcp_client: Client) -> None:
 
     # Second page
     result_page2 = await mcp_client.call_tool(
-        "get_dataset_queries", {"urn": _test_urn, "start": 5, "count": 5}
+        "get_dataset_queries", {"urn": _test_urn, "start": 1, "count": 1}
     )
     assert result_page2.content, "Tool result should have content"
     content_page2 = assert_type(TextContent, result_page2.content[0])
@@ -578,6 +591,7 @@ async def test_get_dataset_queries_count(mcp_client: Client) -> None:
 
     # Skip test if no queries exist
     if res.get("total", 0) == 0:
+        logger.info("Skipping test_get_dataset_queries_count because no queries exist")
         pytest.skip("No queries available for count test")
 
     assert "queries" in res
@@ -607,6 +621,9 @@ async def test_get_dataset_queries_combined(mcp_client: Client) -> None:
 
     # Skip test if no queries exist
     if res.get("total", 0) == 0:
+        logger.info(
+            "Skipping test_get_dataset_queries_combined because no queries exist"
+        )
         pytest.skip("No queries available for combined parameters test")
 
     assert "queries" in res
