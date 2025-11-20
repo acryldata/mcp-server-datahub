@@ -34,6 +34,11 @@ jobs:
           # Test against longtail (Cloud instance)
           - test_env: "longtail"
             datahub_version: "cloud"
+          # Test against OSS quickstart
+          - test_env: "oss"
+            datahub_version: "v1.3.0"
+          - test_env: "oss"
+            datahub_version: "head"
       fail-fast: false
 
     steps:
@@ -57,10 +62,16 @@ jobs:
           datahub docker quickstart --version ${{ matrix.datahub_version }}
           datahub docker check
 
+      # Ingest and wait for ingestion to complete (OSS only)
       - name: Ingest sample data (OSS only)
         if: matrix.test_env == 'oss'
+        env:
+          DATAHUB_GMS_URL: "http://localhost:8080"
+          DATAHUB_GMS_TOKEN: ""
         run: |
           datahub docker ingest-sample-data
+          datahub ingest mcps tests/addon_bootstrap_mce.json
+          python scripts/wait_for_ingestion.py
 
       # Setup MCP server dependencies
       - name: Install uv

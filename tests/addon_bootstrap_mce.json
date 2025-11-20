@@ -1,0 +1,253 @@
+[
+    {
+        "entityType": "dataset",
+        "entityUrn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.adoption.pet_profiles,PROD)",
+        "changeType": "UPSERT",
+        "aspectName": "datasetProperties",
+        "aspect": {
+            "value": "{\"customProperties\": {}, \"externalUrl\": \"https://app.snowflake.com/us-west-2/xaa48144/#/data/databases/LONG_TAIL_COMPANIONS/schemas/ADOPTION/table/PET_PROFILES/\", \"name\": \"PET_PROFILES\", \"qualifiedName\": \"LONG_TAIL_COMPANIONS.ADOPTION.PET_PROFILES\", \"description\": \"this table contains profile details of all pets\", \"created\": {\"time\": 1647476928706}, \"lastModified\": {\"time\": 1747322153328}, \"tags\": []}",
+            "contentType": "application/json"
+        }
+    },
+    {
+        "entityType": "dataset",
+        "entityUrn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.adoption.pet_profiles,PROD)",
+        "changeType": "UPSERT",
+        "aspectName": "schemaMetadata",
+        "aspect": {
+            "value": "{\"schemaName\": \"long_tail_companions.adoption.pet_profiles\", \"platform\": \"urn:li:dataPlatform:snowflake\", \"version\": 0, \"created\": {\"time\": 0, \"actor\": \"urn:li:corpuser:unknown\"}, \"lastModified\": {\"time\": 0, \"actor\": \"urn:li:corpuser:unknown\"}, \"hash\": \"\", \"platformSchema\": {\"com.linkedin.pegasus2avro.schema.MySqlDDL\": {\"tableSchema\": \"\"}}, \"fields\": [{\"fieldPath\": \"profile_id\", \"nullable\": true, \"description\": \"Unique identifier of pet profile\", \"type\": {\"type\": {\"com.linkedin.pegasus2avro.schema.StringType\": {}}}, \"nativeDataType\": \"VARCHAR(16777216)\", \"recursive\": false, \"isPartOfKey\": false}, {\"fieldPath\": \"species\", \"nullable\": true, \"description\": \"Species of pet, either feline or canine\", \"type\": {\"type\": {\"com.linkedin.pegasus2avro.schema.StringType\": {}}}, \"nativeDataType\": \"VARCHAR(16777216)\", \"recursive\": false, \"isPartOfKey\": false}, {\"fieldPath\": \"breed\", \"nullable\": true, \"description\": \"Breed of pet as determined during intake\", \"type\": {\"type\": {\"com.linkedin.pegasus2avro.schema.StringType\": {}}}, \"nativeDataType\": \"VARCHAR(16777216)\", \"recursive\": false, \"isPartOfKey\": false}, {\"fieldPath\": \"sex\", \"nullable\": true, \"description\": \"Sex of pet\", \"type\": {\"type\": {\"com.linkedin.pegasus2avro.schema.StringType\": {}}}, \"nativeDataType\": \"VARCHAR(16777216)\", \"recursive\": false, \"isPartOfKey\": false}, {\"fieldPath\": \"color\", \"nullable\": true, \"description\": \"Color of pet, as determined druing intake\", \"type\": {\"type\": {\"com.linkedin.pegasus2avro.schema.StringType\": {}}}, \"nativeDataType\": \"VARCHAR(16777216)\", \"recursive\": false, \"isPartOfKey\": false}, {\"fieldPath\": \"coat_type\", \"nullable\": true, \"description\": \"Coat type of pet, as determined druing intake\", \"type\": {\"type\": {\"com.linkedin.pegasus2avro.schema.StringType\": {}}}, \"nativeDataType\": \"VARCHAR(16777216)\", \"recursive\": false, \"isPartOfKey\": false}, {\"fieldPath\": \"name\", \"nullable\": true, \"description\": \"Name assigned to pet during intake\", \"type\": {\"type\": {\"com.linkedin.pegasus2avro.schema.StringType\": {}}}, \"nativeDataType\": \"VARCHAR(16777216)\", \"recursive\": false, \"isPartOfKey\": false}, {\"fieldPath\": \"age_m\", \"nullable\": true, \"description\": \"Approximate age of pet - months\", \"type\": {\"type\": {\"com.linkedin.pegasus2avro.schema.NumberType\": {}}}, \"nativeDataType\": \"NUMBER(38,0)\", \"recursive\": false, \"isPartOfKey\": false}, {\"fieldPath\": \"age_y\", \"nullable\": true, \"description\": \"Approximate age of pet - years\", \"type\": {\"type\": {\"com.linkedin.pegasus2avro.schema.NumberType\": {}}}, \"nativeDataType\": \"NUMBER(38,0)\", \"recursive\": false, \"isPartOfKey\": false}, {\"fieldPath\": \"spay_neutered\", \"nullable\": true, \"description\": \"Whether or not pet is spayed or neutered\", \"type\": {\"type\": {\"com.linkedin.pegasus2avro.schema.BooleanType\": {}}}, \"nativeDataType\": \"BOOLEAN\", \"recursive\": false, \"isPartOfKey\": false}, {\"fieldPath\": \"temperament\", \"nullable\": true, \"description\": \"Temperment observed during intake\", \"type\": {\"type\": {\"com.linkedin.pegasus2avro.schema.StringType\": {}}}, \"nativeDataType\": \"VARCHAR(16777216)\", \"recursive\": false, \"isPartOfKey\": false}, {\"fieldPath\": \"created\", \"nullable\": true, \"description\": \"UTC timestamp when record was created\", \"type\": {\"type\": {\"com.linkedin.pegasus2avro.schema.TimeType\": {}}}, \"nativeDataType\": \"TIMESTAMP_NTZ\", \"recursive\": false, \"isPartOfKey\": false}, {\"fieldPath\": \"updated_at\", \"nullable\": true, \"description\": \"UTC timestamp when record was last updated\", \"type\": {\"type\": {\"com.linkedin.pegasus2avro.schema.TimeType\": {}}}, \"nativeDataType\": \"TIMESTAMP_NTZ\", \"recursive\": false, \"isPartOfKey\": false}, {\"fieldPath\": \"created_at\", \"nullable\": true, \"type\": {\"type\": {\"com.linkedin.pegasus2avro.schema.TimeType\": {}}}, \"nativeDataType\": \"TIMESTAMP_NTZ\", \"recursive\": false, \"isPartOfKey\": false}]}",
+            "contentType": "application/json"
+        }
+    },
+   
+    {
+        "entityType": "dataset",
+        "entityUrn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.adoption.pet_profiles,PROD)",
+        "changeType": "UPSERT",
+        "aspectName": "subTypes",
+        "aspect": {
+            "value": "{\"typeNames\": [\"Table\"]}",
+            "contentType": "application/json"
+        }
+    },
+    {
+        "entityType": "dataset",
+        "entityUrn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.adoption.pet_profiles,PROD)",
+        "changeType": "UPSERT",
+        "aspectName": "dataPlatformInstance",
+        "aspect": {
+            "value": "{\"platform\": \"urn:li:dataPlatform:snowflake\"}",
+            "contentType": "application/json"
+        }
+    },
+    {
+        "entityType": "dataset",
+        "entityUrn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.adoption.pet_profiles,PROD)",
+        "changeType": "UPSERT",
+        "aspectName": "status",
+        "aspect": {
+            "value": "{\"removed\": false}",
+            "contentType": "application/json"
+        }
+    },
+    {
+        "entityType": "dataset",
+        "entityUrn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.analytics.pet_details,PROD)",
+        "changeType": "UPSERT",
+        "aspectName": "globalTags",
+        "aspect": {
+            "value": "{\"tags\": [{\"tag\": \"urn:li:tag:__default_gold\"}, {\"tag\": \"urn:li:tag:__default_low_queries\"}, {\"tag\": \"urn:li:tag:__default_high_queries\"}, {\"tag\": \"urn:li:tag:__default_large_table\"}, {\"tag\": \"urn:li:tag:Not PII Compliant\"}]}",
+            "contentType": "application/json"
+        }
+    },
+    {
+        "entityType": "dataset",
+        "entityUrn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.analytics.pet_details,PROD)",
+        "changeType": "UPSERT",
+        "aspectName": "datasetProperties",
+        "aspect": {
+            "value": "{\"customProperties\": {}, \"externalUrl\": \"https://app.snowflake.com/us-west-2/xaa48144/#/data/databases/LONG_TAIL_COMPANIONS/schemas/ANALYTICS/table/PET_DETAILS/\", \"name\": \"PET_DETAILS\", \"qualifiedName\": \"LONG_TAIL_COMPANIONS.ANALYTICS.PET_DETAILS\", \"created\": {\"time\": 1763455578997}, \"lastModified\": {\"time\": 1763455580736}, \"tags\": []}",
+            "contentType": "application/json"
+        }
+    },
+    {
+        "entityType": "dataset",
+        "entityUrn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.analytics.pet_details,PROD)",
+        "changeType": "UPSERT",
+        "aspectName": "schemaMetadata",
+        "aspect": {
+            "value": "{\"schemaName\": \"long_tail_companions.analytics.pet_details\", \"platform\": \"urn:li:dataPlatform:snowflake\", \"version\": 0, \"created\": {\"time\": 0, \"actor\": \"urn:li:corpuser:unknown\"}, \"lastModified\": {\"time\": 0, \"actor\": \"urn:li:corpuser:unknown\"}, \"hash\": \"\", \"platformSchema\": {\"com.linkedin.pegasus2avro.schema.MySqlDDL\": {\"tableSchema\": \"\"}}, \"fields\": [{\"fieldPath\": \"pet_fk\", \"nullable\": true, \"type\": {\"type\": {\"com.linkedin.pegasus2avro.schema.NumberType\": {}}}, \"nativeDataType\": \"NUMBER(38,0)\", \"recursive\": false, \"isPartOfKey\": false}, {\"fieldPath\": \"profile_id\", \"nullable\": true, \"type\": {\"type\": {\"com.linkedin.pegasus2avro.schema.StringType\": {}}}, \"nativeDataType\": \"VARCHAR(16777216)\", \"recursive\": false, \"isPartOfKey\": false}, {\"fieldPath\": \"status\", \"nullable\": true, \"type\": {\"type\": {\"com.linkedin.pegasus2avro.schema.StringType\": {}}}, \"nativeDataType\": \"VARCHAR(16777216)\", \"recursive\": false, \"isPartOfKey\": false}, {\"fieldPath\": \"postal_code\", \"nullable\": true, \"type\": {\"type\": {\"com.linkedin.pegasus2avro.schema.StringType\": {}}}, \"nativeDataType\": \"VARCHAR(16777216)\", \"recursive\": false, \"isPartOfKey\": false}, {\"fieldPath\": \"species\", \"nullable\": true, \"type\": {\"type\": {\"com.linkedin.pegasus2avro.schema.StringType\": {}}}, \"nativeDataType\": \"VARCHAR(16777216)\", \"recursive\": false, \"isPartOfKey\": false}, {\"fieldPath\": \"breed\", \"nullable\": true, \"type\": {\"type\": {\"com.linkedin.pegasus2avro.schema.StringType\": {}}}, \"nativeDataType\": \"VARCHAR(16777216)\", \"recursive\": false, \"isPartOfKey\": false}, {\"fieldPath\": \"name\", \"nullable\": true, \"type\": {\"type\": {\"com.linkedin.pegasus2avro.schema.StringType\": {}}}, \"nativeDataType\": \"VARCHAR(16777216)\", \"recursive\": false, \"isPartOfKey\": false}, {\"fieldPath\": \"sex\", \"nullable\": true, \"type\": {\"type\": {\"com.linkedin.pegasus2avro.schema.StringType\": {}}}, \"nativeDataType\": \"VARCHAR(16777216)\", \"recursive\": false, \"isPartOfKey\": false}, {\"fieldPath\": \"color\", \"nullable\": true, \"type\": {\"type\": {\"com.linkedin.pegasus2avro.schema.StringType\": {}}}, \"nativeDataType\": \"VARCHAR(16777216)\", \"recursive\": false, \"isPartOfKey\": false}, {\"fieldPath\": \"coat_type\", \"nullable\": true, \"type\": {\"type\": {\"com.linkedin.pegasus2avro.schema.StringType\": {}}}, \"nativeDataType\": \"VARCHAR(16777216)\", \"recursive\": false, \"isPartOfKey\": false}, {\"fieldPath\": \"age_m\", \"nullable\": true, \"type\": {\"type\": {\"com.linkedin.pegasus2avro.schema.NumberType\": {}}}, \"nativeDataType\": \"NUMBER(38,0)\", \"recursive\": false, \"isPartOfKey\": false}, {\"fieldPath\": \"age_y\", \"nullable\": true, \"type\": {\"type\": {\"com.linkedin.pegasus2avro.schema.NumberType\": {}}}, \"nativeDataType\": \"NUMBER(38,0)\", \"recursive\": false, \"isPartOfKey\": false}, {\"fieldPath\": \"spay_neutered\", \"nullable\": true, \"type\": {\"type\": {\"com.linkedin.pegasus2avro.schema.BooleanType\": {}}}, \"nativeDataType\": \"BOOLEAN\", \"recursive\": false, \"isPartOfKey\": false}, {\"fieldPath\": \"temperament\", \"nullable\": true, \"type\": {\"type\": {\"com.linkedin.pegasus2avro.schema.StringType\": {}}}, \"nativeDataType\": \"VARCHAR(16777216)\", \"recursive\": false, \"isPartOfKey\": false}, {\"fieldPath\": \"created_at\", \"nullable\": true, \"type\": {\"type\": {\"com.linkedin.pegasus2avro.schema.TimeType\": {}}}, \"nativeDataType\": \"TIMESTAMP_NTZ\", \"recursive\": false, \"isPartOfKey\": false}, {\"fieldPath\": \"updated_at\", \"nullable\": true, \"type\": {\"type\": {\"com.linkedin.pegasus2avro.schema.TimeType\": {}}}, \"nativeDataType\": \"TIMESTAMP_NTZ\", \"recursive\": false, \"isPartOfKey\": false}, {\"fieldPath\": \"pet_id\", \"nullable\": true, \"type\": {\"type\": {\"com.linkedin.pegasus2avro.schema.StringType\": {}}}, \"nativeDataType\": \"VARCHAR(16777216)\", \"recursive\": false, \"isPartOfKey\": false}]}",
+            "contentType": "application/json"
+        }
+    },
+    {
+        "entityType": "dataset",
+        "entityUrn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.analytics.pet_details,PROD)",
+        "changeType": "UPSERT",
+        "aspectName": "domains",
+        "aspect": {
+            "value": "{\"domains\": [\"urn:li:domain:0da1ef03-8870-45db-9f47-ef4f592f095c\"]}",
+            "contentType": "application/json"
+        }
+    },
+    {
+        "entityType": "dataset",
+        "entityUrn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.analytics.pet_details,PROD)",
+        "changeType": "UPSERT",
+        "aspectName": "subTypes",
+        "aspect": {
+            "value": "{\"typeNames\": [\"Table\"]}",
+            "contentType": "application/json"
+        }
+    },
+    {
+        "entityType": "dataset",
+        "entityUrn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.analytics.pet_details,PROD)",
+        "changeType": "UPSERT",
+        "aspectName": "dataPlatformInstance",
+        "aspect": {
+            "value": "{\"platform\": \"urn:li:dataPlatform:snowflake\"}",
+            "contentType": "application/json"
+        }
+    },
+    {
+        "entityType": "dataset",
+        "entityUrn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.analytics.pet_details,PROD)",
+        "changeType": "UPSERT",
+        "aspectName": "glossaryTerms",
+        "aspect": {
+            "value": "{\"terms\": [{\"urn\": \"urn:li:glossaryTerm:4595b6d1-d6a6-42e2-9ab6-1630b35b1bfc\", \"context\": \"urn:li:corpuser:test@example.com\", \"attribution\": {\"time\": 1750186570256, \"actor\": \"urn:li:corpuser:__datahub_system\", \"source\": \"urn:li:dataHubAction:6e31acca-88ef-4973-a93c-b9ae24991fff\", \"sourceDetail\": {\"actor\": \"urn:li:corpuser:test@example.com\", \"propagated\": \"true\", \"origin\": \"urn:li:dataset:(urn:li:dataPlatform:dbt,long_tail_companions.analytics.pet_details,PROD)\"}}}, {\"urn\": \"urn:li:glossaryTerm:9afa9a59-93b2-47cb-9094-aa342eec24ad\"}], \"auditStamp\": {\"time\": 1763534532858, \"actor\": \"urn:li:corpuser:__datahub_system\"}}",
+            "contentType": "application/json"
+        }
+    },
+    {
+        "entityType": "dataset",
+        "entityUrn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.analytics.pet_details,PROD)",
+        "changeType": "UPSERT",
+        "aspectName": "upstreamLineage",
+        "aspect": {
+            "value": "{\"upstreams\": [{\"auditStamp\": {\"time\": 1761189498008, \"actor\": \"urn:li:corpuser:_ingestion\"}, \"created\": {\"time\": 1761122781990, \"actor\": \"urn:li:corpuser:test@example.com\"}, \"dataset\": \"urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.adoption.pets,PROD)\", \"type\": \"TRANSFORMED\", \"query\": \"urn:li:query:b3a8783e1686233566f1f00d02190648b4befd49886d24f24fbaf366445d218a\"}, {\"auditStamp\": {\"time\": 1761189498008, \"actor\": \"urn:li:corpuser:_ingestion\"}, \"created\": {\"time\": 1761122781990, \"actor\": \"urn:li:corpuser:test@example.com\"}, \"dataset\": \"urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.adoption.pet_profiles,PROD)\", \"type\": \"TRANSFORMED\", \"query\": \"urn:li:query:b3a8783e1686233566f1f00d02190648b4befd49886d24f24fbaf366445d218a\"}, {\"auditStamp\": {\"time\": 1761189498008, \"actor\": \"urn:li:corpuser:_ingestion\"}, \"created\": {\"time\": 1761122781990, \"actor\": \"urn:li:corpuser:test@example.com\"}, \"dataset\": \"urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.adoption.human_profiles,PROD)\", \"type\": \"TRANSFORMED\", \"query\": \"urn:li:query:b3a8783e1686233566f1f00d02190648b4befd49886d24f24fbaf366445d218a\"}, {\"auditStamp\": {\"time\": 1763530210622, \"actor\": \"urn:li:corpuser:unknown\"}, \"dataset\": \"urn:li:dataset:(urn:li:dataPlatform:dbt,long_tail_companions.analytics.pet_details,PROD)\", \"type\": \"COPY\"}, {\"auditStamp\": {\"time\": 1742401675665, \"actor\": \"urn:li:corpuser:test@example.com\"}, \"created\": {\"time\": 1742401675665, \"actor\": \"urn:li:corpuser:test@example.com\"}, \"dataset\": \"urn:li:dataset:(urn:li:dataPlatform:dbt,long_tail_companions.ecommerce.users,PROD)\", \"type\": \"TRANSFORMED\", \"properties\": {\"source\": \"UI\"}}], \"fineGrainedLineages\": [{\"upstreamType\": \"FIELD_SET\", \"upstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.adoption.pet_profiles,PROD),breed)\"], \"downstreamType\": \"FIELD\", \"downstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.analytics.pet_details,PROD),breed)\"], \"transformOperation\": \"NONE\", \"confidenceScore\": 1.0, \"query\": \"urn:li:query:4ccc5d6b1f3accc81400a1660b9d74b895629e7084e8e11a571c4d53ed138c1d\"}, {\"upstreamType\": \"FIELD_SET\", \"upstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:dbt,long_tail_companions.analytics.pet_details,PROD),breed)\"], \"downstreamType\": \"FIELD\", \"downstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.analytics.pet_details,PROD),breed)\"], \"transformOperation\": \"NONE\", \"confidenceScore\": 1.0}, {\"upstreamType\": \"FIELD_SET\", \"upstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.adoption.pet_profiles,PROD),breed)\"], \"downstreamType\": \"FIELD\", \"downstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.analytics.pet_details,PROD),breed)\"], \"transformOperation\": \"NONE\", \"confidenceScore\": 1.0, \"query\": \"urn:li:query:b3a8783e1686233566f1f00d02190648b4befd49886d24f24fbaf366445d218a\"}, {\"upstreamType\": \"FIELD_SET\", \"upstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.adoption.pets,PROD),status)\"], \"downstreamType\": \"FIELD\", \"downstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.analytics.pet_details,PROD),status)\"], \"transformOperation\": \"NONE\", \"confidenceScore\": 1.0, \"query\": \"urn:li:query:4ccc5d6b1f3accc81400a1660b9d74b895629e7084e8e11a571c4d53ed138c1d\"}, {\"upstreamType\": \"FIELD_SET\", \"upstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:dbt,long_tail_companions.analytics.pet_details,PROD),status)\"], \"downstreamType\": \"FIELD\", \"downstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.analytics.pet_details,PROD),status)\"], \"transformOperation\": \"NONE\", \"confidenceScore\": 1.0}, {\"upstreamType\": \"FIELD_SET\", \"upstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.adoption.pets,PROD),status)\"], \"downstreamType\": \"FIELD\", \"downstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.analytics.pet_details,PROD),status)\"], \"transformOperation\": \"NONE\", \"confidenceScore\": 1.0, \"query\": \"urn:li:query:b3a8783e1686233566f1f00d02190648b4befd49886d24f24fbaf366445d218a\"}, {\"upstreamType\": \"FIELD_SET\", \"upstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.adoption.pet_profiles,PROD),temperament)\"], \"downstreamType\": \"FIELD\", \"downstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.analytics.pet_details,PROD),temperament)\"], \"transformOperation\": \"NONE\", \"confidenceScore\": 1.0, \"query\": \"urn:li:query:4ccc5d6b1f3accc81400a1660b9d74b895629e7084e8e11a571c4d53ed138c1d\"}, {\"upstreamType\": \"FIELD_SET\", \"upstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:dbt,long_tail_companions.analytics.pet_details,PROD),temperament)\"], \"downstreamType\": \"FIELD\", \"downstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.analytics.pet_details,PROD),temperament)\"], \"transformOperation\": \"NONE\", \"confidenceScore\": 1.0}, {\"upstreamType\": \"FIELD_SET\", \"upstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.adoption.pet_profiles,PROD),temperament)\"], \"downstreamType\": \"FIELD\", \"downstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.analytics.pet_details,PROD),temperament)\"], \"transformOperation\": \"NONE\", \"confidenceScore\": 1.0, \"query\": \"urn:li:query:b3a8783e1686233566f1f00d02190648b4befd49886d24f24fbaf366445d218a\"}, {\"upstreamType\": \"FIELD_SET\", \"upstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.adoption.pet_profiles,PROD),color)\"], \"downstreamType\": \"FIELD\", \"downstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.analytics.pet_details,PROD),color)\"], \"transformOperation\": \"NONE\", \"confidenceScore\": 1.0, \"query\": \"urn:li:query:4ccc5d6b1f3accc81400a1660b9d74b895629e7084e8e11a571c4d53ed138c1d\"}, {\"upstreamType\": \"FIELD_SET\", \"upstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:dbt,long_tail_companions.analytics.pet_details,PROD),color)\"], \"downstreamType\": \"FIELD\", \"downstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.analytics.pet_details,PROD),color)\"], \"transformOperation\": \"NONE\", \"confidenceScore\": 1.0}, {\"upstreamType\": \"FIELD_SET\", \"upstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.adoption.pet_profiles,PROD),color)\"], \"downstreamType\": \"FIELD\", \"downstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.analytics.pet_details,PROD),color)\"], \"transformOperation\": \"NONE\", \"confidenceScore\": 1.0, \"query\": \"urn:li:query:b3a8783e1686233566f1f00d02190648b4befd49886d24f24fbaf366445d218a\"}, {\"upstreamType\": \"FIELD_SET\", \"upstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.adoption.pet_profiles,PROD),updated_at)\"], \"downstreamType\": \"FIELD\", \"downstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.analytics.pet_details,PROD),updated_at)\"], \"transformOperation\": \"NONE\", \"confidenceScore\": 1.0, \"query\": \"urn:li:query:4ccc5d6b1f3accc81400a1660b9d74b895629e7084e8e11a571c4d53ed138c1d\"}, {\"upstreamType\": \"FIELD_SET\", \"upstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:dbt,long_tail_companions.analytics.pet_details,PROD),updated_at)\"], \"downstreamType\": \"FIELD\", \"downstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.analytics.pet_details,PROD),updated_at)\"], \"transformOperation\": \"NONE\", \"confidenceScore\": 1.0}, {\"upstreamType\": \"FIELD_SET\", \"upstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.adoption.pet_profiles,PROD),updated_at)\"], \"downstreamType\": \"FIELD\", \"downstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.analytics.pet_details,PROD),updated_at)\"], \"transformOperation\": \"NONE\", \"confidenceScore\": 1.0, \"query\": \"urn:li:query:b3a8783e1686233566f1f00d02190648b4befd49886d24f24fbaf366445d218a\"}, {\"upstreamType\": \"FIELD_SET\", \"upstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.adoption.pet_profiles,PROD),profile_id)\", \"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.adoption.human_profiles,PROD),postal_code)\"], \"downstreamType\": \"FIELD\", \"downstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.analytics.pet_details,PROD),postal_code)\"], \"transformOperation\": \"NONE\", \"confidenceScore\": 1.0, \"query\": \"urn:li:query:4ccc5d6b1f3accc81400a1660b9d74b895629e7084e8e11a571c4d53ed138c1d\"}, {\"upstreamType\": \"FIELD_SET\", \"upstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:dbt,long_tail_companions.analytics.pet_details,PROD),postal_code)\"], \"downstreamType\": \"FIELD\", \"downstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.analytics.pet_details,PROD),postal_code)\"], \"transformOperation\": \"NONE\", \"confidenceScore\": 1.0}, {\"upstreamType\": \"FIELD_SET\", \"upstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.adoption.pet_profiles,PROD),profile_id)\", \"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.adoption.human_profiles,PROD),postal_code)\"], \"downstreamType\": \"FIELD\", \"downstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.analytics.pet_details,PROD),postal_code)\"], \"transformOperation\": \"NONE\", \"confidenceScore\": 1.0, \"query\": \"urn:li:query:b3a8783e1686233566f1f00d02190648b4befd49886d24f24fbaf366445d218a\"}, {\"upstreamType\": \"FIELD_SET\", \"upstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.adoption.pet_profiles,PROD),species)\"], \"downstreamType\": \"FIELD\", \"downstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.analytics.pet_details,PROD),species)\"], \"transformOperation\": \"NONE\", \"confidenceScore\": 1.0, \"query\": \"urn:li:query:4ccc5d6b1f3accc81400a1660b9d74b895629e7084e8e11a571c4d53ed138c1d\"}, {\"upstreamType\": \"FIELD_SET\", \"upstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:dbt,long_tail_companions.analytics.pet_details,PROD),species)\"], \"downstreamType\": \"FIELD\", \"downstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.analytics.pet_details,PROD),species)\"], \"transformOperation\": \"NONE\", \"confidenceScore\": 1.0}, {\"upstreamType\": \"FIELD_SET\", \"upstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.adoption.pet_profiles,PROD),species)\"], \"downstreamType\": \"FIELD\", \"downstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.analytics.pet_details,PROD),species)\"], \"transformOperation\": \"NONE\", \"confidenceScore\": 1.0, \"query\": \"urn:li:query:b3a8783e1686233566f1f00d02190648b4befd49886d24f24fbaf366445d218a\"}, {\"upstreamType\": \"FIELD_SET\", \"upstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.adoption.pets,PROD),pk)\"], \"downstreamType\": \"FIELD\", \"downstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.analytics.pet_details,PROD),pet_fk)\"], \"transformOperation\": \"NONE\", \"confidenceScore\": 1.0, \"query\": \"urn:li:query:4ccc5d6b1f3accc81400a1660b9d74b895629e7084e8e11a571c4d53ed138c1d\"}, {\"upstreamType\": \"FIELD_SET\", \"upstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:dbt,long_tail_companions.analytics.pet_details,PROD),pet_fk)\"], \"downstreamType\": \"FIELD\", \"downstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.analytics.pet_details,PROD),pet_fk)\"], \"transformOperation\": \"NONE\", \"confidenceScore\": 1.0}, {\"upstreamType\": \"FIELD_SET\", \"upstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.adoption.pets,PROD),pk)\"], \"downstreamType\": \"FIELD\", \"downstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.analytics.pet_details,PROD),pet_fk)\"], \"transformOperation\": \"NONE\", \"confidenceScore\": 1.0, \"query\": \"urn:li:query:b3a8783e1686233566f1f00d02190648b4befd49886d24f24fbaf366445d218a\"}, {\"upstreamType\": \"FIELD_SET\", \"upstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.adoption.pet_profiles,PROD),coat_type)\"], \"downstreamType\": \"FIELD\", \"downstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.analytics.pet_details,PROD),coat_type)\"], \"transformOperation\": \"NONE\", \"confidenceScore\": 1.0, \"query\": \"urn:li:query:4ccc5d6b1f3accc81400a1660b9d74b895629e7084e8e11a571c4d53ed138c1d\"}, {\"upstreamType\": \"FIELD_SET\", \"upstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:dbt,long_tail_companions.analytics.pet_details,PROD),coat_type)\"], \"downstreamType\": \"FIELD\", \"downstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.analytics.pet_details,PROD),coat_type)\"], \"transformOperation\": \"NONE\", \"confidenceScore\": 1.0}, {\"upstreamType\": \"FIELD_SET\", \"upstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.adoption.pet_profiles,PROD),coat_type)\"], \"downstreamType\": \"FIELD\", \"downstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.analytics.pet_details,PROD),coat_type)\"], \"transformOperation\": \"NONE\", \"confidenceScore\": 1.0, \"query\": \"urn:li:query:b3a8783e1686233566f1f00d02190648b4befd49886d24f24fbaf366445d218a\"}, {\"upstreamType\": \"FIELD_SET\", \"upstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.adoption.pet_profiles,PROD),sex)\"], \"downstreamType\": \"FIELD\", \"downstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.analytics.pet_details,PROD),sex)\"], \"transformOperation\": \"NONE\", \"confidenceScore\": 1.0, \"query\": \"urn:li:query:4ccc5d6b1f3accc81400a1660b9d74b895629e7084e8e11a571c4d53ed138c1d\"}, {\"upstreamType\": \"FIELD_SET\", \"upstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:dbt,long_tail_companions.analytics.pet_details,PROD),sex)\"], \"downstreamType\": \"FIELD\", \"downstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.analytics.pet_details,PROD),sex)\"], \"transformOperation\": \"NONE\", \"confidenceScore\": 1.0}, {\"upstreamType\": \"FIELD_SET\", \"upstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.adoption.pet_profiles,PROD),sex)\"], \"downstreamType\": \"FIELD\", \"downstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.analytics.pet_details,PROD),sex)\"], \"transformOperation\": \"NONE\", \"confidenceScore\": 1.0, \"query\": \"urn:li:query:b3a8783e1686233566f1f00d02190648b4befd49886d24f24fbaf366445d218a\"}, {\"upstreamType\": \"FIELD_SET\", \"upstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.adoption.pet_profiles,PROD),name)\"], \"downstreamType\": \"FIELD\", \"downstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.analytics.pet_details,PROD),name)\"], \"transformOperation\": \"NONE\", \"confidenceScore\": 1.0, \"query\": \"urn:li:query:4ccc5d6b1f3accc81400a1660b9d74b895629e7084e8e11a571c4d53ed138c1d\"}, {\"upstreamType\": \"FIELD_SET\", \"upstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:dbt,long_tail_companions.analytics.pet_details,PROD),name)\"], \"downstreamType\": \"FIELD\", \"downstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.analytics.pet_details,PROD),name)\"], \"transformOperation\": \"NONE\", \"confidenceScore\": 1.0}, {\"upstreamType\": \"FIELD_SET\", \"upstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.adoption.pet_profiles,PROD),name)\"], \"downstreamType\": \"FIELD\", \"downstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.analytics.pet_details,PROD),name)\"], \"transformOperation\": \"NONE\", \"confidenceScore\": 1.0, \"query\": \"urn:li:query:b3a8783e1686233566f1f00d02190648b4befd49886d24f24fbaf366445d218a\"}, {\"upstreamType\": \"FIELD_SET\", \"upstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.adoption.pet_profiles,PROD),spay_neutered)\"], \"downstreamType\": \"FIELD\", \"downstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.analytics.pet_details,PROD),spay_neutered)\"], \"transformOperation\": \"NONE\", \"confidenceScore\": 1.0, \"query\": \"urn:li:query:4ccc5d6b1f3accc81400a1660b9d74b895629e7084e8e11a571c4d53ed138c1d\"}, {\"upstreamType\": \"FIELD_SET\", \"upstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:dbt,long_tail_companions.analytics.pet_details,PROD),spay_neutered)\"], \"downstreamType\": \"FIELD\", \"downstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.analytics.pet_details,PROD),spay_neutered)\"], \"transformOperation\": \"NONE\", \"confidenceScore\": 1.0}, {\"upstreamType\": \"FIELD_SET\", \"upstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.adoption.pet_profiles,PROD),spay_neutered)\"], \"downstreamType\": \"FIELD\", \"downstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.analytics.pet_details,PROD),spay_neutered)\"], \"transformOperation\": \"NONE\", \"confidenceScore\": 1.0, \"query\": \"urn:li:query:b3a8783e1686233566f1f00d02190648b4befd49886d24f24fbaf366445d218a\"}, {\"upstreamType\": \"FIELD_SET\", \"upstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.adoption.pet_profiles,PROD),age_m)\"], \"downstreamType\": \"FIELD\", \"downstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.analytics.pet_details,PROD),age_m)\"], \"transformOperation\": \"NONE\", \"confidenceScore\": 1.0, \"query\": \"urn:li:query:4ccc5d6b1f3accc81400a1660b9d74b895629e7084e8e11a571c4d53ed138c1d\"}, {\"upstreamType\": \"FIELD_SET\", \"upstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:dbt,long_tail_companions.analytics.pet_details,PROD),age_m)\"], \"downstreamType\": \"FIELD\", \"downstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.analytics.pet_details,PROD),age_m)\"], \"transformOperation\": \"NONE\", \"confidenceScore\": 1.0}, {\"upstreamType\": \"FIELD_SET\", \"upstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.adoption.pet_profiles,PROD),age_m)\"], \"downstreamType\": \"FIELD\", \"downstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.analytics.pet_details,PROD),age_m)\"], \"transformOperation\": \"NONE\", \"confidenceScore\": 1.0, \"query\": \"urn:li:query:b3a8783e1686233566f1f00d02190648b4befd49886d24f24fbaf366445d218a\"}, {\"upstreamType\": \"FIELD_SET\", \"upstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.adoption.pet_profiles,PROD),age_y)\"], \"downstreamType\": \"FIELD\", \"downstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.analytics.pet_details,PROD),age_y)\"], \"transformOperation\": \"NONE\", \"confidenceScore\": 1.0, \"query\": \"urn:li:query:4ccc5d6b1f3accc81400a1660b9d74b895629e7084e8e11a571c4d53ed138c1d\"}, {\"upstreamType\": \"FIELD_SET\", \"upstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:dbt,long_tail_companions.analytics.pet_details,PROD),age_y)\"], \"downstreamType\": \"FIELD\", \"downstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.analytics.pet_details,PROD),age_y)\"], \"transformOperation\": \"NONE\", \"confidenceScore\": 1.0}, {\"upstreamType\": \"FIELD_SET\", \"upstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.adoption.pet_profiles,PROD),age_y)\"], \"downstreamType\": \"FIELD\", \"downstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.analytics.pet_details,PROD),age_y)\"], \"transformOperation\": \"NONE\", \"confidenceScore\": 1.0, \"query\": \"urn:li:query:b3a8783e1686233566f1f00d02190648b4befd49886d24f24fbaf366445d218a\"}, {\"upstreamType\": \"FIELD_SET\", \"upstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.adoption.pet_profiles,PROD),created_at)\"], \"downstreamType\": \"FIELD\", \"downstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.analytics.pet_details,PROD),created_at)\"], \"transformOperation\": \"NONE\", \"confidenceScore\": 1.0, \"query\": \"urn:li:query:4ccc5d6b1f3accc81400a1660b9d74b895629e7084e8e11a571c4d53ed138c1d\"}, {\"upstreamType\": \"FIELD_SET\", \"upstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:dbt,long_tail_companions.analytics.pet_details,PROD),created_at)\"], \"downstreamType\": \"FIELD\", \"downstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.analytics.pet_details,PROD),created_at)\"], \"transformOperation\": \"NONE\", \"confidenceScore\": 1.0}, {\"upstreamType\": \"FIELD_SET\", \"upstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.adoption.pet_profiles,PROD),created_at)\"], \"downstreamType\": \"FIELD\", \"downstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.analytics.pet_details,PROD),created_at)\"], \"transformOperation\": \"NONE\", \"confidenceScore\": 1.0, \"query\": \"urn:li:query:b3a8783e1686233566f1f00d02190648b4befd49886d24f24fbaf366445d218a\"}, {\"upstreamType\": \"FIELD_SET\", \"upstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.adoption.pets,PROD),profile_id)\"], \"downstreamType\": \"FIELD\", \"downstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.analytics.pet_details,PROD),profile_id)\"], \"transformOperation\": \"NONE\", \"confidenceScore\": 1.0, \"query\": \"urn:li:query:4ccc5d6b1f3accc81400a1660b9d74b895629e7084e8e11a571c4d53ed138c1d\"}, {\"upstreamType\": \"FIELD_SET\", \"upstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:dbt,long_tail_companions.analytics.pet_details,PROD),profile_id)\"], \"downstreamType\": \"FIELD\", \"downstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.analytics.pet_details,PROD),profile_id)\"], \"transformOperation\": \"NONE\", \"confidenceScore\": 1.0}, {\"upstreamType\": \"FIELD_SET\", \"upstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.adoption.pets,PROD),profile_id)\"], \"downstreamType\": \"FIELD\", \"downstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.analytics.pet_details,PROD),profile_id)\"], \"transformOperation\": \"NONE\", \"confidenceScore\": 1.0, \"query\": \"urn:li:query:b3a8783e1686233566f1f00d02190648b4befd49886d24f24fbaf366445d218a\"}]}",
+            "contentType": "application/json"
+        }
+    },
+    {
+        "entityType": "dataset",
+        "entityUrn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.analytics.pet_details,PROD)",
+        "changeType": "UPSERT",
+        "aspectName": "status",
+        "aspect": {
+            "value": "{\"removed\": false}",
+            "contentType": "application/json"
+        }
+    },
+    {
+        "entityType": "domain",
+        "entityUrn": "urn:li:domain:0da1ef03-8870-45db-9f47-ef4f592f095c",
+        "changeType": "UPSERT",
+        "aspectName": "domainProperties",
+        "aspect": {
+            "value": "{\"customProperties\": {}, \"name\": \"Adoptions\", \"description\": \"# Pet Adoptions Domain Documentation\", \"created\": {\"time\": 1722973905297, \"actor\": \"urn:li:corpuser:test@example.com\"}}",
+            "contentType": "application/json"
+        }
+    },
+    {
+        "entityType": "query",
+        "entityUrn": "urn:li:query:ec6cb92edd075c995e22d8d50804627bc8e921c56241c110733f223412668e47",
+        "changeType": "UPSERT",
+        "aspectName": "dataPlatformInstance",
+        "aspect": {
+            "value": "{\"platform\": \"urn:li:dataPlatform:snowflake\"}",
+            "contentType": "application/json"
+        }
+    },
+    {
+        "entityType": "query",
+        "entityUrn": "urn:li:query:ec6cb92edd075c995e22d8d50804627bc8e921c56241c110733f223412668e47",
+        "changeType": "UPSERT",
+        "aspectName": "queryProperties",
+        "aspect": {
+            "value": "{\"customProperties\": {}, \"statement\": {\"value\": \"SELECT COUNT(*)\\n        FROM LONG_TAIL_COMPANIONS.ANALYTICS.\\\"PET_DETAILS\\\"\\n        WHERE status IS NULL\", \"language\": \"SQL\"}, \"source\": \"SYSTEM\", \"created\": {\"time\": 1761170668488, \"actor\": \"urn:li:corpuser:deploy_test_sa\"}, \"lastModified\": {\"time\": 1761170668488, \"actor\": \"urn:li:corpuser:deploy_test_sa\"}}",
+            "contentType": "application/json"
+        }
+    },
+    {
+        "entityType": "query",
+        "entityUrn": "urn:li:query:ec6cb92edd075c995e22d8d50804627bc8e921c56241c110733f223412668e47",
+        "changeType": "UPSERT",
+        "aspectName": "querySubjects",
+        "aspect": {
+            "value": "{\"subjects\": [{\"entity\": \"urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.analytics.pet_details,PROD)\"}, {\"entity\": \"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.analytics.pet_details,PROD),status)\"}]}",
+            "contentType": "application/json"
+        }
+    },
+    {
+        "entityType": "query",
+        "entityUrn": "urn:li:query:ec6cb92edd075c995e22d8d50804627bc8e921c56241c110733f223412668e47",
+        "changeType": "UPSERT",
+        "aspectName": "status",
+        "aspect": {
+            "value": "{\"removed\": false}",
+            "contentType": "application/json"
+        }
+    },
+    {
+        "entityType": "query",
+        "entityUrn": "urn:li:query:manual_test_query_for_pet_details",
+        "changeType": "UPSERT",
+        "aspectName": "queryProperties",
+        "aspect": {
+            "value": "{\"statement\": {\"value\": \"SELECT pet_id, name FROM long_tail_companions.analytics.pet_details WHERE pet_id = '123'\", \"language\": \"SQL\"}, \"created\": {\"time\": 1761170668488, \"actor\": \"urn:li:corpuser:deploy_test_sa\"}, \"lastModified\": {\"time\": 1761170668488, \"actor\": \"urn:li:corpuser:deploy_test_sa\"}, \"source\": \"MANUAL\", \"name\": \"Manual Test Query for Pet Details\"}",
+            "contentType": "application/json"
+        }
+    },
+    {
+        "entityType": "query",
+        "entityUrn": "urn:li:query:manual_test_query_for_pet_details",
+        "changeType": "UPSERT",
+        "aspectName": "querySubjects",
+        "aspect": {
+            "value": "{\"subjects\": [{\"entity\": \"urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.analytics.pet_details,PROD)\"}, {\"entity\": \"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.analytics.pet_details,PROD),pet_id)\"}]}",
+            "contentType": "application/json"
+        }
+    },
+    {
+        "entityType": "dataset",
+        "entityUrn": "urn:li:dataset:(urn:li:dataPlatform:looker,long-tail-companions.view.pet_details,PROD)",
+        "changeType": "UPSERT",
+        "aspectName": "schemaMetadata",
+        "aspect": {
+            "value": "{\"schemaName\": \"long-tail-companions.view.pet_details\", \"platform\": \"urn:li:dataPlatform:looker\", \"version\": 0, \"created\": {\"time\": 0, \"actor\": \"urn:li:corpuser:unknown\"}, \"lastModified\": {\"time\": 0, \"actor\": \"urn:li:corpuser:unknown\"}, \"hash\": \"\", \"platformSchema\": {\"com.linkedin.pegasus2avro.schema.MySqlDDL\": {\"tableSchema\": \"\"}}, \"fields\": [{\"fieldPath\": \"color\", \"nullable\": true, \"description\": \"Color of pet\", \"type\": {\"type\": {\"com.linkedin.pegasus2avro.schema.StringType\": {}}}, \"nativeDataType\": \"VARCHAR(16777216)\", \"recursive\": false, \"isPartOfKey\": false}]}",
+            "contentType": "application/json"
+        }
+    },
+    {
+        "entityType": "dataset",
+        "entityUrn": "urn:li:dataset:(urn:li:dataPlatform:looker,long-tail-companions.view.pet_details,PROD)",
+        "changeType": "UPSERT",
+        "aspectName": "datasetProperties",
+        "aspect": {
+            "value": "{\"customProperties\": {}, \"name\": \"pet_details\", \"qualifiedName\": \"long-tail-companions.view.pet_details\", \"description\": \"Looker view for pet details\", \"created\": {\"time\": 1761122781990}, \"lastModified\": {\"time\": 1761122781990}, \"tags\": []}",
+            "contentType": "application/json"
+        }
+    },
+    {
+        "entityType": "dataset",
+        "entityUrn": "urn:li:dataset:(urn:li:dataPlatform:looker,long-tail-companions.view.pet_details,PROD)",
+        "changeType": "UPSERT",
+        "aspectName": "status",
+        "aspect": {
+            "value": "{\"removed\": false}",
+            "contentType": "application/json"
+        }
+    },
+    {
+        "entityType": "dataset",
+        "entityUrn": "urn:li:dataset:(urn:li:dataPlatform:looker,long-tail-companions.view.pet_details,PROD)",
+        "changeType": "UPSERT",
+        "aspectName": "upstreamLineage",
+        "aspect": {
+            "value": "{\"upstreams\": [{\"auditStamp\": {\"time\": 1761189498008, \"actor\": \"urn:li:corpuser:_ingestion\"}, \"created\": {\"time\": 1761122781990, \"actor\": \"urn:li:corpuser:test@example.com\"}, \"dataset\": \"urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.adoption.pet_profiles,PROD)\", \"type\": \"TRANSFORMED\"}], \"fineGrainedLineages\": [{\"upstreamType\": \"FIELD_SET\", \"upstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.adoption.pet_profiles,PROD),color)\"], \"downstreamType\": \"FIELD\", \"downstreams\": [\"urn:li:schemaField:(urn:li:dataset:(urn:li:dataPlatform:looker,long-tail-companions.view.pet_details,PROD),color)\"], \"transformOperation\": \"NONE\", \"confidenceScore\": 1.0}]}",
+            "contentType": "application/json"
+        }
+    }
+]
