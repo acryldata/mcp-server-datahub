@@ -1,5 +1,5 @@
 [project]
-name = "mcp-server-datahub"
+name = "mcp-server-datahub-shemreader"
 dynamic = ["version"]
 description = "A Model Context Protocol (MCP) server for DataHub"
 readme = "README.md"
@@ -26,7 +26,7 @@ dev = [
 ]
 
 [project.urls]
-"Source" = "https://github.com/acryldata/mcp-server-datahub"
+"Source" = "https://github.com/shemreader/mcp-server-datahub"
 "Documentation" = "https://docs.datahub.com/docs/features/feature-guides/mcp"
 
 [project.scripts]
