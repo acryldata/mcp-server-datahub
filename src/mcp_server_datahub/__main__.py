@@ -29,10 +29,24 @@ register_all_tools(is_oss=True)
     is_flag=True,
     default=False,
 )
+@click.option(
+    "--host",
+    type=str,
+    default="0.0.0.0",
+    help="Host to bind the server to (default: 0.0.0.0 for all interfaces)",
+)
+@click.option(
+    "--port",
+    type=int,
+    default=8000,
+    help="Port to bind the server to (default: 8000)",
+)
 @telemetry.with_telemetry(
     capture_kwargs=["transport"],
 )
-def main(transport: Literal["stdio", "sse", "http"], debug: bool) -> None:
+def main(
+    transport: Literal["stdio", "sse", "http"], debug: bool, host: str, port: int
+) -> None:
     client = DataHubClient.from_env(
         client_mode=ClientMode.SDK,
         datahub_component=f"mcp-server-datahub/{__version__}",
@@ -45,7 +59,13 @@ def main(transport: Literal["stdio", "sse", "http"], debug: bool) -> None:
 
     with with_datahub_client(client):
         if transport == "http":
-            mcp.run(transport=transport, show_banner=False, stateless_http=True)
+            mcp.run(
+                transport=transport,
+                show_banner=False,
+                stateless_http=True,
+                host=host,
+                port=port,
+            )
         else:
             mcp.run(transport=transport, show_banner=False)
 
