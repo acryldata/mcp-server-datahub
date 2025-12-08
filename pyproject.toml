@@ -1,5 +1,5 @@
 [project]
-name = "mcp-server-datahub-shemreader"
+name = "mcp-server-datahub"
 dynamic = ["version"]
 description = "A Model Context Protocol (MCP) server for DataHub"
 readme = "README.md"
@@ -12,7 +12,6 @@ dependencies = [
     "jmespath~=1.0.1",
     "loguru",
     "pydantic>=2.0,<2.12",
-    "sniffio>=1.3.0",
 ]
 license = "Apache-2.0"
 
@@ -27,7 +26,7 @@ dev = [
 ]
 
 [project.urls]
-"Source" = "https://github.com/shemreader/mcp-server-datahub"
+"Source" = "https://github.com/acryldata/mcp-server-datahub"
 "Documentation" = "https://docs.datahub.com/docs/features/feature-guides/mcp"
 
 [project.scripts]
