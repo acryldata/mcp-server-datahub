@@ -66,7 +66,19 @@ def main(
                 host=host,
                 port=port,
             )
+        elif transport == "sse":
+            mcp.run(
+                transport=transport,
+                show_banner=False,
+                host=host,
+                port=port,
+            )
         else:
+            # stdio transport - warn if host/port were explicitly set
+            if host != "0.0.0.0" or port != 8000:
+                logging.warning(
+                    "--host and --port options are ignored for stdio transport"
+                )
             mcp.run(transport=transport, show_banner=False)
 
 
