@@ -58,15 +58,6 @@ if using_oss:
 
     # Import tool modules directly and get from sys.modules to avoid __init__.py shadowing
     # The __init__.py re-exports functions which shadows the module names
-    import mcp_server_datahub.tools.descriptions
-    import mcp_server_datahub.tools.documents
-    import mcp_server_datahub.tools.domains
-    import mcp_server_datahub.tools.get_me
-    import mcp_server_datahub.tools.owners
-    import mcp_server_datahub.tools.save_document
-    import mcp_server_datahub.tools.structured_properties
-    import mcp_server_datahub.tools.tags
-    import mcp_server_datahub.tools.terms
 
     # Get actual module objects from sys.modules (not the shadowed function refs)
     descriptions_module = sys.modules["mcp_server_datahub.tools.descriptions"]
