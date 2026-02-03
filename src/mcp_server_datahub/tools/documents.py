@@ -3,7 +3,7 @@
 import pathlib
 from typing import Any, Dict, List, Literal, Optional
 
-import re2
+import re2  # type: ignore[import-untyped]
 
 # Load GraphQL queries at module level (no circular dependency here)
 document_search_gql = (
