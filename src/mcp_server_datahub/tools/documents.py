@@ -1,13 +1,11 @@
 """Document tools for DataHub MCP server."""
 
-import logging
 import pathlib
 from typing import Any, Dict, List, Literal, Optional
 
 import re2  # type: ignore[import-untyped]
 from datahub.utilities.perf_timer import PerfTimer
-
-logger = logging.getLogger(__name__)
+from loguru import logger
 
 # Load GraphQL queries at module level (no circular dependency here)
 document_search_gql = (
