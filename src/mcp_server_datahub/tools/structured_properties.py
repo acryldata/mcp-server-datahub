@@ -436,5 +436,3 @@ def remove_structured_properties(
         "success": True,
         "message": f"Successfully removed {len(property_urns)} structured propert(ies) from {success_count} entit(ies)",
     }
-
-
