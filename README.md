@@ -94,6 +94,76 @@ List schema fields for a dataset with keyword filtering and pagination, useful w
 
 Retrieve the exact lineage paths between two assets or columns, including intermediate transformations and SQL query information.
 
+### Mutation Tools
+
+These tools allow modifying metadata in DataHub. They are enabled via the `TOOLS_IS_MUTATION_ENABLED=true` environment variable.
+
+`add_tags` / `remove_tags`
+
+Add or remove tags from entities or schema fields (columns). Supports bulk operations on multiple entities.
+
+`add_terms` / `remove_terms`
+
+Add or remove glossary terms from entities or schema fields. Useful for applying business definitions and data classification.
+
+`add_owners` / `remove_owners`
+
+Add or remove ownership assignments from entities. Supports different ownership types (technical owner, data owner, etc.).
+
+`set_domains` / `remove_domains`
+
+Assign or remove domain membership for entities. Each entity can belong to one domain.
+
+`update_description`
+
+Update, append to, or remove descriptions for entities or schema fields. Supports markdown formatting.
+
+`add_structured_properties` / `remove_structured_properties`
+
+Manage structured properties (typed metadata fields) on entities. Supports string, number, URN, date, and rich text value types.
+
+### User Tools
+
+These tools provide information about the authenticated user. Enabled via `TOOLS_IS_USER_ENABLED=true`.
+
+`get_me`
+
+Retrieve information about the currently authenticated user, including profile details and group memberships.
+
+### Document Tools
+
+These tools work with documents (knowledge articles, runbooks, FAQs) stored in DataHub. Document tools are automatically hidden if no documents exist in the catalog.
+
+`search_documents`
+
+Search for documents using keyword search with filters for platforms, domains, tags, glossary terms, and owners.
+
+`grep_documents`
+
+Search within document content using regex patterns. Useful for finding specific information across multiple documents.
+
+`save_document`
+
+Save standalone documents (insights, decisions, FAQs, notes) to DataHub's knowledge base. Documents are organized under a configurable parent folder.
+
+## Configuration
+
+### Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `TOOLS_IS_MUTATION_ENABLED` | `false` | Enable mutation tools (add/remove tags, owners, etc.) |
+| `TOOLS_IS_USER_ENABLED` | `false` | Enable user tools (get_me) |
+| `DATAHUB_MCP_DOCUMENT_TOOLS_DISABLED` | `false` | Completely disable document tools |
+| `SAVE_DOCUMENT_TOOL_ENABLED` | `true` | Enable/disable the save_document tool |
+| `SAVE_DOCUMENT_PARENT_TITLE` | `Shared` | Title for the parent folder of saved documents |
+| `SAVE_DOCUMENT_ORGANIZE_BY_USER` | `false` | Organize saved documents by user |
+| `SAVE_DOCUMENT_RESTRICT_UPDATES` | `true` | Only allow updating documents in the shared folder |
+| `TOOL_RESPONSE_TOKEN_LIMIT` | `80000` | Maximum tokens for tool responses |
+| `ENTITY_SCHEMA_TOKEN_BUDGET` | `16000` | Token budget per entity for schema fields |
+| `DISABLE_NEWER_GMS_FIELD_DETECTION` | `false` | Disable adaptive GMS field detection |
+| `DATAHUB_MCP_DISABLE_DEFAULT_VIEW` | `false` | Disable automatic default view application |
+| `SEMANTIC_SEARCH_ENABLED` | `false` | Enable semantic (AI-powered) search |
 
 ## Example: Data Discovery & Understanding Flow (for Agents Using DataHub Tools)
 

@@ -262,7 +262,12 @@ async def test_search_different_num_results(mcp_client: Client) -> None:
 @pytest.mark.anyio
 async def test_get_entities_dataset(mcp_client: Client) -> None:
     """Test getting a single dataset entity via get_entities tool."""
-    result = await mcp_client.call_tool("get_entities", {"urns": _test_urn})
+    try:
+        result = await mcp_client.call_tool("get_entities", {"urns": _test_urn})
+    except Exception as e:
+        if "not found" in str(e).lower():
+            pytest.skip(f"Test entity {_test_urn} not found in DataHub instance")
+        raise
     assert result.content, "Tool result should have content"
     content = assert_type(TextContent, result.content[0])
     res = json.loads(content.text)
@@ -274,7 +279,12 @@ async def test_get_entities_dataset(mcp_client: Client) -> None:
 @pytest.mark.anyio
 async def test_get_entities_domain(mcp_client: Client) -> None:
     """Test getting a domain entity via get_entities tool."""
-    result = await mcp_client.call_tool("get_entities", {"urns": _test_domain})
+    try:
+        result = await mcp_client.call_tool("get_entities", {"urns": _test_domain})
+    except Exception as e:
+        if "not found" in str(e).lower():
+            pytest.skip(f"Test domain {_test_domain} not found in DataHub instance")
+        raise
     assert result.content, "Tool result should have content"
     content = assert_type(TextContent, result.content[0])
     res = json.loads(content.text)
@@ -633,7 +643,12 @@ async def test_get_dataset_queries_combined(mcp_client: Client) -> None:
 @pytest.mark.anyio
 async def test_list_schema_fields_basic(mcp_client: Client) -> None:
     """Test list_schema_fields tool for basic schema field listing."""
-    result = await mcp_client.call_tool("list_schema_fields", {"urn": _test_urn})
+    try:
+        result = await mcp_client.call_tool("list_schema_fields", {"urn": _test_urn})
+    except Exception as e:
+        if "not found" in str(e).lower():
+            pytest.skip(f"Test entity {_test_urn} not found in DataHub instance")
+        raise
     assert result.content, "Tool result should have content"
     content = assert_type(TextContent, result.content[0])
     res = json.loads(content.text)
@@ -649,9 +664,14 @@ async def test_list_schema_fields_basic(mcp_client: Client) -> None:
 @pytest.mark.anyio
 async def test_list_schema_fields_single_keyword(mcp_client: Client) -> None:
     """Test list_schema_fields with single keyword filter."""
-    result = await mcp_client.call_tool(
-        "list_schema_fields", {"urn": _test_urn, "keywords": "id"}
-    )
+    try:
+        result = await mcp_client.call_tool(
+            "list_schema_fields", {"urn": _test_urn, "keywords": "id"}
+        )
+    except Exception as e:
+        if "not found" in str(e).lower():
+            pytest.skip(f"Test entity {_test_urn} not found in DataHub instance")
+        raise
     assert result.content, "Tool result should have content"
     content = assert_type(TextContent, result.content[0])
     res = json.loads(content.text)
@@ -666,9 +686,14 @@ async def test_list_schema_fields_single_keyword(mcp_client: Client) -> None:
 @pytest.mark.anyio
 async def test_list_schema_fields_multiple_keywords(mcp_client: Client) -> None:
     """Test list_schema_fields with multiple keywords (OR matching)."""
-    result = await mcp_client.call_tool(
-        "list_schema_fields", {"urn": _test_urn, "keywords": ["id", "name"]}
-    )
+    try:
+        result = await mcp_client.call_tool(
+            "list_schema_fields", {"urn": _test_urn, "keywords": ["id", "name"]}
+        )
+    except Exception as e:
+        if "not found" in str(e).lower():
+            pytest.skip(f"Test entity {_test_urn} not found in DataHub instance")
+        raise
     assert result.content, "Tool result should have content"
     content = assert_type(TextContent, result.content[0])
     res = json.loads(content.text)
@@ -684,9 +709,14 @@ async def test_list_schema_fields_multiple_keywords(mcp_client: Client) -> None:
 async def test_list_schema_fields_pagination(mcp_client: Client) -> None:
     """Test list_schema_fields with pagination."""
     # First page
-    result_page1 = await mcp_client.call_tool(
-        "list_schema_fields", {"urn": _test_urn, "limit": 5, "offset": 0}
-    )
+    try:
+        result_page1 = await mcp_client.call_tool(
+            "list_schema_fields", {"urn": _test_urn, "limit": 5, "offset": 0}
+        )
+    except Exception as e:
+        if "not found" in str(e).lower():
+            pytest.skip(f"Test entity {_test_urn} not found in DataHub instance")
+        raise
     assert result_page1.content, "Tool result should have content"
     content_page1 = assert_type(TextContent, result_page1.content[0])
     res_page1 = json.loads(content_page1.text)
@@ -713,9 +743,14 @@ async def test_list_schema_fields_pagination(mcp_client: Client) -> None:
 @pytest.mark.anyio
 async def test_list_schema_fields_limit(mcp_client: Client) -> None:
     """Test list_schema_fields with different limit values."""
-    result = await mcp_client.call_tool(
-        "list_schema_fields", {"urn": _test_urn, "limit": 10}
-    )
+    try:
+        result = await mcp_client.call_tool(
+            "list_schema_fields", {"urn": _test_urn, "limit": 10}
+        )
+    except Exception as e:
+        if "not found" in str(e).lower():
+            pytest.skip(f"Test entity {_test_urn} not found in DataHub instance")
+        raise
     assert result.content, "Tool result should have content"
     content = assert_type(TextContent, result.content[0])
     res = json.loads(content.text)
@@ -731,10 +766,15 @@ async def test_list_schema_fields_limit(mcp_client: Client) -> None:
 @pytest.mark.anyio
 async def test_list_schema_fields_combined(mcp_client: Client) -> None:
     """Test list_schema_fields with keywords and pagination combined."""
-    result = await mcp_client.call_tool(
-        "list_schema_fields",
-        {"urn": _test_urn, "keywords": ["id", "name"], "limit": 10, "offset": 0},
-    )
+    try:
+        result = await mcp_client.call_tool(
+            "list_schema_fields",
+            {"urn": _test_urn, "keywords": ["id", "name"], "limit": 10, "offset": 0},
+        )
+    except Exception as e:
+        if "not found" in str(e).lower():
+            pytest.skip(f"Test entity {_test_urn} not found in DataHub instance")
+        raise
     assert result.content, "Tool result should have content"
     content = assert_type(TextContent, result.content[0])
     res = json.loads(content.text)

@@ -17,6 +17,8 @@ import os
 import pathlib
 import re
 import string
+import threading
+from enum import Enum
 from typing import (
     Any,
     Awaitable,
@@ -43,17 +45,37 @@ from datahub.sdk.search_client import compile_filters
 from datahub.sdk.search_filters import Filter, FilterDsl, load_filters
 from datahub.utilities.ordered_set import OrderedSet
 from fastmcp import FastMCP
+from fastmcp.tools.tool import Tool as FastMCPTool
+from json_repair import repair_json
 from loguru import logger
 from pydantic import BaseModel
 
+# IMPORTANT: Use relative imports to maintain compatibility across repositories
+from .tools.descriptions import update_description
+from .tools.domains import remove_domains, set_domains
+from .tools.get_me import get_me
+from .tools.owners import add_owners, remove_owners
+from .tools.structured_properties import (
+    add_structured_properties,
+    remove_structured_properties,
+)
+from .tools.terms import (
+    add_glossary_terms,
+    remove_glossary_terms,
+)
+
 # IMPORTANT: Use relative import to maintain compatibility across repositories
 from ._token_estimator import TokenCountEstimator
+from .tools.documents import grep_documents, search_documents
+from .tools.save_document import is_save_document_enabled, save_document
+from .tools.tags import add_tags, remove_tags
 
 _P = ParamSpec("_P")
 _R = TypeVar("_R")
 T = TypeVar("T")
 DESCRIPTION_LENGTH_HARD_LIMIT = 1000
 QUERY_LENGTH_HARD_LIMIT = 5000
+DOCUMENT_CONTENT_CHAR_LIMIT = 8000
 
 # Maximum token count for tool responses to prevent context window issues
 # As per telemetry tool result length goes upto
@@ -62,6 +84,15 @@ TOOL_RESPONSE_TOKEN_LIMIT = int(os.getenv("TOOL_RESPONSE_TOKEN_LIMIT", 80000))
 # Per-entity schema token budget for field truncation
 # Assumes ~5 entities per response: 80K total / 5 = 16K per entity
 ENTITY_SCHEMA_TOKEN_BUDGET = int(os.getenv("ENTITY_SCHEMA_TOKEN_BUDGET", "16000"))
+
+
+class ToolType(Enum):
+    """Tool type enumeration for different tool types."""
+
+    SEARCH = "search"  # Datahub search tools
+    MUTATION = "mutation"  # Datahub mutation tools
+    USER = "user"  # Datahub user tools
+    DEFAULT = "default"  # Fallback tag
 
 
 def _select_results_within_budget(
@@ -250,7 +281,9 @@ def async_background(fn: Callable[_P, _R]) -> Callable[_P, Awaitable[_R]]:
     return wrapper
 
 
-mcp = FastMCP[None](name="datahub")
+mcp = FastMCP[None](
+    name="datahub",
+)
 
 
 _mcp_dh_client = contextvars.ContextVar[DataHubClient]("_mcp_dh_client")
@@ -376,11 +409,19 @@ def _is_datahub_cloud(graph: DataHubGraph) -> bool:
 
 
 def _is_field_validation_error(error_msg: str) -> bool:
-    """Check if the error is a GraphQL field validation error."""
-    return "FieldUndefined" in error_msg or "ValidationError" in error_msg
+    """Check if the error is a GraphQL field/type validation or syntax error.
+
+    Includes InvalidSyntax because unknown types (like Document on older GMS)
+    cause syntax errors rather than validation errors.
+    """
+    return (
+        "FieldUndefined" in error_msg
+        or "ValidationError" in error_msg
+        or "InvalidSyntax" in error_msg
+    )
 
 
-def _execute_graphql(
+def execute_graphql(
     graph: DataHubGraph,
     *,
     query: str,
@@ -423,6 +464,9 @@ def _execute_graphql(
     logger.debug(
         f"Executing GraphQL {operation_name or 'query'}: "
         f"is_cloud={is_cloud}, newer_gms_enabled={newer_gms_enabled_for_this_query}"
+    )
+    logger.debug(
+        f"GraphQL query for {operation_name or 'query'}:\n{query}\nVariables: {variables}"
     )
 
     try:
@@ -586,7 +630,7 @@ def fetch_global_default_view(graph: DataHubGraph) -> Optional[str]:
     }
     """
 
-    result = _execute_graphql(graph, query=query)
+    result = execute_graphql(graph, query=query)
     settings = result.get("globalViewsSettings")
     if settings:
         view_urn = settings.get("defaultView")
@@ -968,6 +1012,26 @@ def clean_get_entities_response(
         if view_properties.get("logic"):
             view_properties["logic"] = truncate_query(view_properties["logic"])
 
+    # Truncate document content to prevent context window issues
+    if response and (info := response.get("info")):
+        if contents := info.get("contents"):
+            if text := contents.get("text"):
+                if len(text) > DOCUMENT_CONTENT_CHAR_LIMIT:
+                    original_length = len(text)
+                    truncate_at = DOCUMENT_CONTENT_CHAR_LIMIT
+                    contents["text"] = (
+                        text[:truncate_at]
+                        + "\n\n[Content truncated. Use grep_documents(start_offset={}) to continue.]".format(
+                            truncate_at
+                        )
+                    )
+                    contents["_truncated"] = True
+                    contents["_originalLengthChars"] = original_length
+                    contents["_truncatedAtChar"] = truncate_at
+                    logger.info(
+                        f"Document content truncated: {original_length:,} -> {truncate_at:,} chars"
+                    )
+
     return response
 
 
@@ -984,12 +1048,33 @@ def get_entities(urns: List[str] | str) -> List[dict] | dict:
     """
     client = get_datahub_client()
 
-    # Handle single URN for backward compatibility
+    # Handle JSON-stringified arrays (same issue as filters in search tool)
+    # Some MCP clients/LLMs pass arrays as JSON strings instead of proper lists
     if isinstance(urns, str):
-        urns = [urns]
-        return_single = True
+        urns_str = urns.strip()  # Remove leading/trailing whitespace
+
+        # Try to parse as JSON array first
+        if urns_str.startswith("["):
+            try:
+                # Use json_repair to handle malformed JSON from LLMs
+                urns = json.loads(repair_json(urns_str))
+                return_single = False
+            except (json.JSONDecodeError, Exception) as e:
+                logger.warning(
+                    f"Failed to parse URNs as JSON array: {e}. Treating as single URN."
+                )
+                # Not valid JSON, treat as single URN string
+                urns = [urns_str]
+                return_single = True
+        else:
+            # Single URN string
+            urns = [urns_str]
+            return_single = True
     else:
         return_single = False
+
+    # Trim whitespace from each URN (defensive against string concatenation issues)
+    urns = [urn.strip() for urn in urns]
 
     results = []
     for urn in urns:
@@ -1008,14 +1093,14 @@ def get_entities(urns: List[str] | str) -> List[dict] | dict:
             # Execute the appropriate GraphQL query
             variables = {"urn": urn}
             if is_query:
-                result = _execute_graphql(
+                result = execute_graphql(
                     client._graph,
                     query=query_entity_gql,
                     variables=variables,
                     operation_name="GetQueryEntity",
                 )["entity"]
             else:
-                result = _execute_graphql(
+                result = execute_graphql(
                     client._graph,
                     query=entity_details_fragment_gql,
                     variables=variables,
@@ -1107,7 +1192,7 @@ def list_schema_fields(
 
     # Execute GraphQL query to get full schema
     variables = {"urn": urn}
-    result = _execute_graphql(
+    result = execute_graphql(
         client._graph,
         query=entity_details_fragment_gql,
         variables=variables,
@@ -1369,7 +1454,7 @@ def _search_implementation(
         operation_name = "search"
         response_key = "searchAcrossEntities"
 
-    response = _execute_graphql(
+    response = execute_graphql(
         client._graph,
         query=gql_query,
         variables=variables,
@@ -1721,7 +1806,7 @@ def get_dataset_queries(
         variables["input"]["source"] = source
 
     # Execute the GraphQL query
-    result = _execute_graphql(
+    result = execute_graphql(
         client._graph,
         query=queries_gql,
         variables=variables,
@@ -1807,7 +1892,7 @@ class AssetLineageAPI:
         }
         if asset_lineage_directive.upstream:
             result["upstreams"] = clean_gql_response(
-                _execute_graphql(
+                execute_graphql(
                     self.graph,
                     query=entity_details_fragment_gql,
                     variables={
@@ -1821,7 +1906,7 @@ class AssetLineageAPI:
             )
         if asset_lineage_directive.downstream:
             result["downstreams"] = clean_gql_response(
-                _execute_graphql(
+                execute_graphql(
                     self.graph,
                     query=entity_details_fragment_gql,
                     variables={
@@ -2467,25 +2552,145 @@ def _find_upstream_lineage_path(
 
 # Track if tools have been registered to prevent duplicate registration
 _tools_registered = False
+_tools_registration_lock = threading.Lock()
 
 
-def register_all_tools(is_oss: bool = False) -> None:
-    """Register all MCP tools with deployment-specific descriptions.
+def register_mutation_tools(mcp_instance: FastMCP, is_oss: bool = False) -> None:
+    """Register mutation tools on an MCP instance.
+
+    This is the core registration logic that can be used by both production code
+    (via register_all_tools) and tests (with isolated MCP instances).
 
     Args:
+        mcp_instance: The FastMCP instance to register tools on
         is_oss: If True, use OSS-compatible tool descriptions (limited sorting fields).
                 If False, use Cloud descriptions (full sorting features).
-
-    Note: Can only be called once. Subsequent calls are no-ops to prevent duplicate registration.
     """
-    global _tools_registered
-    if _tools_registered:
-        logger.debug("Tools already registered, skipping duplicate registration")
+
+    enabled = get_boolean_env_variable("TOOLS_IS_MUTATION_ENABLED")
+
+    logger.info(f"Mutation Tools {'ENABLED' if enabled else 'DISABLED'} MCP Server.")
+
+    if not enabled:
         return
 
-    _tools_registered = True
-    logger.info(f"Registering MCP tools (is_oss={is_oss})")
+    # Register add_tags tool
+    mcp_instance.tool(
+        name="add_tags", description=add_tags.__doc__, tags={ToolType.MUTATION.value}
+    )(async_background(add_tags))
 
+    # Register remove_tags tool
+    mcp_instance.tool(
+        name="remove_tags",
+        description=remove_tags.__doc__,
+        tags={ToolType.MUTATION.value},
+    )(async_background(remove_tags))
+
+    # Register add_terms tool
+    mcp_instance.tool(
+        name="add_terms",
+        description=add_glossary_terms.__doc__,
+        tags={ToolType.MUTATION.value},
+    )(async_background(add_glossary_terms))
+
+    # Register remove_terms tool
+    mcp_instance.tool(
+        name="remove_terms",
+        description=remove_glossary_terms.__doc__,
+        tags={ToolType.MUTATION.value},
+    )(async_background(remove_glossary_terms))
+
+    # Register add_owners tool
+    mcp_instance.tool(
+        name="add_owners",
+        description=add_owners.__doc__,
+        tags={ToolType.MUTATION.value},
+    )(async_background(add_owners))
+
+    # Register remove_owners tool
+    mcp_instance.tool(
+        name="remove_owners",
+        description=remove_owners.__doc__,
+        tags={ToolType.MUTATION.value},
+    )(async_background(remove_owners))
+
+    # Register set_domains tool
+    mcp_instance.tool(
+        name="set_domains",
+        description=set_domains.__doc__,
+        tags={ToolType.MUTATION.value},
+    )(async_background(set_domains))
+
+    # Register remove_domains tool
+    mcp_instance.tool(
+        name="remove_domains",
+        description=remove_domains.__doc__,
+        tags={ToolType.MUTATION.value},
+    )(async_background(remove_domains))
+
+    # Register update_description tool
+    mcp_instance.tool(
+        name="update_description", description=update_description.__doc__
+    )(async_background(update_description))
+
+    # Register add_structured_properties tool
+    mcp_instance.tool(
+        name="add_structured_properties",
+        description=add_structured_properties.__doc__,
+    )(async_background(add_structured_properties))
+
+    # Register remove_structured_properties tool
+    mcp_instance.tool(
+        name="remove_structured_properties",
+        description=remove_structured_properties.__doc__,
+    )(async_background(remove_structured_properties))
+
+    # Register save_document tool (only if enabled via environment variable)
+    if is_save_document_enabled():
+        logger.info("Save Document ENABLED - registering save_document tool")
+        mcp_instance.tool(
+            name="save_document",
+            description=save_document.__doc__,
+            tags={ToolType.MUTATION.value},
+        )(async_background(save_document))
+    else:
+        logger.info("Save Document DISABLED - save_document tool not registered")
+
+
+def register_user_tools(mcp_instance: FastMCP, is_oss: bool = False) -> None:
+    """Register user information tools on an MCP instance.
+
+    This includes tools for fetching authenticated user information.
+
+    Args:
+        mcp_instance: The FastMCP instance to register tools on
+        is_oss: If True, use OSS-compatible tool descriptions.
+                If False, use Cloud descriptions.
+    """
+
+    enabled = get_boolean_env_variable("TOOLS_IS_USER_ENABLED")
+    logger.info(f"User Tools {'ENABLED' if enabled else 'DISABLED'} MCP Server.")
+
+    if not enabled:
+        return
+
+    # Register get_me tool
+    mcp_instance.tool(
+        name="get_me", description=get_me.__doc__, tags={ToolType.USER.value}
+    )(async_background(get_me))
+
+
+def register_search_tools(mcp_instance: FastMCP, is_oss: bool = False) -> None:
+    """Register search and entity tools on an MCP instance.
+
+    This is the core registration logic that can be used by both production code
+    (via register_all_tools) and tests (with isolated MCP instances).
+
+    Args:
+        mcp_instance: The FastMCP instance to register tools on
+        is_oss: If True, use OSS-compatible tool descriptions (limited sorting fields).
+                If False, use Cloud descriptions (full sorting features).
+    """
     # Choose sorting documentation based on deployment type
     if not is_oss:
         sorting_docs = """Available sort fields for datasets:
@@ -2523,36 +2728,115 @@ def register_all_tools(is_oss: bool = False) -> None:
         # but provides clear error messages when semantic search is actually attempted
 
         # Register enhanced search tool with semantic capabilities (as "search")
-        mcp.tool(name="search", description=enhanced_search.__doc__)(
-            async_background(enhanced_search)
-        )
+        mcp_instance.tool(
+            name="search",
+            description=enhanced_search.__doc__,
+            tags={ToolType.SEARCH.value},
+        )(async_background(enhanced_search))
     else:
         # Register original search tool with deployment-specific description
-        mcp.tool(name="search", description=search_description)(
-            async_background(search)
-        )
+        mcp_instance.tool(
+            name="search", description=search_description, tags={ToolType.SEARCH.value}
+        )(async_background(search))
 
     # Register get_lineage tool
-    mcp.tool(name="get_lineage", description=get_lineage.__doc__)(
-        async_background(get_lineage)
-    )
+    mcp_instance.tool(
+        name="get_lineage",
+        description=get_lineage.__doc__,
+        tags={ToolType.SEARCH.value},
+    )(async_background(get_lineage))
 
     # Register get_dataset_queries tool
-    mcp.tool(name="get_dataset_queries", description=get_dataset_queries.__doc__)(
-        async_background(get_dataset_queries)
-    )
+    mcp_instance.tool(
+        name="get_dataset_queries",
+        description=get_dataset_queries.__doc__,
+        tags={ToolType.SEARCH.value},
+    )(async_background(get_dataset_queries))
 
     # Register get_entities tool
-    mcp.tool(name="get_entities", description=get_entities.__doc__)(
-        async_background(get_entities)
-    )
+    mcp_instance.tool(
+        name="get_entities",
+        description=get_entities.__doc__,
+        tags={ToolType.SEARCH.value},
+    )(async_background(get_entities))
 
     # Register list_schema_fields tool
-    mcp.tool(name="list_schema_fields", description=list_schema_fields.__doc__)(
-        async_background(list_schema_fields)
-    )
+    mcp_instance.tool(
+        name="list_schema_fields",
+        description=list_schema_fields.__doc__,
+        tags={ToolType.SEARCH.value},
+    )(async_background(list_schema_fields))
 
     # Register get_lineage_paths_between tool
-    mcp.tool(
-        name="get_lineage_paths_between", description=get_lineage_paths_between.__doc__
+    mcp_instance.tool(
+        name="get_lineage_paths_between",
+        description=get_lineage_paths_between.__doc__,
+        tags={ToolType.SEARCH.value},
     )(async_background(get_lineage_paths_between))
+
+    # Register search_documents tool
+    mcp_instance.tool(name="search_documents", description=search_documents.__doc__)(
+        async_background(search_documents)
+    )
+
+    # Register grep_documents tool
+    mcp_instance.tool(name="grep_documents", description=grep_documents.__doc__)(
+        async_background(grep_documents)
+    )
+
+
+def register_all_tools(is_oss: bool = False) -> None:
+    """Register all MCP tools on the global mcp instance.
+
+    Args:
+        is_oss: If True, use OSS-compatible tool descriptions (limited sorting fields).
+                If False, use Cloud descriptions (full sorting features).
+
+    Note: Thread-safe. Can be called multiple times from different threads.
+          Only the first call will register tools, subsequent calls are no-ops.
+    """
+    global _tools_registered
+
+    # Thread-safe check-and-set using lock
+    with _tools_registration_lock:
+        if _tools_registered:
+            logger.debug("Tools already registered, skipping duplicate registration")
+            return
+
+        _tools_registered = True
+        logger.info(f"Registering MCP tools (is_oss={is_oss})")
+
+    # Call the core registration logic on the global mcp instance
+    register_search_tools(mcp, is_oss)
+
+    register_mutation_tools(mcp, is_oss)
+
+    register_user_tools(mcp, is_oss)
+
+
+def get_valid_tools_from_mcp(
+    filter_fn: Optional[Callable[[FastMCPTool], bool]] = None,
+) -> List[FastMCPTool]:
+    """Get valid tools from MCP, optionally filtered.
+
+    Args:
+        filter_fn: Optional function to filter tools. Receives a Tool and returns True to include it.
+
+    Returns:
+        List of Tool objects that pass the filter (or all tools if no filter provided).
+
+    Example filtering by tag values:
+        # Filter tools that have the "mutation" tag
+        tools = get_valid_tools_from_mcp(
+            filter_fn=lambda tool: "mutation" in (tool.tags or set())
+        )
+
+        # Filter tools that have either "search" or "user" tags
+        tools = get_valid_tools_from_mcp(
+            filter_fn=lambda tool: bool((tool.tags or set()) & {"search", "user"})
+        )
+    """
+    tools = list(mcp._tool_manager._tools.values())
+    if filter_fn:
+        return [tool for tool in tools if filter_fn(tool)]
+    return tools

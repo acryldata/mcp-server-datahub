@@ -5,6 +5,66 @@ All notable changes to mcp-server-datahub will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-01-30
+
+### Added
+
+#### Mutation Tools
+New tools for modifying metadata in DataHub. Enabled via `TOOLS_IS_MUTATION_ENABLED=true` environment variable.
+
+- **`add_tags` / `remove_tags`**: Add or remove tags from entities or schema fields (columns). Supports bulk operations on multiple entities.
+- **`add_terms` / `remove_terms`**: Add or remove glossary terms from entities or schema fields. Useful for applying business definitions and data classification.
+- **`add_owners` / `remove_owners`**: Add or remove ownership assignments from entities. Supports different ownership types (technical owner, data owner, etc.).
+- **`set_domains` / `remove_domains`**: Assign or remove domain membership for entities. Each entity can belong to one domain.
+- **`update_description`**: Update, append to, or remove descriptions for entities or schema fields. Supports markdown formatting.
+- **`add_structured_properties` / `remove_structured_properties`**: Manage structured properties (typed metadata fields) on entities. Supports string, number, URN, date, and rich text value types.
+
+#### User Tools
+New tools for user information. Enabled via `TOOLS_IS_USER_ENABLED=true` environment variable.
+
+- **`get_me`**: Retrieve information about the currently authenticated user, including profile details and group memberships.
+
+#### Document Tools
+New tools for working with documents (knowledge articles, runbooks, FAQs) stored in DataHub. Document tools are automatically hidden if no documents exist in the catalog.
+
+- **`search_documents`**: Search for documents using keyword search with filters for platforms, domains, tags, glossary terms, and owners.
+- **`grep_documents`**: Search within document content using regex patterns. Useful for finding specific information across multiple documents.
+- **`save_document`**: Save standalone documents (insights, decisions, FAQs, notes) to DataHub's knowledge base. Documents are organized under a configurable parent folder.
+
+#### Document Tools Middleware
+- **New `DocumentToolsMiddleware`** that automatically hides document tools when no documents exist in the catalog
+- Prevents confusion by only showing relevant tools
+- Cached document existence check (1-minute TTL) to avoid repeated queries
+- Can be completely disabled via `DATAHUB_MCP_DOCUMENT_TOOLS_DISABLED=true`
+
+#### Semantic Search Support
+- **`SEMANTIC_SEARCH_ENABLED`** environment variable to enable AI-powered semantic search
+
+### Changed
+
+- **Python version requirement**: Now requires Python 3.11+ (previously 3.10+)
+- **Upgraded `acryl-datahub`**: Now requires `>=1.3.1.7` (previously `==1.2.0.2`)
+
+### Dependencies
+
+- **Added** `json-repair`: For robust JSON parsing
+- **Added** `google-re2`: For efficient regex operations in document grep
+
+### Environment Variables (New in 0.5.0)
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `TOOLS_IS_MUTATION_ENABLED` | `false` | Enable mutation tools (add/remove tags, owners, etc.) |
+| `TOOLS_IS_USER_ENABLED` | `false` | Enable user tools (get_me) |
+| `DATAHUB_MCP_DOCUMENT_TOOLS_DISABLED` | `false` | Completely disable document tools |
+| `SAVE_DOCUMENT_TOOL_ENABLED` | `true` | Enable/disable the save_document tool |
+| `SAVE_DOCUMENT_PARENT_TITLE` | `Shared` | Title for the parent folder of saved documents |
+| `SAVE_DOCUMENT_ORGANIZE_BY_USER` | `false` | Organize saved documents by user |
+| `SAVE_DOCUMENT_RESTRICT_UPDATES` | `true` | Only allow updating documents in the shared folder |
+| `SEMANTIC_SEARCH_ENABLED` | `false` | Enable semantic (AI-powered) search |
+
+---
+
 ## [0.4.0] - 2025-11-17
 
 ### Added
@@ -80,6 +140,27 @@ See git history for changes in earlier versions.
 ---
 
 ## Migration Guide
+
+### Environment Variables (New in 0.5.0)
+
+```bash
+# Enable mutation tools (add/remove tags, owners, terms, etc.)
+export TOOLS_IS_MUTATION_ENABLED=true
+
+# Enable user tools (get_me)
+export TOOLS_IS_USER_ENABLED=true
+
+# Disable document tools if they impact chatbot behavior
+export DATAHUB_MCP_DOCUMENT_TOOLS_DISABLED=true
+
+# Configure save_document behavior
+export SAVE_DOCUMENT_PARENT_TITLE="Shared"
+export SAVE_DOCUMENT_ORGANIZE_BY_USER=false
+export SAVE_DOCUMENT_RESTRICT_UPDATES=true
+
+# Enable semantic search
+export SEMANTIC_SEARCH_ENABLED=true
+```
 
 ### Environment Variables (New in 0.4.0)
 
