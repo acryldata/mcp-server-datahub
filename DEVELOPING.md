@@ -13,12 +13,12 @@ make setup
 ### Run using the MCP inspector
 
 ```bash
-npx -y @modelcontextprotocol/inspector@latest
-
-# In the UI, select "STDIO" and put in
-# command: <full-path-to-uv>
-# args: --directory path/to/mcp-server-datahub run mcp-server-datahub
+uv run fastmcp dev src/mcp_server_datahub/__main__.py --with-editable .
 ```
+
+In the inspector UI, add environment variables for `DATAHUB_GMS_URL` and `DATAHUB_GMS_TOKEN`, then click Connect.
+
+> **Note:** Use `fastmcp dev` (not `mcp dev`), since this project uses the standalone FastMCP package.
 
 ### Run using an MCP client
 
