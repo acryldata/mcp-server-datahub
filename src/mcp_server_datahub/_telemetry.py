@@ -4,6 +4,7 @@ import mcp.types as mt
 from datahub.telemetry import telemetry
 from datahub.utilities.perf_timer import PerfTimer
 from fastmcp.server.middleware import CallNext, Middleware, MiddlewareContext
+from fastmcp.tools.tool import ToolResult
 
 from mcp_server_datahub._version import __version__
 
@@ -18,8 +19,8 @@ class TelemetryMiddleware(Middleware):
     async def on_call_tool(
         self,
         context: MiddlewareContext[mt.CallToolRequestParams],
-        call_next: CallNext[mt.CallToolRequestParams, mt.CallToolResult],
-    ) -> mt.CallToolResult:
+        call_next: CallNext[mt.CallToolRequestParams, ToolResult],
+    ) -> ToolResult:
         telemetry_data: dict[str, Any] = {}
         with PerfTimer() as timer:
             telemetry_data = {
@@ -31,10 +32,6 @@ class TelemetryMiddleware(Middleware):
             try:
                 result = await call_next(context)
 
-                # BUG: The FastMCP type annotations seem to be incorrect.
-                # This method typically returns fastmcp.tools.tool.ToolResult.
-                if isinstance(result, mt.CallToolResult):
-                    telemetry_data["tool_result_is_error"] = result.isError
                 telemetry_data["tool_result_length"] = sum(
                     len(block.text)
                     for block in result.content

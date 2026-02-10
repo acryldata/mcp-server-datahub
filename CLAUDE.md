@@ -28,9 +28,10 @@ A quick summary is below:
 Run the server using MCP inspector for development:
 
 ```bash
-source .venv/bin/activate
-mcp dev src/mcp_server_datahub/__main__.py
+uv run fastmcp dev src/mcp_server_datahub/__main__.py --with-editable .
 ```
+
+> **Note:** Use `fastmcp dev` (not `mcp dev`), since this project uses the standalone FastMCP package.
 
 ## Architecture
 

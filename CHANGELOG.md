@@ -44,6 +44,17 @@ New tools for working with documents (knowledge articles, runbooks, FAQs) stored
 
 - **Python version requirement**: Now requires Python 3.11+ (previously 3.10+)
 - **Upgraded `acryl-datahub`**: Now requires `>=1.3.1.7` (previously `==1.2.0.2`)
+- **Upgraded `fastmcp`**: Now requires `>=2.14.5,<3` (previously `>=2.10.5`). Includes middleware type fixes, MCP SDK 1.26.0 compatibility, and background task support.
+- **Relaxed `pydantic` pin**: Now allows `>=2.0,<3` (previously `>=2.0,<2.12`)
+- **Updated development instructions**: `fastmcp dev` replaces `mcp dev` for the MCP inspector
+
+### Security
+
+- **Added** `SECURITY.md` with vulnerability reporting guidelines
+- **Bumped** `authlib` from 1.6.0 to 1.6.6 (security fixes)
+- **Bumped** `urllib3` from 2.4.0 to 2.6.3
+- **Bumped** `aiohttp` from 3.12.7 to 3.13.3
+- **Bumped** `python-multipart` from 0.0.20 to 0.0.22
 
 ### Dependencies
 
