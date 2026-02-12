@@ -11,6 +11,7 @@ from mcp_server_datahub._telemetry import TelemetryMiddleware
 from mcp_server_datahub._version import __version__
 from mcp_server_datahub.document_tools_middleware import DocumentToolsMiddleware
 from mcp_server_datahub.mcp_server import mcp, register_all_tools, with_datahub_client
+from mcp_server_datahub.version_requirements import VersionFilterMiddleware
 
 logging.basicConfig(level=logging.INFO)
 
@@ -43,6 +44,7 @@ def main(transport: Literal["stdio", "sse", "http"], debug: bool) -> None:
         # logging.getLogger("datahub").setLevel(logging.DEBUG)
         mcp.add_middleware(LoggingMiddleware(include_payloads=True))
     mcp.add_middleware(TelemetryMiddleware())
+    mcp.add_middleware(VersionFilterMiddleware())
     mcp.add_middleware(DocumentToolsMiddleware())
 
     with with_datahub_client(client):

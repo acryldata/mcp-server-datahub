@@ -1,10 +1,11 @@
-"""Smoke test for mcp-server-datahub.
+"""Smoke check for mcp-server-datahub.
 
-Exercises every registered tool against a live DataHub instance to verify
+Exercises every available tool against a live DataHub instance to verify
 GraphQL compatibility. Mutation tools are tested with add-then-remove pairs
 so the instance is left in its original state.
 
 All URNs are discovered dynamically from the live instance — nothing is hardcoded.
+Tools hidden by version filtering or other middleware are automatically skipped.
 
 Usage:
     # Test read-only tools only (safe, no changes to DataHub):
@@ -31,21 +32,22 @@ import os
 import sys
 from dataclasses import dataclass, field
 from functools import partial
-from typing import Any, Optional
+from typing import Any, Callable, Coroutine, Optional
 
 import anyio
-
 import click
 from datahub.ingestion.graph.config import ClientMode
 from datahub.sdk.main_client import DataHubClient
 from fastmcp import Client
 
-# Must set env vars before importing mcp_server so tool registration picks them up
-# We defer the import to after we parse CLI args
+
+# ---------------------------------------------------------------------------
+# Report
+# ---------------------------------------------------------------------------
 
 
 @dataclass
-class ToolTestResult:
+class ToolCheckResult:
     tool: str
     passed: bool
     detail: str = ""
@@ -53,27 +55,27 @@ class ToolTestResult:
 
 
 @dataclass
-class SmokeTestReport:
-    results: list[ToolTestResult] = field(default_factory=list)
+class SmokeCheckReport:
+    results: list[ToolCheckResult] = field(default_factory=list)
 
     def record(
         self, tool: str, passed: bool, detail: str = "", error: str = ""
     ) -> None:
         self.results.append(
-            ToolTestResult(tool=tool, passed=passed, detail=detail, error=error)
+            ToolCheckResult(tool=tool, passed=passed, detail=detail, error=error)
         )
 
     def print_report(self) -> None:
         print("\n" + "=" * 70)
-        print("SMOKE TEST REPORT")
+        print("SMOKE CHECK REPORT")
         print("=" * 70)
 
         passed = [r for r in self.results if r.passed]
         failed = [r for r in self.results if not r.passed]
 
         for r in self.results:
-            status = "PASS" if r.passed else "FAIL"
             icon = "  ✓" if r.passed else "  ✗"
+            status = "PASS" if r.passed else "FAIL"
             print(f"{icon} [{status}] {r.tool}")
             if r.detail:
                 print(f"          {r.detail}")
@@ -92,9 +94,14 @@ class SmokeTestReport:
         return all(r.passed for r in self.results)
 
 
+# ---------------------------------------------------------------------------
+# Discovered URNs
+# ---------------------------------------------------------------------------
+
+
 @dataclass
 class DiscoveredURNs:
-    """URNs discovered from the live DataHub instance for use in tests."""
+    """URNs discovered from the live DataHub instance for use in checks."""
 
     dataset_urn: Optional[str] = None
     tag_urn: Optional[str] = None
@@ -104,12 +111,50 @@ class DiscoveredURNs:
     structured_property_urn: Optional[str] = None
 
 
+# ---------------------------------------------------------------------------
+# Check registry — decorator to declare tool requirements
+# ---------------------------------------------------------------------------
+
+# Each registered check is (name, required_tools, required_urns, fn)
+CheckFn = Callable[
+    [Client, SmokeCheckReport, DiscoveredURNs],
+    Coroutine[Any, Any, None],
+]
+
+_ALL_CHECKS: list[tuple[str, list[str], list[str], CheckFn]] = []
+
+
+def check(
+    *required_tools: str,
+    urns: Optional[list[str]] = None,
+) -> Callable[[CheckFn], CheckFn]:
+    """Decorator to register a smoke check function.
+
+    Args:
+        *required_tools: MCP tool names this check needs. The check is skipped
+            if any of these are not in the available tool list.
+        urns: Optional list of DiscoveredURNs attribute names this check needs
+            (e.g. ["dataset_urn", "tag_urn"]). The check fails if any are None.
+    """
+
+    def decorator(fn: CheckFn) -> CheckFn:
+        _ALL_CHECKS.append((fn.__name__, list(required_tools), urns or [], fn))
+        return fn
+
+    return decorator
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
 async def call_tool(
     mcp_client: Client,
     tool_name: str,
     arguments: dict[str, Any],
 ) -> Any:
-    """Call an MCP tool and return the parsed result data."""
+    """Call an MCP tool and return the result."""
     result = await mcp_client.call_tool(tool_name, arguments=arguments)
     if result.is_error:
         raise RuntimeError(f"Tool returned error: {result.content}")
@@ -136,22 +181,14 @@ def _search_entity_type_sync(graph: Any, entity_type: str, count: int = 5) -> li
 async def discover_urns(
     mcp_client: Client, graph: Any, test_urn: Optional[str] = None
 ) -> DiscoveredURNs:
-    """Discover real URNs from the live DataHub instance.
-
-    Searches for entities and inspects their metadata to find existing
-    tags, owners, and domains. Never uses hardcoded URNs.
-    """
+    """Discover real URNs from the live DataHub instance."""
     urns = DiscoveredURNs()
 
     # 1. Find a dataset URN via search
     search_result = await call_tool(
         mcp_client,
         "search",
-        {
-            "query": "*",
-            "filters": {"entity_type": ["DATASET"]},
-            "num_results": 10,
-        },
+        {"query": "*", "filters": {"entity_type": ["DATASET"]}, "num_results": 10},
     )
     search_data = json.loads(search_result.content[0].text)
     for sr in search_data.get("searchResults", []):
@@ -166,58 +203,49 @@ async def discover_urns(
     if not urns.dataset_urn:
         return urns
 
-    # 2. Fetch the dataset entity to discover related URNs
+    # 2. Fetch entity metadata to discover tags, domains from entity data
     entity_result = await call_tool(
         mcp_client, "get_entities", {"urns": urns.dataset_urn}
     )
     entity_data = json.loads(entity_result.content[0].text)
 
-    # Discover tag URNs from entity's tags
-    tags = entity_data.get("tags", {}).get("tags", [])
-    for tag in tags:
-        tag_urn = tag.get("tag", {}).get("urn", "")
-        if tag_urn:
-            urns.tag_urn = tag_urn
+    # Tags from entity
+    for tag in entity_data.get("tags", {}).get("tags", []):
+        t = tag.get("tag", {}).get("urn", "")
+        if t:
+            urns.tag_urn = t
             break
 
-    # Owner URN is discovered via get_me below (not from entity metadata,
-    # since entities may reference owners that don't exist as user entities).
-
-    # Discover domain URN from entity's domain
-    domain_data = entity_data.get("domain", {})
-    domain_urn = domain_data.get("domain", {}).get("urn", "")
+    # Domain from entity
+    domain_urn = entity_data.get("domain", {}).get("domain", {}).get("urn", "")
     if domain_urn:
         urns.domain_urn = domain_urn
 
-    # 3. If we didn't find tags/domain on the first entity, search more entities
+    # 3. Scan more entities if needed
     if not urns.tag_urn or not urns.domain_urn:
         for sr in search_data.get("searchResults", []):
             urn = sr.get("entity", {}).get("urn", "")
             if urn == urns.dataset_urn:
-                continue  # already checked
+                continue
             try:
                 er = await call_tool(mcp_client, "get_entities", {"urns": urn})
                 ed = json.loads(er.content[0].text)
-
                 if not urns.tag_urn:
                     for tag in ed.get("tags", {}).get("tags", []):
                         t = tag.get("tag", {}).get("urn", "")
                         if t:
                             urns.tag_urn = t
                             break
-
                 if not urns.domain_urn:
-                    dd = ed.get("domain", {})
-                    d = dd.get("domain", {}).get("urn", "")
+                    d = ed.get("domain", {}).get("domain", {}).get("urn", "")
                     if d:
                         urns.domain_urn = d
             except Exception:
                 continue
-
             if urns.tag_urn and urns.domain_urn:
                 break
 
-    # 4. Discover owner URN via get_me (the authenticated user is guaranteed to exist)
+    # 4. Owner via get_me
     try:
         me_result = await call_tool(mcp_client, "get_me", {})
         me_data = json.loads(me_result.content[0].text)
@@ -225,9 +253,7 @@ async def discover_urns(
     except Exception:
         pass
 
-    # 5. If still no tag, search for TAG entities directly via GraphQL.
-    #    The MCP search tool applies a default view that filters out tags,
-    #    so we query GraphQL directly. Run in a thread to avoid blocking the event loop.
+    # 5. Tags via direct GraphQL (MCP search applies a default view that hides tags)
     if not urns.tag_urn:
         try:
             tag_urns = await anyio.to_thread.run_sync(
@@ -238,7 +264,7 @@ async def discover_urns(
         except Exception:
             pass
 
-    # 6. If still no term, search for GLOSSARY_TERM entities directly via GraphQL.
+    # 6. Glossary terms via direct GraphQL
     if not urns.term_urn:
         try:
             term_urns = await anyio.to_thread.run_sync(
@@ -249,7 +275,7 @@ async def discover_urns(
         except Exception:
             pass
 
-    # 7. If still no domain, search for DOMAIN entities directly via GraphQL.
+    # 7. Domains via direct GraphQL
     if not urns.domain_urn:
         try:
             domain_urns = await anyio.to_thread.run_sync(
@@ -260,7 +286,7 @@ async def discover_urns(
         except Exception:
             pass
 
-    # 8. Search for STRUCTURED_PROPERTY entities directly via GraphQL.
+    # 8. Structured properties via direct GraphQL
     if not urns.structured_property_urn:
         try:
             sp_urns = await anyio.to_thread.run_sync(
@@ -274,104 +300,81 @@ async def discover_urns(
     return urns
 
 
-# --- Read-only tool tests ---
+# ---------------------------------------------------------------------------
+# Check functions — each decorated with @check(...) to declare requirements
+# ---------------------------------------------------------------------------
 
 
-async def check_search(mcp_client: Client, report: SmokeTestReport) -> None:
-    """Test the search tool."""
-    try:
-        result = await call_tool(mcp_client, "search", {"query": "*", "num_results": 5})
-        data = json.loads(result.content[0].text)
-        total = data.get("total", 0)
-        result_count = len(data.get("searchResults", []))
-        report.record(
-            "search", True, f"{result_count} results returned (total: {total})"
-        )
-    except Exception as e:
-        report.record("search", False, error=str(e))
+@check("search")
+async def check_search(
+    c: Client, report: SmokeCheckReport, urns: DiscoveredURNs
+) -> None:
+    result = await call_tool(c, "search", {"query": "*", "num_results": 5})
+    data = json.loads(result.content[0].text)
+    total = data.get("total", 0)
+    count = len(data.get("searchResults", []))
+    report.record("search", True, f"{count} results returned (total: {total})")
 
 
+@check("get_entities", urns=["dataset_urn"])
 async def check_get_entities(
-    mcp_client: Client, report: SmokeTestReport, urn: str
+    c: Client, report: SmokeCheckReport, urns: DiscoveredURNs
 ) -> None:
-    """Test get_entities with a known URN."""
-    try:
-        result = await call_tool(mcp_client, "get_entities", {"urns": urn})
-        data = json.loads(result.content[0].text)
-        entity_urn = data.get("urn", "")
-        report.record("get_entities", True, f"Fetched: {entity_urn[:80]}")
-    except Exception as e:
-        report.record("get_entities", False, error=str(e))
+    result = await call_tool(c, "get_entities", {"urns": urns.dataset_urn})
+    data = json.loads(result.content[0].text)
+    report.record("get_entities", True, f"Fetched: {data.get('urn', '')[:80]}")
 
 
+@check("get_lineage", urns=["dataset_urn"])
 async def check_get_lineage(
-    mcp_client: Client, report: SmokeTestReport, urn: str
+    c: Client, report: SmokeCheckReport, urns: DiscoveredURNs
 ) -> None:
-    """Test get_lineage (upstream)."""
-    try:
-        result = await call_tool(
-            mcp_client,
-            "get_lineage",
-            {"urn": urn, "upstream": True, "max_hops": 1},
-        )
-        data = json.loads(result.content[0].text)
-        count = data.get("total", data.get("count", "?"))
-        report.record("get_lineage", True, f"upstream hops=1, results: {count}")
-    except Exception as e:
-        report.record("get_lineage", False, error=str(e))
+    result = await call_tool(
+        c, "get_lineage", {"urn": urns.dataset_urn, "upstream": True, "max_hops": 1}
+    )
+    data = json.loads(result.content[0].text)
+    count = data.get("total", data.get("count", "?"))
+    report.record("get_lineage", True, f"upstream hops=1, results: {count}")
 
 
+@check("get_dataset_queries", urns=["dataset_urn"])
 async def check_get_dataset_queries(
-    mcp_client: Client, report: SmokeTestReport, urn: str
+    c: Client, report: SmokeCheckReport, urns: DiscoveredURNs
 ) -> None:
-    """Test get_dataset_queries."""
-    try:
-        result = await call_tool(
-            mcp_client,
-            "get_dataset_queries",
-            {"urn": urn, "count": 3},
-        )
-        data = json.loads(result.content[0].text)
-        count = data.get("count", len(data.get("queries", [])))
-        report.record("get_dataset_queries", True, f"Found {count} queries")
-    except Exception as e:
-        report.record("get_dataset_queries", False, error=str(e))
+    result = await call_tool(
+        c, "get_dataset_queries", {"urn": urns.dataset_urn, "count": 3}
+    )
+    data = json.loads(result.content[0].text)
+    count = data.get("count", len(data.get("queries", [])))
+    report.record("get_dataset_queries", True, f"Found {count} queries")
 
 
+@check("list_schema_fields", urns=["dataset_urn"])
 async def check_list_schema_fields(
-    mcp_client: Client, report: SmokeTestReport, urn: str
+    c: Client, report: SmokeCheckReport, urns: DiscoveredURNs
 ) -> None:
-    """Test list_schema_fields."""
-    try:
-        result = await call_tool(
-            mcp_client,
-            "list_schema_fields",
-            {"urn": urn, "limit": 5},
-        )
-        data = json.loads(result.content[0].text)
-        field_count = len(data.get("fields", []))
-        report.record("list_schema_fields", True, f"Returned {field_count} fields")
-    except Exception as e:
-        report.record("list_schema_fields", False, error=str(e))
+    result = await call_tool(
+        c, "list_schema_fields", {"urn": urns.dataset_urn, "limit": 5}
+    )
+    data = json.loads(result.content[0].text)
+    field_count = len(data.get("fields", []))
+    report.record("list_schema_fields", True, f"Returned {field_count} fields")
 
 
+@check("get_lineage_paths_between", urns=["dataset_urn"])
 async def check_get_lineage_paths_between(
-    mcp_client: Client, report: SmokeTestReport, urn: str
+    c: Client, report: SmokeCheckReport, urns: DiscoveredURNs
 ) -> None:
-    """Test get_lineage_paths_between.
-
-    Uses the same URN for source and target which returns "no path found",
-    but that exercises the GraphQL query successfully.
-    """
     try:
         result = await call_tool(
-            mcp_client,
+            c,
             "get_lineage_paths_between",
-            {"source_urn": urn, "target_urn": urn},
+            {"source_urn": urns.dataset_urn, "target_urn": urns.dataset_urn},
         )
         data = json.loads(result.content[0].text)
-        path_count = data.get("pathCount", 0)
-        report.record("get_lineage_paths_between", True, f"Found {path_count} paths")
+        report.record(
+            "get_lineage_paths_between", True, f"Found {data.get('pathCount', 0)} paths"
+        )
     except Exception as e:
         err = str(e)
         if "No lineage path found" in err or "not found in lineage" in err:
@@ -381,269 +384,231 @@ async def check_get_lineage_paths_between(
                 "GraphQL OK (no path between same entity, expected)",
             )
         else:
-            report.record("get_lineage_paths_between", False, error=err)
+            raise
 
 
-async def check_search_documents(mcp_client: Client, report: SmokeTestReport) -> None:
-    """Test search_documents."""
-    try:
-        result = await call_tool(
-            mcp_client, "search_documents", {"query": "*", "num_results": 3}
-        )
-        data = json.loads(result.content[0].text)
-        total = data.get("total", 0)
-        report.record("search_documents", True, f"Total documents: {total}")
-    except Exception as e:
-        report.record("search_documents", False, error=str(e))
+@check("search_documents")
+async def check_search_documents(
+    c: Client, report: SmokeCheckReport, urns: DiscoveredURNs
+) -> None:
+    result = await call_tool(c, "search_documents", {"query": "*", "num_results": 3})
+    data = json.loads(result.content[0].text)
+    report.record("search_documents", True, f"Total documents: {data.get('total', 0)}")
 
 
+@check("save_document")
+async def check_save_document(
+    c: Client, report: SmokeCheckReport, urns: DiscoveredURNs
+) -> None:
+    result = await call_tool(
+        c,
+        "save_document",
+        {
+            "document_type": "Note",
+            "title": "[Smoke Check] Test Document - Safe to Delete",
+            "content": "This document was created by the MCP smoke check and is safe to delete.",
+        },
+    )
+    data = json.loads(result.content[0].text)
+    doc_urn = data.get("urn", "")
+    report.record("save_document", True, f"Created: {doc_urn[:80]}")
+    # Stash URN for grep_documents to use
+    urns._saved_doc_urn = doc_urn  # type: ignore[attr-defined]
+
+
+@check("grep_documents", "search_documents")
 async def check_grep_documents(
-    mcp_client: Client, report: SmokeTestReport, doc_urn: Optional[str] = None
+    c: Client, report: SmokeCheckReport, urns: DiscoveredURNs
 ) -> None:
-    """Test grep_documents.
+    target_urn = getattr(urns, "_saved_doc_urn", None)
 
-    Uses a provided document URN (e.g. from save_document), or searches for
-    existing documents, or creates one on the fly.
-    """
-    try:
-        target_urn = doc_urn
-
-        # If no URN provided, search for existing documents
-        if not target_urn:
-            search_result = await call_tool(
-                mcp_client,
-                "search_documents",
-                {"query": "*", "num_results": 1},
-            )
-            search_data = json.loads(search_result.content[0].text)
-            for r in search_data.get("results", []):
-                if r.get("urn"):
-                    target_urn = r["urn"]
-                    break
-
-        # Still nothing — create a document
-        if not target_urn:
-            save_result = await call_tool(
-                mcp_client,
-                "save_document",
-                {
-                    "document_type": "Note",
-                    "title": "[Smoke Test] grep test doc",
-                    "content": "smoke test content for grep validation",
-                },
-            )
-            save_data = json.loads(save_result.content[0].text)
-            target_urn = save_data.get("urn", "")
-
-        if not target_urn:
-            report.record(
-                "grep_documents",
-                False,
-                error="No documents available to grep and could not create one",
-            )
-            return
-
-        result = await call_tool(
-            mcp_client,
-            "grep_documents",
-            {"urns": [target_urn], "pattern": ".*", "max_matches_per_doc": 1},
+    # Search for existing documents
+    if not target_urn:
+        search_result = await call_tool(
+            c, "search_documents", {"query": "*", "num_results": 1}
         )
-        data = json.loads(result.content[0].text)
-        report.record(
-            "grep_documents",
-            True,
-            f"Matched {data.get('totalMatches', 0)} times in {target_urn[:60]}",
+        search_data = json.loads(search_result.content[0].text)
+        for r in search_data.get("results", []):
+            if r.get("urn"):
+                target_urn = r["urn"]
+                break
+
+    # Create one if needed
+    if not target_urn:
+        save_result = await call_tool(
+            c,
+            "save_document",
+            {
+                "document_type": "Note",
+                "title": "[Smoke Check] grep test doc",
+                "content": "smoke check content for grep validation",
+            },
         )
-    except Exception as e:
-        report.record("grep_documents", False, error=str(e))
+        save_data = json.loads(save_result.content[0].text)
+        target_urn = save_data.get("urn", "")
+
+    if not target_urn:
+        raise RuntimeError("No documents available to grep and could not create one")
+
+    result = await call_tool(
+        c,
+        "grep_documents",
+        {"urns": [target_urn], "pattern": ".*", "max_matches_per_doc": 1},
+    )
+    data = json.loads(result.content[0].text)
+    report.record(
+        "grep_documents",
+        True,
+        f"Matched {data.get('totalMatches', 0)} times in {target_urn[:60]}",
+    )
 
 
-# --- User tool tests ---
+@check("get_me")
+async def check_get_me(
+    c: Client, report: SmokeCheckReport, urns: DiscoveredURNs
+) -> None:
+    result = await call_tool(c, "get_me", {})
+    data = json.loads(result.content[0].text)
+    corp_user = data.get("data", {}).get("corpUser", {})
+    username = corp_user.get("username", corp_user.get("urn", "unknown"))
+    report.record("get_me", True, f"User: {username}")
 
 
-async def check_get_me(mcp_client: Client, report: SmokeTestReport) -> None:
-    """Test get_me."""
-    try:
-        result = await call_tool(mcp_client, "get_me", {})
-        data = json.loads(result.content[0].text)
-        corp_user = data.get("data", {}).get("corpUser", {})
-        username = corp_user.get("username", corp_user.get("urn", "unknown"))
-        report.record("get_me", True, f"User: {username}")
-    except Exception as e:
-        report.record("get_me", False, error=str(e))
-
-
-# --- Mutation tool tests (add then remove to leave state clean) ---
-
-
+@check("add_tags", "remove_tags", urns=["dataset_urn", "tag_urn"])
 async def check_add_remove_tags(
-    mcp_client: Client, report: SmokeTestReport, urn: str, tag_urn: str
+    c: Client, report: SmokeCheckReport, urns: DiscoveredURNs
 ) -> None:
-    """Test add_tags then remove_tags using a discovered tag URN."""
+    await call_tool(
+        c, "add_tags", {"tag_urns": [urns.tag_urn], "entity_urns": [urns.dataset_urn]}
+    )
+    report.record("add_tags", True, f"Added {urns.tag_urn}")
     try:
         await call_tool(
-            mcp_client,
-            "add_tags",
-            {"tag_urns": [tag_urn], "entity_urns": [urn]},
-        )
-        report.record("add_tags", True, f"Added {tag_urn}")
-    except Exception as e:
-        report.record("add_tags", False, error=str(e))
-        report.record("remove_tags", False, error="Skipped (add_tags failed)")
-        return
-
-    try:
-        await call_tool(
-            mcp_client,
+            c,
             "remove_tags",
-            {"tag_urns": [tag_urn], "entity_urns": [urn]},
+            {"tag_urns": [urns.tag_urn], "entity_urns": [urns.dataset_urn]},
         )
-        report.record("remove_tags", True, f"Removed {tag_urn}")
+        report.record("remove_tags", True, f"Removed {urns.tag_urn}")
     except Exception as e:
         report.record("remove_tags", False, error=str(e))
 
 
+@check("add_terms", "remove_terms", urns=["dataset_urn", "term_urn"])
 async def check_add_remove_terms(
-    mcp_client: Client, report: SmokeTestReport, urn: str, term_urn: str
+    c: Client, report: SmokeCheckReport, urns: DiscoveredURNs
 ) -> None:
-    """Test add_terms then remove_terms using a discovered glossary term URN."""
+    await call_tool(
+        c,
+        "add_terms",
+        {"term_urns": [urns.term_urn], "entity_urns": [urns.dataset_urn]},
+    )
+    report.record("add_terms", True, f"Added {urns.term_urn}")
     try:
         await call_tool(
-            mcp_client,
-            "add_terms",
-            {"term_urns": [term_urn], "entity_urns": [urn]},
-        )
-        report.record("add_terms", True, f"Added {term_urn}")
-    except Exception as e:
-        report.record("add_terms", False, error=str(e))
-        report.record("remove_terms", False, error="Skipped (add_terms failed)")
-        return
-
-    try:
-        await call_tool(
-            mcp_client,
+            c,
             "remove_terms",
-            {"term_urns": [term_urn], "entity_urns": [urn]},
+            {"term_urns": [urns.term_urn], "entity_urns": [urns.dataset_urn]},
         )
-        report.record("remove_terms", True, f"Removed {term_urn}")
+        report.record("remove_terms", True, f"Removed {urns.term_urn}")
     except Exception as e:
         report.record("remove_terms", False, error=str(e))
 
 
+@check("add_owners", "remove_owners", urns=["dataset_urn", "owner_urn"])
 async def check_add_remove_owners(
-    mcp_client: Client,
-    report: SmokeTestReport,
-    urn: str,
-    owner_urn: str,
+    c: Client, report: SmokeCheckReport, urns: DiscoveredURNs
 ) -> None:
-    """Test add_owners then remove_owners using a discovered owner URN (from get_me)."""
     # The batchAddOwners GraphQL mutation requires ownershipTypeUrn.
     # Use the DataHub built-in system type for technical owners.
+    await call_tool(
+        c,
+        "add_owners",
+        {
+            "owner_urns": [urns.owner_urn],
+            "entity_urns": [urns.dataset_urn],
+            "ownership_type_urn": "urn:li:ownershipType:__system__technical_owner",
+        },
+    )
+    report.record("add_owners", True, f"Added owner {urns.owner_urn}")
     try:
         await call_tool(
-            mcp_client,
-            "add_owners",
-            {
-                "owner_urns": [owner_urn],
-                "entity_urns": [urn],
-                "ownership_type_urn": "urn:li:ownershipType:__system__technical_owner",
-            },
-        )
-        report.record("add_owners", True, f"Added owner {owner_urn}")
-    except Exception as e:
-        report.record("add_owners", False, error=str(e))
-        report.record("remove_owners", False, error="Skipped (add_owners failed)")
-        return
-
-    try:
-        await call_tool(
-            mcp_client,
+            c,
             "remove_owners",
-            {"owner_urns": [owner_urn], "entity_urns": [urn]},
+            {"owner_urns": [urns.owner_urn], "entity_urns": [urns.dataset_urn]},
         )
-        report.record("remove_owners", True, f"Removed owner {owner_urn}")
+        report.record("remove_owners", True, f"Removed owner {urns.owner_urn}")
     except Exception as e:
         report.record("remove_owners", False, error=str(e))
 
 
+@check("set_domains", "remove_domains", urns=["dataset_urn", "domain_urn"])
 async def check_set_remove_domains(
-    mcp_client: Client, report: SmokeTestReport, urn: str, domain_urn: str
+    c: Client, report: SmokeCheckReport, urns: DiscoveredURNs
 ) -> None:
-    """Test set_domains then remove_domains using a discovered domain URN."""
+    await call_tool(
+        c,
+        "set_domains",
+        {"domain_urn": urns.domain_urn, "entity_urns": [urns.dataset_urn]},
+    )
+    report.record("set_domains", True, f"Set domain {urns.domain_urn}")
     try:
-        await call_tool(
-            mcp_client,
-            "set_domains",
-            {"domain_urn": domain_urn, "entity_urns": [urn]},
-        )
-        report.record("set_domains", True, f"Set domain {domain_urn}")
-    except Exception as e:
-        report.record("set_domains", False, error=str(e))
-        report.record("remove_domains", False, error="Skipped (set_domains failed)")
-        return
-
-    try:
-        await call_tool(mcp_client, "remove_domains", {"entity_urns": [urn]})
+        await call_tool(c, "remove_domains", {"entity_urns": [urns.dataset_urn]})
         report.record("remove_domains", True, "Removed domain")
     except Exception as e:
         report.record("remove_domains", False, error=str(e))
 
 
+@check(
+    "add_structured_properties",
+    "remove_structured_properties",
+    urns=["dataset_urn", "structured_property_urn"],
+)
 async def check_add_remove_structured_properties(
-    mcp_client: Client, report: SmokeTestReport, urn: str, property_urn: str
+    c: Client, report: SmokeCheckReport, urns: DiscoveredURNs
 ) -> None:
-    """Test add_structured_properties then remove_structured_properties."""
+    await call_tool(
+        c,
+        "add_structured_properties",
+        {
+            "property_values": {urns.structured_property_urn: ["smoke_check_value"]},
+            "entity_urns": [urns.dataset_urn],
+        },
+    )
+    report.record(
+        "add_structured_properties", True, f"Added {urns.structured_property_urn}"
+    )
     try:
         await call_tool(
-            mcp_client,
-            "add_structured_properties",
-            {
-                "property_values": {property_urn: ["smoke_test_value"]},
-                "entity_urns": [urn],
-            },
-        )
-        report.record("add_structured_properties", True, f"Added {property_urn}")
-    except Exception as e:
-        report.record("add_structured_properties", False, error=str(e))
-        report.record(
-            "remove_structured_properties", False, error="Skipped (add failed)"
-        )
-        return
-
-    try:
-        await call_tool(
-            mcp_client,
+            c,
             "remove_structured_properties",
             {
-                "property_urns": [property_urn],
-                "entity_urns": [urn],
+                "property_urns": [urns.structured_property_urn],
+                "entity_urns": [urns.dataset_urn],
             },
         )
-        report.record("remove_structured_properties", True, f"Removed {property_urn}")
+        report.record(
+            "remove_structured_properties",
+            True,
+            f"Removed {urns.structured_property_urn}",
+        )
     except Exception as e:
         report.record("remove_structured_properties", False, error=str(e))
 
 
+@check("update_description", urns=["dataset_urn"])
 async def check_update_description(
-    mcp_client: Client, report: SmokeTestReport, urn: str
+    c: Client, report: SmokeCheckReport, urns: DiscoveredURNs
 ) -> None:
-    """Test update_description (append then clean up)."""
-    marker = "\n\n<!-- mcp_smoke_test -->"
-
+    marker = "\n\n<!-- mcp_smoke_check -->"
+    await call_tool(
+        c,
+        "update_description",
+        {"entity_urn": urns.dataset_urn, "operation": "append", "description": marker},
+    )
+    report.record("update_description", True, "Appended test marker")
+    # Best-effort cleanup
     try:
-        await call_tool(
-            mcp_client,
-            "update_description",
-            {"entity_urn": urn, "operation": "append", "description": marker},
-        )
-        report.record("update_description", True, "Appended test marker")
-    except Exception as e:
-        report.record("update_description", False, error=str(e))
-        return
-
-    # Clean up: fetch current description, strip our marker, replace
-    try:
-        entity_result = await call_tool(mcp_client, "get_entities", {"urns": urn})
+        entity_result = await call_tool(c, "get_entities", {"urns": urns.dataset_urn})
         entity_data = json.loads(entity_result.content[0].text)
         current_desc = (
             entity_data.get("editableProperties", {}).get("description", "")
@@ -652,42 +617,28 @@ async def check_update_description(
         )
         cleaned = current_desc.replace(marker, "")
         await call_tool(
-            mcp_client,
+            c,
             "update_description",
-            {"entity_urn": urn, "operation": "replace", "description": cleaned},
-        )
-    except Exception:
-        pass  # Best-effort cleanup
-
-
-async def check_save_document(
-    mcp_client: Client, report: SmokeTestReport
-) -> Optional[str]:
-    """Test save_document. Returns the created document URN on success."""
-    try:
-        result = await call_tool(
-            mcp_client,
-            "save_document",
             {
-                "document_type": "Note",
-                "title": "[Smoke Test] Test Document - Safe to Delete",
-                "content": "This document was created by the MCP smoke test and is safe to delete.",
+                "entity_urn": urns.dataset_urn,
+                "operation": "replace",
+                "description": cleaned,
             },
         )
-        data = json.loads(result.content[0].text)
-        doc_urn = data.get("urn", "")
-        report.record("save_document", True, f"Created: {doc_urn[:80]}")
-        return doc_urn or None
-    except Exception as e:
-        report.record("save_document", False, error=str(e))
-        return None
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Runner
+# ---------------------------------------------------------------------------
 
 
 async def run_smoke_check(
     test_mutations: bool = False,
     test_user: bool = False,
     test_urn: Optional[str] = None,
-) -> SmokeTestReport:
+) -> SmokeCheckReport:
     # Set env vars for tool registration before importing
     if test_mutations:
         os.environ["TOOLS_IS_MUTATION_ENABLED"] = "true"
@@ -695,27 +646,32 @@ async def run_smoke_check(
         os.environ["TOOLS_IS_USER_ENABLED"] = "true"
 
     # Now import and register
+    from mcp_server_datahub.document_tools_middleware import DocumentToolsMiddleware
     from mcp_server_datahub.mcp_server import (
         mcp,
         register_all_tools,
         with_datahub_client,
     )
+    from mcp_server_datahub.version_requirements import VersionFilterMiddleware
 
     register_all_tools(is_oss=True)
 
-    report = SmokeTestReport()
+    # Add middleware so list_tools reflects what a real client sees
+    mcp.add_middleware(VersionFilterMiddleware())
+    mcp.add_middleware(DocumentToolsMiddleware())
 
+    report = SmokeCheckReport()
     client = DataHubClient.from_env(client_mode=ClientMode.SDK)
 
     with with_datahub_client(client):
         async with Client(mcp) as mcp_client:
-            # 1. List tools
+            # 1. List available tools (filtered by middleware)
             tools = await mcp_client.list_tools()
-            tool_names = sorted(t.name for t in tools)
-            print(f"Registered tools ({len(tools)}): {', '.join(tool_names)}")
+            available = {t.name for t in tools}
+            print(f"Available tools ({len(tools)}): {', '.join(sorted(available))}")
             print()
 
-            # 2. Discover URNs from the live instance
+            # 2. Discover URNs
             print("Discovering URNs from DataHub instance...")
             urns = await discover_urns(mcp_client, client._graph, test_urn=test_urn)
             print(f"  dataset:              {urns.dataset_urn or 'NOT FOUND'}")
@@ -728,150 +684,31 @@ async def run_smoke_check(
             )
             print()
 
-            # 3. Search tool
-            await check_search(mcp_client, report)
+            # 3. Run all registered checks
+            for name, required_tools, required_urns, fn in _ALL_CHECKS:
+                # Skip if any required tool is not available
+                missing_tools = [t for t in required_tools if t not in available]
+                if missing_tools:
+                    continue  # Tool not available on this server version — skip silently
 
-            # 4. Dataset-dependent read-only tools
-            if not urns.dataset_urn:
-                for tool in [
-                    "get_entities",
-                    "get_lineage",
-                    "get_dataset_queries",
-                    "list_schema_fields",
-                    "get_lineage_paths_between",
-                ]:
-                    report.record(
-                        tool, False, error="No dataset found in DataHub instance"
-                    )
-            else:
-                await check_get_entities(mcp_client, report, urns.dataset_urn)
-                await check_get_lineage(mcp_client, report, urns.dataset_urn)
-                await check_get_dataset_queries(mcp_client, report, urns.dataset_urn)
-                await check_list_schema_fields(mcp_client, report, urns.dataset_urn)
-                await check_get_lineage_paths_between(
-                    mcp_client, report, urns.dataset_urn
-                )
-
-            # 5. Document tools — save first so grep can use the created doc
-            await check_search_documents(mcp_client, report)
-
-            saved_doc_urn: Optional[str] = None
-            if "save_document" in tool_names:
-                saved_doc_urn = await check_save_document(mcp_client, report)
-
-            await check_grep_documents(mcp_client, report, doc_urn=saved_doc_urn)
-
-            # 6. User tools
-            if test_user:
-                await check_get_me(mcp_client, report)
-
-            # 7. Mutation tools
-            if test_mutations:
-                if not urns.dataset_urn:
-                    for tool in [
-                        "add_tags",
-                        "remove_tags",
-                        "add_owners",
-                        "remove_owners",
-                        "set_domains",
-                        "remove_domains",
-                        "update_description",
-                    ]:
+                # Fail if any required URN was not discovered
+                missing_urns = [u for u in required_urns if not getattr(urns, u, None)]
+                if missing_urns:
+                    urn_names = ", ".join(missing_urns)
+                    for tool in required_tools:
                         report.record(
-                            tool, False, error="No dataset found in DataHub instance"
-                        )
-                else:
-                    # Tags
-                    if urns.tag_urn:
-                        await check_add_remove_tags(
-                            mcp_client, report, urns.dataset_urn, urns.tag_urn
-                        )
-                    else:
-                        report.record(
-                            "add_tags", False, error="No tag found in DataHub instance"
-                        )
-                        report.record(
-                            "remove_tags",
+                            tool,
                             False,
-                            error="No tag found in DataHub instance",
+                            error=f"Required URN(s) not found in instance: {urn_names}",
                         )
+                    continue
 
-                    # Terms
-                    if urns.term_urn:
-                        await check_add_remove_terms(
-                            mcp_client, report, urns.dataset_urn, urns.term_urn
-                        )
-                    else:
-                        report.record(
-                            "add_terms",
-                            False,
-                            error="No glossary term found in DataHub instance",
-                        )
-                        report.record(
-                            "remove_terms",
-                            False,
-                            error="No glossary term found in DataHub instance",
-                        )
-
-                    # Owners
-                    if urns.owner_urn:
-                        await check_add_remove_owners(
-                            mcp_client,
-                            report,
-                            urns.dataset_urn,
-                            urns.owner_urn,
-                        )
-                    else:
-                        report.record(
-                            "add_owners",
-                            False,
-                            error="No owner found in DataHub instance",
-                        )
-                        report.record(
-                            "remove_owners",
-                            False,
-                            error="No owner found in DataHub instance",
-                        )
-
-                    # Domains
-                    if urns.domain_urn:
-                        await check_set_remove_domains(
-                            mcp_client, report, urns.dataset_urn, urns.domain_urn
-                        )
-                    else:
-                        report.record(
-                            "set_domains",
-                            False,
-                            error="No domain found in DataHub instance",
-                        )
-                        report.record(
-                            "remove_domains",
-                            False,
-                            error="No domain found in DataHub instance",
-                        )
-
-                    # Structured properties
-                    if urns.structured_property_urn:
-                        await check_add_remove_structured_properties(
-                            mcp_client,
-                            report,
-                            urns.dataset_urn,
-                            urns.structured_property_urn,
-                        )
-                    else:
-                        report.record(
-                            "add_structured_properties",
-                            False,
-                            error="No structured property found in DataHub instance",
-                        )
-                        report.record(
-                            "remove_structured_properties",
-                            False,
-                            error="No structured property found in DataHub instance",
-                        )
-
-                    # Description (no extra URN needed)
-                    await check_update_description(mcp_client, report, urns.dataset_urn)
+                # Run the check
+                try:
+                    await fn(mcp_client, report, urns)
+                except Exception as e:
+                    # Record failure for the first required tool
+                    report.record(required_tools[0], False, error=str(e))
 
     return report
 
@@ -886,7 +723,7 @@ async def run_smoke_check(
 @click.option("--all", "test_all", is_flag=True, help="Test everything")
 @click.option("--urn", default=None, help="Dataset URN to use for testing")
 def main(mutations: bool, user: bool, test_all: bool, urn: Optional[str]) -> None:
-    """Smoke test all MCP server tools against a live DataHub instance."""
+    """Smoke check all MCP server tools against a live DataHub instance."""
     if test_all:
         mutations = True
         user = True

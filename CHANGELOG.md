@@ -5,6 +5,24 @@ All notable changes to mcp-server-datahub will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.1] - 2026-02-11
+
+### Fixed
+
+- **`list_schema_fields`**: Fixed crash (`'NoneType' object has no attribute 'get'`) when a dataset has no schema metadata. Now gracefully returns an empty fields list.
+- **`save_document`**: Errors (e.g., authorization failures) are now raised as exceptions instead of being silently returned in the response body. This ensures LLM agents see the actual error message.
+- **`update_description`**: Hidden from OSS instances where entity-level description updates are not supported. Available on Cloud only.
+
+### Added
+
+- **`scripts/smoke_check.py`**: Comprehensive smoke check script that exercises all available MCP tools against a live DataHub instance. Discovers URNs dynamically, respects version filtering middleware, and tests mutation tools with add-then-remove pairs. Supports `--all`, `--mutations`, `--user`, and `--urn` options.
+
+### Changed
+
+- **Version-aware tool filtering**: `update_description` now requires Cloud (`@min_version(cloud="0.3.16")`), previously also allowed on OSS >= 1.4.0.
+
+---
+
 ## [0.5.0] - 2026-01-30
 
 ### Added

@@ -51,6 +51,12 @@ if using_oss:
         document_tools_middleware
     )
 
+    # Import and expose version_requirements
+    from mcp_server_datahub import version_requirements
+
+    mcp_module.version_requirements = version_requirements  # type: ignore[attr-defined]
+    sys.modules["datahub_integrations.mcp.version_requirements"] = version_requirements
+
     # Create datahub_integrations.mcp.tools submodule
     tools_module = types.ModuleType("datahub_integrations.mcp.tools")
     sys.modules["datahub_integrations.mcp.tools"] = tools_module

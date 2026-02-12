@@ -7,6 +7,8 @@ import re2  # type: ignore[import-untyped]
 from datahub.utilities.perf_timer import PerfTimer
 from loguru import logger
 
+from ..version_requirements import min_version
+
 # Load GraphQL queries at module level (no circular dependency here)
 document_search_gql = (
     pathlib.Path(__file__).parent.parent / "gql/document_search.gql"
@@ -291,6 +293,7 @@ def _hybrid_search_documents(
     return clean_gql_response(merged)
 
 
+@min_version(cloud="0.3.16", oss="1.4.0")
 def search_documents(
     query: str = "*",
     semantic_query: Optional[str] = None,
@@ -584,6 +587,7 @@ def _search_documents_impl(
     return clean_gql_response(response)
 
 
+@min_version(cloud="0.3.16", oss="1.4.0")
 def grep_documents(
     urns: List[str],
     pattern: str,
