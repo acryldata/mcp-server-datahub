@@ -7,7 +7,14 @@ import click
 from datahub.sdk.main_client import DataHubClient
 from fastmcp import Client
 
-from mcp_server_datahub.mcp_server import mcp, set_datahub_client
+from mcp_server_datahub.mcp_server import (
+    create_mcp_server,
+    register_all_tools,
+    set_datahub_client,
+)
+
+mcp = create_mcp_server()
+register_all_tools(mcp, is_oss=True)
 
 
 def _divider() -> None:
