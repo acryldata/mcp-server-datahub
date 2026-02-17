@@ -18,6 +18,7 @@ import pathlib
 import re
 import string
 import threading
+import weakref
 from enum import Enum
 from typing import (
     Any,
@@ -2624,8 +2625,8 @@ def _find_upstream_lineage_path(
     }
 
 
-# Track MCP instances that have already had tools registered
-_registered_mcp_instances: set[int] = set()
+# Track MCP instances that have already had tools registered.
+_registered_mcp_instances: weakref.WeakSet[FastMCP] = weakref.WeakSet()
 _tools_registration_lock = threading.Lock()
 
 
@@ -2806,18 +2807,16 @@ def register_all_tools(mcp_instance: FastMCP, is_oss: bool = False) -> None:
     Note: Thread-safe. Can be called multiple times from different threads.
           Only the first call will register tools, subsequent calls are no-ops.
     """
-    mcp_instance_id = id(mcp_instance)
-
     # Thread-safe check-and-set using lock
     with _tools_registration_lock:
-        if mcp_instance_id in _registered_mcp_instances:
+        if mcp_instance in _registered_mcp_instances:
             logger.debug(
                 "Tools already registered for this MCP instance, "
                 "skipping duplicate registration"
             )
             return
 
-        _registered_mcp_instances.add(mcp_instance_id)
+        _registered_mcp_instances.add(mcp_instance)
         logger.info(f"Registering MCP tools (is_oss={is_oss})")
 
     # Call the core registration logic on the provided mcp instance
