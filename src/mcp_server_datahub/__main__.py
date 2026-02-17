@@ -31,10 +31,30 @@ register_all_tools(is_oss=True)
     is_flag=True,
     default=False,
 )
+@click.option(
+    "--host",
+    type=str,
+    default=None,
+)
+@click.option(
+    "--port",
+    type=click.IntRange(1, 65535),
+    default=None,
+)
 @telemetry.with_telemetry(
     capture_kwargs=["transport"],
 )
-def main(transport: Literal["stdio", "sse", "http"], debug: bool) -> None:
+def main(
+    transport: Literal["stdio", "sse", "http"],
+    debug: bool,
+    host: str | None,
+    port: int | None,
+) -> None:
+    if transport == "stdio" and (host is not None or port is not None):
+        raise click.UsageError(
+            "--host/--port can only be used with --transport http or sse"
+        )
+
     client = DataHubClient.from_env(
         client_mode=ClientMode.SDK,
         datahub_component=f"mcp-server-datahub/{__version__}",
@@ -48,8 +68,14 @@ def main(transport: Literal["stdio", "sse", "http"], debug: bool) -> None:
     mcp.add_middleware(DocumentToolsMiddleware())
 
     with with_datahub_client(client):
-        if transport == "http":
-            mcp.run(transport=transport, show_banner=False, stateless_http=True)
+        if transport in {"http", "sse"}:
+            mcp.run(
+                transport=transport,
+                show_banner=False,
+                stateless_http=True if transport == "http" else None,
+                host=host,
+                port=port,
+            )
         else:
             mcp.run(transport=transport, show_banner=False)
 
