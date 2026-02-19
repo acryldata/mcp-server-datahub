@@ -54,7 +54,6 @@ from starlette.responses import JSONResponse, Response
 
 # IMPORTANT: Use relative imports to maintain compatibility across repositories
 from ._token_estimator import TokenCountEstimator
-from ._version import __version__
 from .tools.descriptions import update_description
 from .tools.documents import grep_documents, search_documents
 from .tools.domains import remove_domains, set_domains
