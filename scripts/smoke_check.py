@@ -648,13 +648,14 @@ async def run_smoke_check(
     # Now import and register
     from mcp_server_datahub.document_tools_middleware import DocumentToolsMiddleware
     from mcp_server_datahub.mcp_server import (
-        mcp,
+        create_mcp_server,
         register_all_tools,
         with_datahub_client,
     )
     from mcp_server_datahub.version_requirements import VersionFilterMiddleware
 
-    register_all_tools(is_oss=True)
+    mcp = create_mcp_server()
+    register_all_tools(mcp, is_oss=True)
 
     # Add middleware so list_tools reflects what a real client sees
     mcp.add_middleware(VersionFilterMiddleware())

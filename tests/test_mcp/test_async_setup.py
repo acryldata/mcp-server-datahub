@@ -5,7 +5,14 @@ import anyio
 import fastmcp.tools.tool
 import pytest
 
-from datahub_integrations.mcp.mcp_server import async_background, mcp
+from datahub_integrations.mcp.mcp_server import (
+    async_background,
+    create_mcp_server,
+    register_all_tools,
+)
+
+mcp = create_mcp_server()
+register_all_tools(mcp, is_oss=True)
 
 
 @pytest.mark.anyio

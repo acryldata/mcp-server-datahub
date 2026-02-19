@@ -10,13 +10,19 @@ from typing_extensions import Literal
 from mcp_server_datahub._telemetry import TelemetryMiddleware
 from mcp_server_datahub._version import __version__
 from mcp_server_datahub.document_tools_middleware import DocumentToolsMiddleware
-from mcp_server_datahub.mcp_server import mcp, register_all_tools, with_datahub_client
+from mcp_server_datahub.mcp_server import (
+    create_mcp_server,
+    register_all_tools,
+    with_datahub_client,
+)
 from mcp_server_datahub.version_requirements import VersionFilterMiddleware
 
 logging.basicConfig(level=logging.INFO)
 
+mcp = create_mcp_server()
+
 # Register tools with OSS-compatible descriptions
-register_all_tools(is_oss=True)
+register_all_tools(mcp, is_oss=True)
 
 
 @click.command()

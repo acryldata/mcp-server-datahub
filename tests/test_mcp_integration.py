@@ -13,10 +13,16 @@ from fastmcp import Client
 from mcp.types import TextContent
 from loguru import logger
 from mcp_server_datahub._telemetry import TelemetryMiddleware
-from mcp_server_datahub.mcp_server import mcp, register_all_tools, with_datahub_client
+from mcp_server_datahub.mcp_server import (
+    create_mcp_server,
+    register_all_tools,
+    with_datahub_client,
+)
+
+mcp = create_mcp_server()
 
 # Register tools with OSS-compatible descriptions for testing
-register_all_tools(is_oss=True)
+register_all_tools(mcp, is_oss=True)
 
 _test_urn = "urn:li:dataset:(urn:li:dataPlatform:snowflake,long_tail_companions.analytics.pet_details,PROD)"
 _test_domain = "urn:li:domain:0da1ef03-8870-45db-9f47-ef4f592f095c"  # "urn:li:domain:7186eeff-a860-4b0a-989f-69473a0c9c67"

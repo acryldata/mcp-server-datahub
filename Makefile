@@ -1,4 +1,4 @@
-.PHONY: setup clean format format-check lint lint-check test
+.PHONY: setup clean format format-check lint lint-check test mcp-inspector
 
 PY_FILES = src tests scripts
 
@@ -32,3 +32,8 @@ clean:
 	rm -rf .pytest_cache/
 	rm -rf .mypy_cache/
 	rm -rf .ruff_cache/ 
+
+# Launch MCP Inspector
+# Use `fastmcp dev` (not `mcp dev`), since this project uses the standalone FastMCP package.
+mcp-inspector:
+	uv run fastmcp dev src/mcp_server_datahub/__main__.py --with-editable .
