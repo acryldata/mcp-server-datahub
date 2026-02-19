@@ -324,15 +324,7 @@ mcp = FastMCP[None](
 
 @mcp.custom_route("/health", methods=["GET"])
 async def health(request: Request) -> Response:
-    missing = [
-        var for var in ("DATAHUB_GMS_URL", "DATAHUB_GMS_TOKEN") if not os.getenv(var)
-    ]
-    if missing:
-        return JSONResponse(
-            {"status": "error", "missing_env_vars": missing},
-            status_code=503,
-        )
-    return JSONResponse({"status": "ok", "version": __version__})
+    return JSONResponse({"status": "ok"})
 
 
 _mcp_dh_client = contextvars.ContextVar[DataHubClient]("_mcp_dh_client")
