@@ -290,6 +290,19 @@ def _ensure_document_exists(
         show_in_global_context=True,
     )
 
+    # Explicitly set DocumentSettings to ensure showInGlobalContext=True is persisted.
+    # This is needed because the SDK's show_in_global_context parameter does not
+    # emit the DocumentSettings aspect. Same workaround as used for documents below.
+    folder_settings_audit = models.AuditStampClass(
+        time=int(datetime.now().timestamp() * 1000),
+        actor="urn:li:corpuser:datahub",
+    )
+    folder_settings = models.DocumentSettingsClass(
+        showInGlobalContext=True,
+        lastModified=folder_settings_audit,
+    )
+    doc._set_aspect(folder_settings)
+
     try:
         client.entities.upsert(doc)
         logger.info(f"Created folder document: {doc_urn}")
