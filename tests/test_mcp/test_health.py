@@ -5,6 +5,7 @@ from typing import AsyncGenerator
 import httpx
 import pytest
 
+import mcp_server_datahub.__main__  # noqa: F401 -- registers /health route on mcp
 from mcp_server_datahub.mcp_server import mcp
 
 

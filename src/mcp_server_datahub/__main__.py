@@ -5,6 +5,8 @@ from datahub.ingestion.graph.config import ClientMode
 from datahub.sdk.main_client import DataHubClient
 from datahub.telemetry import telemetry
 from fastmcp.server.middleware.logging import LoggingMiddleware
+from starlette.requests import Request
+from starlette.responses import JSONResponse, Response
 from typing_extensions import Literal
 
 from mcp_server_datahub._telemetry import TelemetryMiddleware
@@ -17,6 +19,11 @@ logging.basicConfig(level=logging.INFO)
 
 # Register tools with OSS-compatible descriptions
 register_all_tools(is_oss=True)
+
+
+@mcp.custom_route("/health", methods=["GET"])
+async def health(request: Request) -> Response:
+    return JSONResponse({"status": "ok"})
 
 
 @click.command()

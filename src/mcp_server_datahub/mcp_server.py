@@ -49,8 +49,6 @@ from fastmcp.tools.tool import Tool as FastMCPTool
 from json_repair import repair_json
 from loguru import logger
 from pydantic import BaseModel
-from starlette.requests import Request
-from starlette.responses import JSONResponse, Response
 
 # IMPORTANT: Use relative imports to maintain compatibility across repositories
 from ._token_estimator import TokenCountEstimator
@@ -319,11 +317,6 @@ def _register_tool(
 mcp = FastMCP[None](
     name="datahub",
 )
-
-
-@mcp.custom_route("/health", methods=["GET"])
-async def health(request: Request) -> Response:
-    return JSONResponse({"status": "ok"})
 
 
 _mcp_dh_client = contextvars.ContextVar[DataHubClient]("_mcp_dh_client")
