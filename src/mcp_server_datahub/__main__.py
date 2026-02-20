@@ -21,6 +21,9 @@ logging.basicConfig(level=logging.INFO)
 register_all_tools(is_oss=True)
 
 
+# Adds a health route to the MCP Server.
+# Notice that this is only available when the MCP Server is run in HTTP/SSE modes.
+# Doesn't make much sense to have it in the stdio mode since it is usually used as a subprocess of the client.
 @mcp.custom_route("/health", methods=["GET"])
 async def health(request: Request) -> Response:
     return JSONResponse({"status": "ok"})
