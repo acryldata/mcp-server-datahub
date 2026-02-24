@@ -13,7 +13,7 @@ make setup
 ### Run using the MCP inspector
 
 ```bash
-uv run fastmcp dev src/mcp_server_datahub/__main__.py --with-editable .
+uv run fastmcp dev src/mcp_server_datahub/__main__.py:create_app --with-editable .
 ```
 
 In the inspector UI, add environment variables for `DATAHUB_GMS_URL` and `DATAHUB_GMS_TOKEN`, then click Connect.

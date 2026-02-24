@@ -5,6 +5,7 @@ import click
 from datahub.ingestion.graph.config import ClientMode
 from datahub.sdk.main_client import DataHubClient
 from datahub.telemetry import telemetry
+from fastmcp import FastMCP
 from fastmcp.server.middleware.logging import LoggingMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
@@ -22,7 +23,7 @@ logging.basicConfig(level=logging.INFO)
 register_all_tools(is_oss=True)
 
 
-class DataHubClientMiddleware:
+class _DataHubClientMiddleware:
     """Middleware that propagates the DataHub client ContextVar into each request.
 
     When running with HTTP transport (stateless_http=True), each request is handled
@@ -53,6 +54,41 @@ async def health(request: Request) -> Response:
     return JSONResponse({"status": "ok"})
 
 
+_app_initialized = False
+
+
+def create_app() -> FastMCP:
+    """Create and configure the MCP server with DataHub client and middlewares.
+
+    This is the factory function used by ``fastmcp dev`` / ``fastmcp run``
+    (via the ``__main__.py:create_app`` entrypoint) and is also called by the
+    CLI ``main()`` entrypoint.
+
+    The function is idempotent — calling it more than once returns the same
+    ``mcp`` instance without adding duplicate middlewares.
+    """
+    global _app_initialized
+    if _app_initialized:
+        return mcp
+    _app_initialized = True
+
+    client = DataHubClient.from_env(
+        client_mode=ClientMode.SDK,
+        datahub_component=f"mcp-server-datahub/{__version__}",
+    )
+
+    # _DataHubClientMiddleware must be first so the client ContextVar is
+    # available to all subsequent middlewares and tool handlers.  This is
+    # especially important for HTTP transport where each request runs in a
+    # separate async context.
+    mcp.add_middleware(_DataHubClientMiddleware(client))
+    mcp.add_middleware(TelemetryMiddleware())
+    mcp.add_middleware(VersionFilterMiddleware())
+    mcp.add_middleware(DocumentToolsMiddleware())
+
+    return mcp
+
+
 @click.command()
 @click.version_option(version=__version__)
 @click.option(
@@ -69,22 +105,11 @@ async def health(request: Request) -> Response:
     capture_kwargs=["transport"],
 )
 def main(transport: Literal["stdio", "sse", "http"], debug: bool) -> None:
-    client = DataHubClient.from_env(
-        client_mode=ClientMode.SDK,
-        datahub_component=f"mcp-server-datahub/{__version__}",
-    )
-
-    # DataHubClientMiddleware must be first so the client ContextVar is available
-    # to all subsequent middlewares and tool handlers. This is especially important
-    # for HTTP transport where each request runs in a separate async context.
-    mcp.add_middleware(DataHubClientMiddleware(client))
+    create_app()
 
     if debug:
         # logging.getLogger("datahub").setLevel(logging.DEBUG)
         mcp.add_middleware(LoggingMiddleware(include_payloads=True))
-    mcp.add_middleware(TelemetryMiddleware())
-    mcp.add_middleware(VersionFilterMiddleware())
-    mcp.add_middleware(DocumentToolsMiddleware())
 
     if transport == "http":
         mcp.run(transport=transport, show_banner=False, stateless_http=True)
