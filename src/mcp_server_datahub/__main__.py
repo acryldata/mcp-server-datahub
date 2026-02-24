@@ -1,4 +1,5 @@
 import logging
+from typing import Any
 
 import click
 from datahub.ingestion.graph.config import ClientMode
@@ -19,6 +20,29 @@ logging.basicConfig(level=logging.INFO)
 
 # Register tools with OSS-compatible descriptions
 register_all_tools(is_oss=True)
+
+
+class DataHubClientMiddleware:
+    """Middleware that propagates the DataHub client ContextVar into each request.
+
+    When running with HTTP transport (stateless_http=True), each request is handled
+    in a separate async context that does not inherit ContextVars from the main
+    thread. This middleware ensures the DataHub client is available in every request
+    context by setting the ContextVar at the start of each MCP message.
+
+    Must be added as the first middleware so it wraps all other middlewares.
+    """
+
+    def __init__(self, client: DataHubClient) -> None:
+        self._client = client
+
+    async def __call__(
+        self,
+        context: Any,
+        call_next: Any,
+    ) -> Any:
+        with with_datahub_client(self._client):
+            return await call_next(context)
 
 
 # Adds a health route to the MCP Server.
@@ -50,6 +74,11 @@ def main(transport: Literal["stdio", "sse", "http"], debug: bool) -> None:
         datahub_component=f"mcp-server-datahub/{__version__}",
     )
 
+    # DataHubClientMiddleware must be first so the client ContextVar is available
+    # to all subsequent middlewares and tool handlers. This is especially important
+    # for HTTP transport where each request runs in a separate async context.
+    mcp.add_middleware(DataHubClientMiddleware(client))
+
     if debug:
         # logging.getLogger("datahub").setLevel(logging.DEBUG)
         mcp.add_middleware(LoggingMiddleware(include_payloads=True))
@@ -57,11 +86,10 @@ def main(transport: Literal["stdio", "sse", "http"], debug: bool) -> None:
     mcp.add_middleware(VersionFilterMiddleware())
     mcp.add_middleware(DocumentToolsMiddleware())
 
-    with with_datahub_client(client):
-        if transport == "http":
-            mcp.run(transport=transport, show_banner=False, stateless_http=True)
-        else:
-            mcp.run(transport=transport, show_banner=False)
+    if transport == "http":
+        mcp.run(transport=transport, show_banner=False, stateless_http=True)
+    else:
+        mcp.run(transport=transport, show_banner=False)
 
 
 if __name__ == "__main__":
