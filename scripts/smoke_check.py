@@ -26,19 +26,29 @@ Usage:
 Requires DATAHUB_GMS_URL and DATAHUB_GMS_TOKEN env vars (or ~/.datahubenv).
 """
 
+from __future__ import annotations
+
 import asyncio
 import json
 import os
 import sys
 from dataclasses import dataclass, field
 from functools import partial
-from typing import Any, Callable, Coroutine, Optional
+from typing import Any, Optional
 
-import anyio
-import click
-from datahub.ingestion.graph.config import ClientMode
-from datahub.sdk.main_client import DataHubClient
-from fastmcp import Client
+# Heavy dependencies are imported lazily in run_smoke_check() so that
+# --pypi mode (which only needs the standard library) can work
+# without the local venv.
+try:
+    import anyio
+    import click
+    from datahub.ingestion.graph.config import ClientMode
+    from datahub.sdk.main_client import DataHubClient
+    from fastmcp import Client
+
+    _DEPS_AVAILABLE = True
+except ImportError:
+    _DEPS_AVAILABLE = False
 
 
 # ---------------------------------------------------------------------------
@@ -116,18 +126,13 @@ class DiscoveredURNs:
 # ---------------------------------------------------------------------------
 
 # Each registered check is (name, required_tools, required_urns, fn)
-CheckFn = Callable[
-    [Client, SmokeCheckReport, DiscoveredURNs],
-    Coroutine[Any, Any, None],
-]
-
-_ALL_CHECKS: list[tuple[str, list[str], list[str], CheckFn]] = []
+_ALL_CHECKS: list[tuple[str, list[str], list[str], Any]] = []
 
 
 def check(
     *required_tools: str,
     urns: Optional[list[str]] = None,
-) -> Callable[[CheckFn], CheckFn]:
+) -> Any:
     """Decorator to register a smoke check function.
 
     Args:
@@ -137,7 +142,7 @@ def check(
             (e.g. ["dataset_urn", "tag_urn"]). The check fails if any are None.
     """
 
-    def decorator(fn: CheckFn) -> CheckFn:
+    def decorator(fn: Any) -> Any:
         _ALL_CHECKS.append((fn.__name__, list(required_tools), urns or [], fn))
         return fn
 
@@ -713,28 +718,139 @@ async def run_smoke_check(
     return report
 
 
-@click.command()
-@click.option(
-    "--mutations",
-    is_flag=True,
-    help="Test mutation tools (add/remove tags, owners, etc.)",
-)
-@click.option("--user", is_flag=True, help="Test user tools (get_me)")
-@click.option("--all", "test_all", is_flag=True, help="Test everything")
-@click.option("--urn", default=None, help="Dataset URN to use for testing")
-def main(mutations: bool, user: bool, test_all: bool, urn: Optional[str]) -> None:
-    """Smoke check all MCP server tools against a live DataHub instance."""
-    if test_all:
-        mutations = True
-        user = True
+def _run_pypi_smoke_check(version: Optional[str], extra_args: list[str]) -> int:
+    """Install mcp-server-datahub from PyPI in a clean venv under /tmp.
 
-    report = asyncio.run(
-        run_smoke_check(test_mutations=mutations, test_user=user, test_urn=urn)
+    Creates a completely isolated environment with no dependency on the local project.
+    """
+    import shutil
+    import subprocess
+    import tempfile
+
+    pkg = f"mcp-server-datahub=={version}" if version else "mcp-server-datahub"
+    tmpdir = tempfile.mkdtemp(prefix="mcp-smoke-", dir="/tmp")
+
+    try:
+        venv_dir = os.path.join(tmpdir, ".venv")
+        script_copy = os.path.join(tmpdir, "smoke_check.py")
+        python = os.path.join(venv_dir, "bin", "python")
+
+        print(f"Creating clean environment in {tmpdir}")
+        print(f"Installing {pkg} from PyPI...")
+        subprocess.run(["uv", "venv", venv_dir], check=True, capture_output=True)
+        subprocess.run(
+            ["uv", "pip", "install", "--python", python, pkg],
+            check=True,
+        )
+
+        # Show installed version
+        ver_result = subprocess.run(
+            [
+                python,
+                "-c",
+                "from mcp_server_datahub._version import __version__; print(__version__)",
+            ],
+            capture_output=True,
+            text=True,
+        )
+        if ver_result.returncode == 0:
+            print(f"Installed version: {ver_result.stdout.strip()}")
+
+        # Copy this script and run it — completely isolated from local source
+        shutil.copy2(__file__, script_copy)
+        cmd = [python, script_copy] + extra_args
+        print(f"Running: {' '.join(cmd)}\n")
+        proc = subprocess.run(cmd, cwd=tmpdir)
+        return proc.returncode
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+def _parse_pypi_args() -> Optional[tuple[Optional[str], list[str]]]:
+    """Check if --pypi is in sys.argv. Returns (version, extra_args) or None.
+
+    This is a lightweight parser that doesn't require click, so --pypi mode
+    works even without any dependencies installed.
+    """
+    args = sys.argv[1:]
+    pypi_version = None
+    found_pypi = False
+
+    for i, arg in enumerate(args):
+        if arg == "--pypi":
+            found_pypi = True
+            # Next arg might be a version (not starting with --)
+            if i + 1 < len(args) and not args[i + 1].startswith("--"):
+                pypi_version = args[i + 1]
+            break
+        elif arg.startswith("--pypi="):
+            found_pypi = True
+            pypi_version = arg.split("=", 1)[1]
+            break
+
+    if not found_pypi:
+        return None
+
+    # Build extra_args: everything except --pypi and its value
+    extra_args = []
+    skip_next = False
+    for i, arg in enumerate(args):
+        if skip_next:
+            skip_next = False
+            continue
+        if arg == "--pypi":
+            if i + 1 < len(args) and not args[i + 1].startswith("--"):
+                skip_next = True
+            continue
+        if arg.startswith("--pypi="):
+            continue
+        extra_args.append(arg)
+
+    return pypi_version, extra_args
+
+
+if _DEPS_AVAILABLE:
+
+    @click.command()
+    @click.option(
+        "--mutations",
+        is_flag=True,
+        help="Test mutation tools (add/remove tags, owners, etc.)",
     )
-    report.print_report()
+    @click.option("--user", is_flag=True, help="Test user tools (get_me)")
+    @click.option("--all", "test_all", is_flag=True, help="Test everything")
+    @click.option("--urn", default=None, help="Dataset URN to use for testing")
+    def main(
+        mutations: bool,
+        user: bool,
+        test_all: bool,
+        urn: Optional[str],
+    ) -> None:
+        """Smoke check all MCP server tools against a live DataHub instance."""
+        if test_all:
+            mutations = True
+            user = True
 
-    sys.exit(0 if report.all_passed else 1)
+        report = asyncio.run(
+            run_smoke_check(test_mutations=mutations, test_user=user, test_urn=urn)
+        )
+        report.print_report()
+        sys.exit(0 if report.all_passed else 1)
 
 
 if __name__ == "__main__":
+    # Handle --pypi before click, since it doesn't require any dependencies
+    pypi_args = _parse_pypi_args()
+    if pypi_args is not None:
+        version, extra_args = pypi_args
+        sys.exit(_run_pypi_smoke_check(version, extra_args))
+
+    if not _DEPS_AVAILABLE:
+        print(
+            "Error: Dependencies not available. Run with --pypi to test from PyPI,\n"
+            "or use 'uv run python scripts/smoke_check.py' from the project directory.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
     main()
