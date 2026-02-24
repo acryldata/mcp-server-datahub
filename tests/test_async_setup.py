@@ -1,11 +1,20 @@
 import inspect
 import time
+import weakref
 
 import anyio
 import fastmcp.tools.tool
 import pytest
+import mcp_server_datahub.mcp_server as mcp_server_module
 
-from mcp_server_datahub.mcp_server import async_background, mcp
+from mcp_server_datahub.mcp_server import (
+    async_background,
+    create_mcp_server,
+    register_all_tools,
+)
+
+mcp = create_mcp_server()
+register_all_tools(mcp, is_oss=True)
 
 
 @pytest.mark.anyio
@@ -32,3 +41,19 @@ def test_all_tools_are_async() -> None:
     for tool in mcp._tool_manager._tools.values():
         assert isinstance(tool, fastmcp.tools.tool.FunctionTool)
         assert inspect.iscoroutinefunction(tool.fn)
+
+
+def test_register_all_tools_registers_each_instance_independently() -> None:
+    mcp_one = create_mcp_server(name="datahub-test-one")
+    mcp_two = create_mcp_server(name="datahub-test-two")
+
+    register_all_tools(mcp_one, is_oss=True)
+    register_all_tools(mcp_two, is_oss=True)
+
+    assert "search" in mcp_one._tool_manager._tools
+    assert "search" in mcp_two._tool_manager._tools
+
+    # Multiple calls to register_all_tools with the same MCP instance should not register duplicate tools.
+    initial_tool_count = len(mcp_one._tool_manager._tools)
+    register_all_tools(mcp_one, is_oss=True)
+    assert len(mcp_one._tool_manager._tools) == initial_tool_count

@@ -18,6 +18,7 @@ import pathlib
 import re
 import string
 import threading
+import weakref
 from enum import Enum
 from typing import (
     Any,
@@ -314,9 +315,9 @@ def _register_tool(
         TOOL_VERSION_REQUIREMENTS[name] = req
 
 
-mcp = FastMCP[None](
-    name="datahub",
-)
+def create_mcp_server(name: str = "datahub") -> FastMCP[None]:
+    """Create a new FastMCP server instance for DataHub tools."""
+    return FastMCP[None](name=name)
 
 
 _mcp_dh_client = contextvars.ContextVar[DataHubClient]("_mcp_dh_client")
@@ -2624,8 +2625,8 @@ def _find_upstream_lineage_path(
     }
 
 
-# Track if tools have been registered to prevent duplicate registration
-_tools_registered = False
+# Track MCP instances that have already had tools registered.
+_registered_mcp_instances: weakref.WeakSet[FastMCP] = weakref.WeakSet()
 _tools_registration_lock = threading.Lock()
 
 
@@ -2796,8 +2797,8 @@ def register_search_tools(mcp_instance: FastMCP, is_oss: bool = False) -> None:
     _register_tool(mcp_instance, "grep_documents", grep_documents)
 
 
-def register_all_tools(is_oss: bool = False) -> None:
-    """Register all MCP tools on the global mcp instance.
+def register_all_tools(mcp_instance: FastMCP, is_oss: bool = False) -> None:
+    """Register all MCP tools on a specific MCP instance.
 
     Args:
         is_oss: If True, use OSS-compatible tool descriptions (limited sorting fields).
@@ -2806,26 +2807,28 @@ def register_all_tools(is_oss: bool = False) -> None:
     Note: Thread-safe. Can be called multiple times from different threads.
           Only the first call will register tools, subsequent calls are no-ops.
     """
-    global _tools_registered
-
     # Thread-safe check-and-set using lock
     with _tools_registration_lock:
-        if _tools_registered:
-            logger.debug("Tools already registered, skipping duplicate registration")
+        if mcp_instance in _registered_mcp_instances:
+            logger.debug(
+                "Tools already registered for this MCP instance, "
+                "skipping duplicate registration"
+            )
             return
 
-        _tools_registered = True
+        _registered_mcp_instances.add(mcp_instance)
         logger.info(f"Registering MCP tools (is_oss={is_oss})")
 
-    # Call the core registration logic on the global mcp instance
-    register_search_tools(mcp, is_oss)
+    # Call the core registration logic on the provided mcp instance
+    register_search_tools(mcp_instance, is_oss)
 
-    register_mutation_tools(mcp, is_oss)
+    register_mutation_tools(mcp_instance, is_oss)
 
-    register_user_tools(mcp, is_oss)
+    register_user_tools(mcp_instance, is_oss)
 
 
 def get_valid_tools_from_mcp(
+    mcp_instance: FastMCP,
     filter_fn: Optional[Callable[[FastMCPTool], bool]] = None,
 ) -> List[FastMCPTool]:
     """Get valid tools from MCP, optionally filtered.
@@ -2847,7 +2850,7 @@ def get_valid_tools_from_mcp(
             filter_fn=lambda tool: bool((tool.tags or set()) & {"search", "user"})
         )
     """
-    tools = list(mcp._tool_manager._tools.values())
+    tools = list(mcp_instance._tool_manager._tools.values())
     if filter_fn:
         return [tool for tool in tools if filter_fn(tool)]
     return tools
