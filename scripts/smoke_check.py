@@ -711,7 +711,8 @@ async def run_smoke_check(
     report = SmokeCheckReport()
     client = DataHubClient.from_env(client_mode=ClientMode.SDK)
 
-    # For in-process mode, we set the ContextVar manually (no middleware).
+    # For in-process mode, we set the ContextVar directly (same effect as
+    # _DataHubClientMiddleware, which is tested via HTTP/SSE/stdio modes).
     # For url/stdio modes, the server sets up its own ContextVar via middleware.
     ctx_manager: Any
     if not url and not stdio_cmd:
