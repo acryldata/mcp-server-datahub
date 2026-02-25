@@ -6,6 +6,7 @@ from datahub.ingestion.graph.config import ClientMode
 from datahub.sdk.main_client import DataHubClient
 from datahub.telemetry import telemetry
 from fastmcp import FastMCP
+from fastmcp.server.middleware import Middleware
 from fastmcp.server.middleware.logging import LoggingMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
@@ -23,7 +24,7 @@ logging.basicConfig(level=logging.INFO)
 register_all_tools(is_oss=True)
 
 
-class _DataHubClientMiddleware:
+class _DataHubClientMiddleware(Middleware):
     """Middleware that propagates the DataHub client ContextVar into each request.
 
     When running with HTTP transport (stateless_http=True), each request is handled

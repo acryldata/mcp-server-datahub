@@ -8,8 +8,14 @@ All URNs are discovered dynamically from the live instance — nothing is hardco
 Tools hidden by version filtering or other middleware are automatically skipped.
 
 Usage:
-    # Test read-only tools only (safe, no changes to DataHub):
+    # In-process (default) — tools registered locally, no transport:
     uv run python scripts/smoke_check.py
+
+    # Against a running HTTP/SSE server:
+    uv run python scripts/smoke_check.py --url http://localhost:8000/mcp
+
+    # Via stdio subprocess (launches server as child process):
+    uv run python scripts/smoke_check.py --stdio-cmd "uv run mcp-server-datahub"
 
     # Also test mutation tools (adds then removes metadata):
     uv run python scripts/smoke_check.py --mutations
@@ -22,6 +28,9 @@ Usage:
 
     # Use a specific dataset URN for testing:
     uv run python scripts/smoke_check.py --all --urn "urn:li:dataset:(...)"
+
+    # Install from PyPI and run in a clean environment:
+    uv run python scripts/smoke_check.py --pypi
 
 Requires DATAHUB_GMS_URL and DATAHUB_GMS_TOKEN env vars (or ~/.datahubenv).
 """
@@ -643,33 +652,78 @@ async def run_smoke_check(
     test_mutations: bool = False,
     test_user: bool = False,
     test_urn: Optional[str] = None,
+    url: Optional[str] = None,
+    stdio_cmd: Optional[str] = None,
 ) -> SmokeCheckReport:
-    # Set env vars for tool registration before importing
-    if test_mutations:
-        os.environ["TOOLS_IS_MUTATION_ENABLED"] = "true"
-    if test_user:
-        os.environ["TOOLS_IS_USER_ENABLED"] = "true"
+    """Run smoke checks against an MCP server.
 
-    # Now import and register
-    from mcp_server_datahub.document_tools_middleware import DocumentToolsMiddleware
-    from mcp_server_datahub.mcp_server import (
-        mcp,
-        register_all_tools,
-        with_datahub_client,
-    )
-    from mcp_server_datahub.version_requirements import VersionFilterMiddleware
+    Transport modes:
+    - In-process (default): Imports the server locally, registers tools and
+      middleware, and connects via FastMCPTransport (memory pipes).
+    - HTTP/SSE (--url): Connects to an already-running server. The server
+      handles its own tool registration and middleware.
+    - Stdio (--stdio-cmd): Launches the server as a subprocess and
+      communicates via stdin/stdout.
+    """
+    from fastmcp.client.transports import StdioTransport
 
-    register_all_tools(is_oss=True)
+    # Determine the transport target for Client()
+    transport_target: Any  # str (URL), StdioTransport, or FastMCP instance
+    if url:
+        # Remote HTTP/SSE — server is already running and configured
+        transport_target = url
+        mode_label = f"HTTP/SSE → {url}"
+    elif stdio_cmd:
+        # Stdio subprocess — launch server as child process
+        parts = stdio_cmd.split()
+        transport_target = StdioTransport(command=parts[0], args=parts[1:])
+        mode_label = f"stdio → {stdio_cmd}"
+    else:
+        # In-process (original behaviour)
+        # Set env vars for tool registration before importing
+        if test_mutations:
+            os.environ["TOOLS_IS_MUTATION_ENABLED"] = "true"
+        if test_user:
+            os.environ["TOOLS_IS_USER_ENABLED"] = "true"
 
-    # Add middleware so list_tools reflects what a real client sees
-    mcp.add_middleware(VersionFilterMiddleware())
-    mcp.add_middleware(DocumentToolsMiddleware())
+        # Now import and register
+        from mcp_server_datahub.document_tools_middleware import DocumentToolsMiddleware
+        from mcp_server_datahub.mcp_server import (
+            mcp,
+            register_all_tools,
+            with_datahub_client,
+        )
+        from mcp_server_datahub.version_requirements import VersionFilterMiddleware
+
+        register_all_tools(is_oss=True)
+
+        # Add middleware so list_tools reflects what a real client sees
+        mcp.add_middleware(VersionFilterMiddleware())
+        mcp.add_middleware(DocumentToolsMiddleware())
+
+        transport_target = mcp
+        mode_label = "in-process"
+
+    print(f"Mode: {mode_label}")
+    print()
 
     report = SmokeCheckReport()
     client = DataHubClient.from_env(client_mode=ClientMode.SDK)
 
-    with with_datahub_client(client):
-        async with Client(mcp) as mcp_client:
+    # For in-process mode, we set the ContextVar manually (no middleware).
+    # For url/stdio modes, the server sets up its own ContextVar via middleware.
+    ctx_manager: Any
+    if not url and not stdio_cmd:
+        from mcp_server_datahub.mcp_server import with_datahub_client
+
+        ctx_manager = with_datahub_client(client)
+    else:
+        import contextlib
+
+        ctx_manager = contextlib.nullcontext()
+
+    with ctx_manager:
+        async with Client(transport_target) as mcp_client:
             # 1. List available tools (filtered by middleware)
             tools = await mcp_client.list_tools()
             available = {t.name for t in tools}
@@ -820,11 +874,23 @@ if _DEPS_AVAILABLE:
     @click.option("--user", is_flag=True, help="Test user tools (get_me)")
     @click.option("--all", "test_all", is_flag=True, help="Test everything")
     @click.option("--urn", default=None, help="Dataset URN to use for testing")
+    @click.option(
+        "--url",
+        default=None,
+        help="Connect to a running server (HTTP/SSE URL, e.g. http://localhost:8000/mcp)",
+    )
+    @click.option(
+        "--stdio-cmd",
+        default=None,
+        help='Launch server as stdio subprocess (e.g. "uv run mcp-server-datahub")',
+    )
     def main(
         mutations: bool,
         user: bool,
         test_all: bool,
         urn: Optional[str],
+        url: Optional[str],
+        stdio_cmd: Optional[str],
     ) -> None:
         """Smoke check all MCP server tools against a live DataHub instance."""
         if test_all:
@@ -832,7 +898,13 @@ if _DEPS_AVAILABLE:
             user = True
 
         report = asyncio.run(
-            run_smoke_check(test_mutations=mutations, test_user=user, test_urn=urn)
+            run_smoke_check(
+                test_mutations=mutations,
+                test_user=user,
+                test_urn=urn,
+                url=url,
+                stdio_cmd=stdio_cmd,
+            )
         )
         report.print_report()
         sys.exit(0 if report.all_passed else 1)
