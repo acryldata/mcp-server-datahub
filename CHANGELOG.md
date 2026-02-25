@@ -21,10 +21,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`SMOKE_CHECK.md`**: Documentation with step-by-step reproduction instructions for all transport modes.
 - **Core tool validation**: Smoke check now verifies that all 8 core read-only tools are present, catching silent regressions in tool registration or middleware filtering.
 
-### Changed
-
-- **`_DataHubClientMiddleware`** uses the `on_message` hook instead of overriding `__call__`, consistent with the FastMCP middleware framework idioms.
-
 ---
 
 ## [0.5.1] - 2026-02-11
