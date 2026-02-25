@@ -78,6 +78,65 @@ The script:
 It uses the default FastMCP port **8000**. Stop any other server on that
 port before running.
 
+#### Logs
+
+All stdout and stderr from each mode are captured in `scripts/logs/`:
+
+```
+scripts/logs/
+  in-process-memory-pipes.stdout    # smoke check stdout
+  in-process-memory-pipes.stderr    # smoke check stderr (debug logs)
+  http-streamable-http.stdout
+  http-streamable-http.stderr
+  http_server.stdout                # server stdout (for HTTP mode)
+  http_server.stderr                # server stderr (for HTTP mode)
+  sse.stdout
+  sse.stderr
+  sse_server.stdout
+  sse_server.stderr
+  stdio-subprocess.stdout
+  stdio-subprocess.stderr
+  fastmcp-run-create_app-factory.stdout
+  fastmcp-run-create_app-factory.stderr
+  fastmcp-run_server.stdout
+  fastmcp-run_server.stderr
+```
+
+These logs are `.gitignore`d. To troubleshoot a failure, look at the
+`.stderr` file for the failing mode — it contains debug-level output from
+both the DataHub SDK and FastMCP middleware.
+
+### Step-by-step: running all modes manually
+
+If you need to reproduce or debug individual modes outside of
+`test_all_modes.sh`, here are the exact commands:
+
+```bash
+# --- Mode 1: In-process ---
+uv run python scripts/smoke_check.py
+
+# --- Mode 2: HTTP ---
+uv run mcp-server-datahub --transport http &
+# wait until: curl -sf http://127.0.0.1:8000/health
+uv run python scripts/smoke_check.py --url http://127.0.0.1:8000/mcp
+kill %1
+
+# --- Mode 3: SSE ---
+uv run mcp-server-datahub --transport sse &
+# wait until: curl -sf http://127.0.0.1:8000/health
+uv run python scripts/smoke_check.py --url http://127.0.0.1:8000/sse
+kill %1
+
+# --- Mode 4: Stdio ---
+uv run python scripts/smoke_check.py --stdio-cmd "uv run mcp-server-datahub"
+
+# --- Mode 5: fastmcp run (create_app factory) ---
+uv run fastmcp run src/mcp_server_datahub/__main__.py:create_app --transport http &
+# wait until: curl -sf http://127.0.0.1:8000/health
+uv run python scripts/smoke_check.py --url http://127.0.0.1:8000/mcp
+kill %1
+```
+
 ### What it checks
 
 **URN discovery** &mdash; Before running checks, the tool discovers real
