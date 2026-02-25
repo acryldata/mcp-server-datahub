@@ -106,11 +106,13 @@ def create_app() -> FastMCP:
     capture_kwargs=["transport"],
 )
 def main(transport: Literal["stdio", "sse", "http"], debug: bool) -> None:
-    create_app()
-
     if debug:
-        # logging.getLogger("datahub").setLevel(logging.DEBUG)
+        # Add LoggingMiddleware before create_app() so it becomes the
+        # outermost middleware (FastMCP reverses the list) and logs the
+        # full request/response including all other middleware effects.
         mcp.add_middleware(LoggingMiddleware(include_payloads=True))
+
+    create_app()
 
     if transport == "http":
         mcp.run(transport=transport, show_banner=False, stateless_http=True)
