@@ -153,7 +153,14 @@ stop_server
 run_smoke_check "Stdio (subprocess)" --stdio-cmd "uv run mcp-server-datahub"
 
 # ---------------------------------------------------------------------------
-# Mode 5: fastmcp run (create_app factory) — tests the fastmcp dev code path
+# Mode 5: fastmcp run (create_app factory)
+#
+# This exercises the create_app() entry point that `fastmcp dev` uses.
+# Under the hood, `fastmcp dev` runs:
+#   npx @modelcontextprotocol/inspector uv run fastmcp run <spec>
+# We use `uv run fastmcp run` directly as a substitute so that the test
+# suite doesn't require Node.js / npx.  If the fastmcp implementation
+# changes, this mode will catch regressions in the create_app() code path.
 # ---------------------------------------------------------------------------
 echo ""
 echo "  Starting server via 'fastmcp run :create_app' (transport=http)..."

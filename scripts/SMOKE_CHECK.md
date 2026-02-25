@@ -71,8 +71,10 @@ The script:
 2. Starts the server with `--transport http`, runs smoke check with `--url`, stops it.
 3. Starts the server with `--transport sse`, runs smoke check with `--url`, stops it.
 4. Runs the smoke check with `--stdio-cmd` (subprocess mode).
-5. Starts the server via `fastmcp run :create_app` (the same code path used
-   by `fastmcp dev`), runs smoke check with `--url`, stops it.
+5. Starts the server via `uv run fastmcp run :create_app`, runs smoke check
+   with `--url`, stops it.  This exercises the `create_app()` factory that
+   `fastmcp dev` uses under the hood.  We use `uv run fastmcp run` directly
+   as a substitute so that the test suite doesn't require Node.js / npx.
 6. Prints a summary of pass/fail across all modes.
 
 It uses the default FastMCP port **8000**. Stop any other server on that
