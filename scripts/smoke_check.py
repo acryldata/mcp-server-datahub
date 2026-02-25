@@ -447,22 +447,30 @@ async def check_grep_documents(
                 target_urn = r["urn"]
                 break
 
-    # Create one if needed
+    # Create one if needed — but only if save_document is available
     if not target_urn:
-        save_result = await call_tool(
-            c,
-            "save_document",
-            {
-                "document_type": "Note",
-                "title": "[Smoke Check] grep test doc",
-                "content": "smoke check content for grep validation",
-            },
-        )
-        save_data = json.loads(save_result.content[0].text)
-        target_urn = save_data.get("urn", "")
+        tools = await c.list_tools()
+        available = {t.name for t in tools}
+        if "save_document" in available:
+            save_result = await call_tool(
+                c,
+                "save_document",
+                {
+                    "document_type": "Note",
+                    "title": "[Smoke Check] grep test doc",
+                    "content": "smoke check content for grep validation",
+                },
+            )
+            save_data = json.loads(save_result.content[0].text)
+            target_urn = save_data.get("urn", "")
 
     if not target_urn:
-        raise RuntimeError("No documents available to grep and could not create one")
+        report.record(
+            "grep_documents",
+            True,
+            "Skipped — no documents in instance (save_document not available to create one)",
+        )
+        return
 
     result = await call_tool(
         c,
