@@ -40,6 +40,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import shlex
 import sys
 from dataclasses import dataclass, field
 from functools import partial
@@ -675,7 +676,7 @@ async def run_smoke_check(
         mode_label = f"HTTP/SSE → {url}"
     elif stdio_cmd:
         # Stdio subprocess — launch server as child process
-        parts = stdio_cmd.split()
+        parts = shlex.split(stdio_cmd)
         transport_target = StdioTransport(command=parts[0], args=parts[1:])
         mode_label = f"stdio → {stdio_cmd}"
     else:
