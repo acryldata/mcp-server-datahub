@@ -5,6 +5,28 @@ All notable changes to mcp-server-datahub will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.2] - 2026-02-24
+
+### Fixed
+
+- **HTTP transport ContextVar propagation**: Fixed `LookupError` for `_mcp_dh_client` ContextVar when running with HTTP transport (`stateless_http=True`). Each HTTP request runs in a separate async context that doesn't inherit ContextVars from the main thread, causing `DocumentToolsMiddleware` and `VersionFilterMiddleware` to fail. Added `_DataHubClientMiddleware` that sets the ContextVar at the start of every MCP message.
+- **`create_app()` initialization safety**: The `_app_initialized` flag is now set only after all middleware is successfully added, so a failed setup can be retried.
+- **`--debug` middleware ordering**: `LoggingMiddleware` is now added before other middlewares so it wraps the full request/response lifecycle for maximum visibility.
+
+### Added
+
+- **`create_app()` factory function**: Extracted server setup into a factory function so that `fastmcp dev` / `fastmcp run` work correctly (they import the module but never call `main()`).
+- **Multi-mode smoke testing**: `smoke_check.py` now supports `--url` and `--stdio-cmd` options to test against running HTTP/SSE servers or stdio subprocesses, in addition to the default in-process mode.
+- **`test_all_modes.sh` orchestrator**: Runs smoke checks across all 5 transport modes (in-process, HTTP, SSE, stdio, `fastmcp run`), with per-mode log capture to `scripts/logs/`.
+- **`SMOKE_CHECK.md`**: Documentation with step-by-step reproduction instructions for all transport modes.
+- **Core tool validation**: Smoke check now verifies that all 8 core read-only tools are present, catching silent regressions in tool registration or middleware filtering.
+
+### Changed
+
+- **`_DataHubClientMiddleware`** uses the `on_message` hook instead of overriding `__call__`, consistent with the FastMCP middleware framework idioms.
+
+---
+
 ## [0.5.1] - 2026-02-11
 
 ### Fixed

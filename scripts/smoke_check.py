@@ -8,8 +8,14 @@ All URNs are discovered dynamically from the live instance — nothing is hardco
 Tools hidden by version filtering or other middleware are automatically skipped.
 
 Usage:
-    # Test read-only tools only (safe, no changes to DataHub):
+    # In-process (default) — tools registered locally, no transport:
     uv run python scripts/smoke_check.py
+
+    # Against a running HTTP/SSE server:
+    uv run python scripts/smoke_check.py --url http://localhost:8000/mcp
+
+    # Via stdio subprocess (launches server as child process):
+    uv run python scripts/smoke_check.py --stdio-cmd "uv run mcp-server-datahub"
 
     # Also test mutation tools (adds then removes metadata):
     uv run python scripts/smoke_check.py --mutations
@@ -23,16 +29,23 @@ Usage:
     # Use a specific dataset URN for testing:
     uv run python scripts/smoke_check.py --all --urn "urn:li:dataset:(...)"
 
+    # Install from PyPI and run in a clean environment:
+    uv run python scripts/smoke_check.py --pypi
+
 Requires DATAHUB_GMS_URL and DATAHUB_GMS_TOKEN env vars (or ~/.datahubenv).
 """
+
+from __future__ import annotations
 
 import asyncio
 import json
 import os
+import shlex
 import sys
 from dataclasses import dataclass, field
 from functools import partial
-from typing import Any, Callable, Coroutine, Optional
+from collections.abc import Coroutine
+from typing import Any, Callable, Optional
 
 import anyio
 import click
@@ -115,12 +128,12 @@ class DiscoveredURNs:
 # Check registry — decorator to declare tool requirements
 # ---------------------------------------------------------------------------
 
-# Each registered check is (name, required_tools, required_urns, fn)
+# Type for a smoke-check function: async (Client, SmokeCheckReport, DiscoveredURNs) -> None
 CheckFn = Callable[
-    [Client, SmokeCheckReport, DiscoveredURNs],
-    Coroutine[Any, Any, None],
+    [Client, SmokeCheckReport, DiscoveredURNs], Coroutine[Any, Any, None]
 ]
 
+# Each registered check is (name, required_tools, required_urns, fn)
 _ALL_CHECKS: list[tuple[str, list[str], list[str], CheckFn]] = []
 
 
@@ -433,22 +446,30 @@ async def check_grep_documents(
                 target_urn = r["urn"]
                 break
 
-    # Create one if needed
+    # Create one if needed — but only if save_document is available
     if not target_urn:
-        save_result = await call_tool(
-            c,
-            "save_document",
-            {
-                "document_type": "Note",
-                "title": "[Smoke Check] grep test doc",
-                "content": "smoke check content for grep validation",
-            },
-        )
-        save_data = json.loads(save_result.content[0].text)
-        target_urn = save_data.get("urn", "")
+        tools = await c.list_tools()
+        available = {t.name for t in tools}
+        if "save_document" in available:
+            save_result = await call_tool(
+                c,
+                "save_document",
+                {
+                    "document_type": "Note",
+                    "title": "[Smoke Check] grep test doc",
+                    "content": "smoke check content for grep validation",
+                },
+            )
+            save_data = json.loads(save_result.content[0].text)
+            target_urn = save_data.get("urn", "")
 
     if not target_urn:
-        raise RuntimeError("No documents available to grep and could not create one")
+        report.record(
+            "grep_documents",
+            True,
+            "Skipped — no documents in instance (save_document not available to create one)",
+        )
+        return
 
     result = await call_tool(
         c,
@@ -638,38 +659,104 @@ async def run_smoke_check(
     test_mutations: bool = False,
     test_user: bool = False,
     test_urn: Optional[str] = None,
+    url: Optional[str] = None,
+    stdio_cmd: Optional[str] = None,
 ) -> SmokeCheckReport:
-    # Set env vars for tool registration before importing
-    if test_mutations:
-        os.environ["TOOLS_IS_MUTATION_ENABLED"] = "true"
-    if test_user:
-        os.environ["TOOLS_IS_USER_ENABLED"] = "true"
+    """Run smoke checks against an MCP server.
 
-    # Now import and register
-    from mcp_server_datahub.document_tools_middleware import DocumentToolsMiddleware
-    from mcp_server_datahub.mcp_server import (
-        mcp,
-        register_all_tools,
-        with_datahub_client,
-    )
-    from mcp_server_datahub.version_requirements import VersionFilterMiddleware
+    Transport modes:
+    - In-process (default): Imports the server locally, registers tools and
+      middleware, and connects via FastMCPTransport (memory pipes).
+    - HTTP/SSE (--url): Connects to an already-running server. The server
+      handles its own tool registration and middleware.
+    - Stdio (--stdio-cmd): Launches the server as a subprocess and
+      communicates via stdin/stdout.
+    """
+    from fastmcp.client.transports import StdioTransport
 
-    register_all_tools(is_oss=True)
+    # Determine the transport target for Client()
+    transport_target: Any  # str (URL), StdioTransport, or FastMCP instance
+    if url:
+        # Remote HTTP/SSE — server is already running and configured
+        transport_target = url
+        mode_label = f"HTTP/SSE → {url}"
+    elif stdio_cmd:
+        # Stdio subprocess — launch server as child process
+        parts = shlex.split(stdio_cmd)
+        transport_target = StdioTransport(command=parts[0], args=parts[1:])
+        mode_label = f"stdio → {stdio_cmd}"
+    else:
+        # In-process (original behaviour)
+        # Set env vars for tool registration before importing
+        if test_mutations:
+            os.environ["TOOLS_IS_MUTATION_ENABLED"] = "true"
+        if test_user:
+            os.environ["TOOLS_IS_USER_ENABLED"] = "true"
 
-    # Add middleware so list_tools reflects what a real client sees
-    mcp.add_middleware(VersionFilterMiddleware())
-    mcp.add_middleware(DocumentToolsMiddleware())
+        # Now import and register
+        from mcp_server_datahub.document_tools_middleware import DocumentToolsMiddleware
+        from mcp_server_datahub.mcp_server import (
+            mcp,
+            register_all_tools,
+            with_datahub_client,
+        )
+        from mcp_server_datahub.version_requirements import VersionFilterMiddleware
+
+        register_all_tools(is_oss=True)
+
+        # Add middleware so list_tools reflects what a real client sees
+        mcp.add_middleware(VersionFilterMiddleware())
+        mcp.add_middleware(DocumentToolsMiddleware())
+
+        transport_target = mcp
+        mode_label = "in-process"
+
+    print(f"Mode: {mode_label}")
+    print()
 
     report = SmokeCheckReport()
     client = DataHubClient.from_env(client_mode=ClientMode.SDK)
 
-    with with_datahub_client(client):
-        async with Client(mcp) as mcp_client:
+    # For in-process mode, we set the ContextVar directly (same effect as
+    # _DataHubClientMiddleware, which is tested via HTTP/SSE/stdio modes).
+    # For url/stdio modes, the server sets up its own ContextVar via middleware.
+    ctx_manager: Any
+    if not url and not stdio_cmd:
+        from mcp_server_datahub.mcp_server import with_datahub_client
+
+        ctx_manager = with_datahub_client(client)
+    else:
+        import contextlib
+
+        ctx_manager = contextlib.nullcontext()
+
+    with ctx_manager:
+        async with Client(transport_target) as mcp_client:
             # 1. List available tools (filtered by middleware)
             tools = await mcp_client.list_tools()
             available = {t.name for t in tools}
             print(f"Available tools ({len(tools)}): {', '.join(sorted(available))}")
             print()
+
+            # 1b. Verify core tools are present — these should never be
+            # missing regardless of mode or middleware filtering.
+            core_tools = {
+                "search",
+                "get_entities",
+                "get_lineage",
+                "get_dataset_queries",
+                "list_schema_fields",
+                "get_lineage_paths_between",
+                "search_documents",
+                "grep_documents",
+            }
+            missing_core = core_tools - available
+            if missing_core:
+                report.record(
+                    "tool_list_check",
+                    False,
+                    error=f"Core tools missing from server: {sorted(missing_core)}",
+                )
 
             # 2. Discover URNs
             print("Discovering URNs from DataHub instance...")
@@ -713,6 +800,97 @@ async def run_smoke_check(
     return report
 
 
+def _run_pypi_smoke_check(version: Optional[str], extra_args: list[str]) -> int:
+    """Install mcp-server-datahub from PyPI in a clean venv under /tmp.
+
+    Creates a completely isolated environment with no dependency on the local project.
+    """
+    import shutil
+    import subprocess
+    import tempfile
+
+    pkg = f"mcp-server-datahub=={version}" if version else "mcp-server-datahub"
+    tmpdir = tempfile.mkdtemp(prefix="mcp-smoke-", dir="/tmp")
+
+    try:
+        venv_dir = os.path.join(tmpdir, ".venv")
+        script_copy = os.path.join(tmpdir, "smoke_check.py")
+        python = os.path.join(venv_dir, "bin", "python")
+
+        print(f"Creating clean environment in {tmpdir}")
+        print(f"Installing {pkg} from PyPI...")
+        subprocess.run(["uv", "venv", venv_dir], check=True, capture_output=True)
+        subprocess.run(
+            ["uv", "pip", "install", "--python", python, pkg],
+            check=True,
+        )
+
+        # Show installed version
+        ver_result = subprocess.run(
+            [
+                python,
+                "-c",
+                "from mcp_server_datahub._version import __version__; print(__version__)",
+            ],
+            capture_output=True,
+            text=True,
+        )
+        if ver_result.returncode == 0:
+            print(f"Installed version: {ver_result.stdout.strip()}")
+
+        # Copy this script and run it — completely isolated from local source
+        shutil.copy2(__file__, script_copy)
+        cmd = [python, script_copy] + extra_args
+        print(f"Running: {' '.join(cmd)}\n")
+        proc = subprocess.run(cmd, cwd=tmpdir)
+        return proc.returncode
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+def _parse_pypi_args() -> Optional[tuple[Optional[str], list[str]]]:
+    """Check if --pypi is in sys.argv. Returns (version, extra_args) or None.
+
+    This is a lightweight parser that doesn't require click, so --pypi mode
+    works even without any dependencies installed.
+    """
+    args = sys.argv[1:]
+    pypi_version = None
+    found_pypi = False
+
+    for i, arg in enumerate(args):
+        if arg == "--pypi":
+            found_pypi = True
+            # Next arg might be a version (not starting with --)
+            if i + 1 < len(args) and not args[i + 1].startswith("--"):
+                pypi_version = args[i + 1]
+            break
+        elif arg.startswith("--pypi="):
+            found_pypi = True
+            pypi_version = arg.split("=", 1)[1]
+            break
+
+    if not found_pypi:
+        return None
+
+    # Build extra_args: everything except --pypi and its value
+    extra_args = []
+    skip_next = False
+    for i, arg in enumerate(args):
+        if skip_next:
+            skip_next = False
+            continue
+        if arg == "--pypi":
+            if i + 1 < len(args) and not args[i + 1].startswith("--"):
+                skip_next = True
+            continue
+        if arg.startswith("--pypi="):
+            continue
+        extra_args.append(arg)
+
+    return pypi_version, extra_args
+
+
 @click.command()
 @click.option(
     "--mutations",
@@ -722,19 +900,47 @@ async def run_smoke_check(
 @click.option("--user", is_flag=True, help="Test user tools (get_me)")
 @click.option("--all", "test_all", is_flag=True, help="Test everything")
 @click.option("--urn", default=None, help="Dataset URN to use for testing")
-def main(mutations: bool, user: bool, test_all: bool, urn: Optional[str]) -> None:
+@click.option(
+    "--url",
+    default=None,
+    help="Connect to a running server (HTTP/SSE URL, e.g. http://localhost:8000/mcp)",
+)
+@click.option(
+    "--stdio-cmd",
+    default=None,
+    help='Launch server as stdio subprocess (e.g. "uv run mcp-server-datahub")',
+)
+def main(
+    mutations: bool,
+    user: bool,
+    test_all: bool,
+    urn: Optional[str],
+    url: Optional[str],
+    stdio_cmd: Optional[str],
+) -> None:
     """Smoke check all MCP server tools against a live DataHub instance."""
     if test_all:
         mutations = True
         user = True
 
     report = asyncio.run(
-        run_smoke_check(test_mutations=mutations, test_user=user, test_urn=urn)
+        run_smoke_check(
+            test_mutations=mutations,
+            test_user=user,
+            test_urn=urn,
+            url=url,
+            stdio_cmd=stdio_cmd,
+        )
     )
     report.print_report()
-
     sys.exit(0 if report.all_passed else 1)
 
 
 if __name__ == "__main__":
+    # Handle --pypi before click, since it doesn't require any dependencies
+    pypi_args = _parse_pypi_args()
+    if pypi_args is not None:
+        version, extra_args = pypi_args
+        sys.exit(_run_pypi_smoke_check(version, extra_args))
+
     main()
