@@ -71,7 +71,6 @@ def create_app() -> FastMCP:
     global _app_initialized
     if _app_initialized:
         return mcp
-    _app_initialized = True
 
     client = DataHubClient.from_env(
         client_mode=ClientMode.SDK,
@@ -87,6 +86,7 @@ def create_app() -> FastMCP:
     mcp.add_middleware(VersionFilterMiddleware())
     mcp.add_middleware(DocumentToolsMiddleware())
 
+    _app_initialized = True
     return mcp
 
 
