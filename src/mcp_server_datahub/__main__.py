@@ -38,7 +38,7 @@ class _DataHubClientMiddleware(Middleware):
     def __init__(self, client: DataHubClient) -> None:
         self._client = client
 
-    async def __call__(
+    async def on_message(
         self,
         context: Any,
         call_next: Any,
