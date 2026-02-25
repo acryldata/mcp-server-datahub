@@ -135,6 +135,9 @@ run_smoke_check "In-process (memory pipes)"
 
 # ---------------------------------------------------------------------------
 # Mode 2: HTTP (streamable-http)
+#
+# This is the only mode that tests stateless_http=True (the production
+# config).  Our CLI passes that flag; fastmcp run (Mode 5) does not.
 # ---------------------------------------------------------------------------
 start_server "http" "http"
 run_smoke_check "HTTP (streamable-http)" --url "$HTTP_URL"
@@ -161,6 +164,9 @@ run_smoke_check "Stdio (subprocess)" --stdio-cmd "uv run mcp-server-datahub"
 # We use `uv run fastmcp run` directly as a substitute so that the test
 # suite doesn't require Node.js / npx.  If the fastmcp implementation
 # changes, this mode will catch regressions in the create_app() code path.
+#
+# Note: fastmcp run does not pass stateless_http=True, so this mode does
+# NOT test the stateless HTTP transport.  Mode 2 covers that.
 # ---------------------------------------------------------------------------
 echo ""
 echo "  Starting server via 'fastmcp run :create_app' (transport=http)..."
