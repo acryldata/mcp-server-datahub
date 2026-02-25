@@ -44,7 +44,8 @@ import shlex
 import sys
 from dataclasses import dataclass, field
 from functools import partial
-from typing import Any, Optional
+from collections.abc import Coroutine
+from typing import Any, Callable, Optional
 
 import anyio
 import click
@@ -127,14 +128,19 @@ class DiscoveredURNs:
 # Check registry — decorator to declare tool requirements
 # ---------------------------------------------------------------------------
 
+# Type for a smoke-check function: async (Client, SmokeCheckReport, DiscoveredURNs) -> None
+CheckFn = Callable[
+    [Client, SmokeCheckReport, DiscoveredURNs], Coroutine[Any, Any, None]
+]
+
 # Each registered check is (name, required_tools, required_urns, fn)
-_ALL_CHECKS: list[tuple[str, list[str], list[str], Any]] = []
+_ALL_CHECKS: list[tuple[str, list[str], list[str], CheckFn]] = []
 
 
 def check(
     *required_tools: str,
     urns: Optional[list[str]] = None,
-) -> Any:
+) -> Callable[[CheckFn], CheckFn]:
     """Decorator to register a smoke check function.
 
     Args:
@@ -144,7 +150,7 @@ def check(
             (e.g. ["dataset_urn", "tag_urn"]). The check fails if any are None.
     """
 
-    def decorator(fn: Any) -> Any:
+    def decorator(fn: CheckFn) -> CheckFn:
         _ALL_CHECKS.append((fn.__name__, list(required_tools), urns or [], fn))
         return fn
 
