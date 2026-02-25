@@ -738,6 +738,26 @@ async def run_smoke_check(
             print(f"Available tools ({len(tools)}): {', '.join(sorted(available))}")
             print()
 
+            # 1b. Verify core tools are present — these should never be
+            # missing regardless of mode or middleware filtering.
+            core_tools = {
+                "search",
+                "get_entities",
+                "get_lineage",
+                "get_dataset_queries",
+                "list_schema_fields",
+                "get_lineage_paths_between",
+                "search_documents",
+                "grep_documents",
+            }
+            missing_core = core_tools - available
+            if missing_core:
+                report.record(
+                    "tool_list_check",
+                    False,
+                    error=f"Core tools missing from server: {sorted(missing_core)}",
+                )
+
             # 2. Discover URNs
             print("Discovering URNs from DataHub instance...")
             urns = await discover_urns(mcp_client, client._graph, test_urn=test_urn)
