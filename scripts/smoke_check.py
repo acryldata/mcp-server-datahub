@@ -45,19 +45,11 @@ from dataclasses import dataclass, field
 from functools import partial
 from typing import Any, Optional
 
-# Heavy dependencies are imported lazily in run_smoke_check() so that
-# --pypi mode (which only needs the standard library) can work
-# without the local venv.
-try:
-    import anyio
-    import click
-    from datahub.ingestion.graph.config import ClientMode
-    from datahub.sdk.main_client import DataHubClient
-    from fastmcp import Client
-
-    _DEPS_AVAILABLE = True
-except ImportError:
-    _DEPS_AVAILABLE = False
+import anyio
+import click
+from datahub.ingestion.graph.config import ClientMode
+from datahub.sdk.main_client import DataHubClient
+from fastmcp import Client
 
 
 # ---------------------------------------------------------------------------
@@ -871,51 +863,49 @@ def _parse_pypi_args() -> Optional[tuple[Optional[str], list[str]]]:
     return pypi_version, extra_args
 
 
-if _DEPS_AVAILABLE:
+@click.command()
+@click.option(
+    "--mutations",
+    is_flag=True,
+    help="Test mutation tools (add/remove tags, owners, etc.)",
+)
+@click.option("--user", is_flag=True, help="Test user tools (get_me)")
+@click.option("--all", "test_all", is_flag=True, help="Test everything")
+@click.option("--urn", default=None, help="Dataset URN to use for testing")
+@click.option(
+    "--url",
+    default=None,
+    help="Connect to a running server (HTTP/SSE URL, e.g. http://localhost:8000/mcp)",
+)
+@click.option(
+    "--stdio-cmd",
+    default=None,
+    help='Launch server as stdio subprocess (e.g. "uv run mcp-server-datahub")',
+)
+def main(
+    mutations: bool,
+    user: bool,
+    test_all: bool,
+    urn: Optional[str],
+    url: Optional[str],
+    stdio_cmd: Optional[str],
+) -> None:
+    """Smoke check all MCP server tools against a live DataHub instance."""
+    if test_all:
+        mutations = True
+        user = True
 
-    @click.command()
-    @click.option(
-        "--mutations",
-        is_flag=True,
-        help="Test mutation tools (add/remove tags, owners, etc.)",
-    )
-    @click.option("--user", is_flag=True, help="Test user tools (get_me)")
-    @click.option("--all", "test_all", is_flag=True, help="Test everything")
-    @click.option("--urn", default=None, help="Dataset URN to use for testing")
-    @click.option(
-        "--url",
-        default=None,
-        help="Connect to a running server (HTTP/SSE URL, e.g. http://localhost:8000/mcp)",
-    )
-    @click.option(
-        "--stdio-cmd",
-        default=None,
-        help='Launch server as stdio subprocess (e.g. "uv run mcp-server-datahub")',
-    )
-    def main(
-        mutations: bool,
-        user: bool,
-        test_all: bool,
-        urn: Optional[str],
-        url: Optional[str],
-        stdio_cmd: Optional[str],
-    ) -> None:
-        """Smoke check all MCP server tools against a live DataHub instance."""
-        if test_all:
-            mutations = True
-            user = True
-
-        report = asyncio.run(
-            run_smoke_check(
-                test_mutations=mutations,
-                test_user=user,
-                test_urn=urn,
-                url=url,
-                stdio_cmd=stdio_cmd,
-            )
+    report = asyncio.run(
+        run_smoke_check(
+            test_mutations=mutations,
+            test_user=user,
+            test_urn=urn,
+            url=url,
+            stdio_cmd=stdio_cmd,
         )
-        report.print_report()
-        sys.exit(0 if report.all_passed else 1)
+    )
+    report.print_report()
+    sys.exit(0 if report.all_passed else 1)
 
 
 if __name__ == "__main__":
@@ -924,13 +914,5 @@ if __name__ == "__main__":
     if pypi_args is not None:
         version, extra_args = pypi_args
         sys.exit(_run_pypi_smoke_check(version, extra_args))
-
-    if not _DEPS_AVAILABLE:
-        print(
-            "Error: Dependencies not available. Run with --pypi to test from PyPI,\n"
-            "or use 'uv run python scripts/smoke_check.py' from the project directory.",
-            file=sys.stderr,
-        )
-        sys.exit(1)
 
     main()
