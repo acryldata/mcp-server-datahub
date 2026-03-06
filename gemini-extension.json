@@ -1,0 +1,33 @@
+{
+  "name": "datahub",
+  "version": "1.0.0",
+  "description": "Integrates DataHub metadata, lineage, and search into Gemini",
+  "mcpServers": {
+    "datahub": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@acryldata/mcp-server-datahub"
+      ],
+      "env": {
+        "DATAHUB_GMS_URL": "$DATAHUB_GMS_URL",
+        "DATAHUB_GMS_TOKEN": "$DATAHUB_GMS_TOKEN"
+      }
+    }
+  },
+  "settings": [
+    {
+      "name": "DataHub GMS URL",
+      "description": "The URL of your DataHub GMS endpoint (e.g., http://localhost:8080 or https://your-company.acryl.io/gms)",
+      "envVar": "DATAHUB_GMS_URL",
+      "sensitive": false
+    },
+    {
+      "name": "DataHub Personal Access Token",
+      "description": "Your DataHub authentication token for secure access",
+      "envVar": "DATAHUB_GMS_TOKEN",
+      "sensitive": true
+    }
+  ],
+  "contextFileName": "GEMINI.md"
+}
