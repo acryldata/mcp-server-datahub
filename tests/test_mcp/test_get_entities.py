@@ -41,13 +41,13 @@ class TestGetEntitiesSingleURN:
         urn = "urn:li:dataset:(urn:li:dataPlatform:snowflake,db.schema.table,PROD)"
 
         with patch(
-            "datahub_integrations.mcp.mcp_server.get_datahub_client",
+            "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
             return_value=mock_client,
         ):
             mock_client._graph.exists.return_value = True
 
             with patch(
-                "datahub_integrations.mcp.mcp_server.execute_graphql"
+                "datahub_integrations.mcp.graphql_helpers.execute_graphql"
             ) as mock_gql:
                 mock_gql.side_effect = [
                     {"entity": sample_entity_response},
@@ -71,7 +71,7 @@ class TestGetEntitiesSingleURN:
         )
 
         with patch(
-            "datahub_integrations.mcp.mcp_server.get_datahub_client",
+            "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
             return_value=mock_client,
         ):
             mock_client._graph.exists.return_value = False
@@ -86,13 +86,13 @@ class TestGetEntitiesSingleURN:
         urn = "urn:li:dataset:(urn:li:dataPlatform:snowflake,db.schema.table,PROD)"
 
         with patch(
-            "datahub_integrations.mcp.mcp_server.get_datahub_client",
+            "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
             return_value=mock_client,
         ):
             mock_client._graph.exists.return_value = True
 
             with patch(
-                "datahub_integrations.mcp.mcp_server.execute_graphql"
+                "datahub_integrations.mcp.graphql_helpers.execute_graphql"
             ) as mock_gql:
                 mock_gql.side_effect = Exception("GraphQL error")
 
@@ -115,13 +115,13 @@ class TestGetEntitiesMultipleURNs:
         ]
 
         with patch(
-            "datahub_integrations.mcp.mcp_server.get_datahub_client",
+            "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
             return_value=mock_client,
         ):
             mock_client._graph.exists.return_value = True
 
             with patch(
-                "datahub_integrations.mcp.mcp_server.execute_graphql"
+                "datahub_integrations.mcp.graphql_helpers.execute_graphql"
             ) as mock_gql:
                 mock_gql.side_effect = [
                     {
@@ -158,7 +158,7 @@ class TestGetEntitiesMultipleURNs:
     async def test_empty_list_returns_empty_list(self, mock_client):
         """Test passing empty list returns empty list."""
         with patch(
-            "datahub_integrations.mcp.mcp_server.get_datahub_client",
+            "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
             return_value=mock_client,
         ):
             from datahub_integrations.mcp.mcp_server import get_entities
@@ -177,13 +177,13 @@ class TestGetEntitiesMultipleURNs:
         ]
 
         with patch(
-            "datahub_integrations.mcp.mcp_server.get_datahub_client",
+            "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
             return_value=mock_client,
         ):
             mock_client._graph.exists.side_effect = [True, False, True]
 
             with patch(
-                "datahub_integrations.mcp.mcp_server.execute_graphql"
+                "datahub_integrations.mcp.graphql_helpers.execute_graphql"
             ) as mock_gql:
                 mock_gql.side_effect = [
                     {
@@ -230,13 +230,13 @@ class TestGetEntitiesMultipleURNs:
         ]
 
         with patch(
-            "datahub_integrations.mcp.mcp_server.get_datahub_client",
+            "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
             return_value=mock_client,
         ):
             mock_client._graph.exists.return_value = True
 
             with patch(
-                "datahub_integrations.mcp.mcp_server.execute_graphql"
+                "datahub_integrations.mcp.graphql_helpers.execute_graphql"
             ) as mock_gql:
                 mock_gql.side_effect = [
                     {
@@ -270,7 +270,7 @@ class TestGetEntitiesMultipleURNs:
         ]
 
         with patch(
-            "datahub_integrations.mcp.mcp_server.get_datahub_client",
+            "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
             return_value=mock_client,
         ):
             mock_client._graph.exists.return_value = False
@@ -297,18 +297,18 @@ class TestGetEntitiesIntegration:
         urn = "urn:li:dataset:(urn:li:dataPlatform:snowflake,db.schema.table,PROD)"
 
         with patch(
-            "datahub_integrations.mcp.mcp_server.get_datahub_client",
+            "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
             return_value=mock_client,
         ):
             mock_client._graph.exists.return_value = True
 
             with patch(
-                "datahub_integrations.mcp.mcp_server.execute_graphql"
+                "datahub_integrations.mcp.graphql_helpers.execute_graphql"
             ) as mock_gql:
                 mock_gql.return_value = {"entity": sample_entity_response}
 
                 with patch(
-                    "datahub_integrations.mcp.mcp_server.inject_urls_for_urns"
+                    "datahub_integrations.mcp.graphql_helpers.inject_urls_for_urns"
                 ) as mock_inject:
                     from datahub_integrations.mcp.mcp_server import get_entities
 
@@ -327,18 +327,18 @@ class TestGetEntitiesIntegration:
         }
 
         with patch(
-            "datahub_integrations.mcp.mcp_server.get_datahub_client",
+            "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
             return_value=mock_client,
         ):
             mock_client._graph.exists.return_value = True
 
             with patch(
-                "datahub_integrations.mcp.mcp_server.execute_graphql"
+                "datahub_integrations.mcp.graphql_helpers.execute_graphql"
             ) as mock_gql:
                 mock_gql.return_value = {"entity": entity_with_long_desc}
 
                 with patch(
-                    "datahub_integrations.mcp.mcp_server.truncate_descriptions"
+                    "datahub_integrations.mcp.graphql_helpers.truncate_descriptions"
                 ) as mock_truncate:
                     from datahub_integrations.mcp.mcp_server import get_entities
 
@@ -359,13 +359,13 @@ class TestGetEntitiesIntegration:
         }
 
         with patch(
-            "datahub_integrations.mcp.mcp_server.get_datahub_client",
+            "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
             return_value=mock_client,
         ):
             mock_client._graph.exists.return_value = True
 
             with patch(
-                "datahub_integrations.mcp.mcp_server.execute_graphql"
+                "datahub_integrations.mcp.graphql_helpers.execute_graphql"
             ) as mock_gql:
                 mock_gql.return_value = {"entity": entity_with_typename}
 
@@ -409,13 +409,13 @@ class TestGetEntitiesRelatedDocuments:
         }
 
         with patch(
-            "datahub_integrations.mcp.mcp_server.get_datahub_client",
+            "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
             return_value=mock_client,
         ):
             mock_client._graph.exists.return_value = True
 
             with patch(
-                "datahub_integrations.mcp.mcp_server.execute_graphql"
+                "datahub_integrations.mcp.graphql_helpers.execute_graphql"
             ) as mock_gql:
                 mock_gql.side_effect = [
                     {"entity": sample_entity_response},
@@ -443,13 +443,13 @@ class TestGetEntitiesRelatedDocuments:
         urn = "urn:li:corpUser:user1"
 
         with patch(
-            "datahub_integrations.mcp.mcp_server.get_datahub_client",
+            "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
             return_value=mock_client,
         ):
             mock_client._graph.exists.return_value = True
 
             with patch(
-                "datahub_integrations.mcp.mcp_server.execute_graphql"
+                "datahub_integrations.mcp.graphql_helpers.execute_graphql"
             ) as mock_gql:
                 mock_gql.side_effect = [
                     {
@@ -477,13 +477,13 @@ class TestGetEntitiesRelatedDocuments:
         urn = "urn:li:dataset:(urn:li:dataPlatform:snowflake,db.schema.table,PROD)"
 
         with patch(
-            "datahub_integrations.mcp.mcp_server.get_datahub_client",
+            "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
             return_value=mock_client,
         ):
             mock_client._graph.exists.return_value = True
 
             with patch(
-                "datahub_integrations.mcp.mcp_server.execute_graphql"
+                "datahub_integrations.mcp.graphql_helpers.execute_graphql"
             ) as mock_gql:
                 mock_gql.side_effect = [
                     {"entity": sample_entity_response},
@@ -507,13 +507,13 @@ class TestGetEntitiesRelatedDocuments:
         urn = "urn:li:dataset:(urn:li:dataPlatform:snowflake,db.schema.table,PROD)"
 
         with patch(
-            "datahub_integrations.mcp.mcp_server.get_datahub_client",
+            "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
             return_value=mock_client,
         ):
             mock_client._graph.exists.return_value = True
 
             with patch(
-                "datahub_integrations.mcp.mcp_server.execute_graphql"
+                "datahub_integrations.mcp.graphql_helpers.execute_graphql"
             ) as mock_gql:
                 mock_gql.side_effect = [
                     {"entity": sample_entity_response},
@@ -548,13 +548,13 @@ class TestGetEntitiesRelatedDocuments:
         ]
 
         with patch(
-            "datahub_integrations.mcp.mcp_server.get_datahub_client",
+            "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
             return_value=mock_client,
         ):
             mock_client._graph.exists.return_value = True
 
             with patch(
-                "datahub_integrations.mcp.mcp_server.execute_graphql"
+                "datahub_integrations.mcp.graphql_helpers.execute_graphql"
             ) as mock_gql:
                 mock_gql.side_effect = [
                     {

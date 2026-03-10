@@ -41,7 +41,7 @@ def test_set_domains_single_entity(mock_datahub_client):
     ]
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         result = set_domains(domain_urn=domain_urn, entity_urns=entity_urns)
@@ -83,7 +83,7 @@ def test_set_domains_multiple_entities(mock_datahub_client):
     ]
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         result = set_domains(domain_urn=domain_urn, entity_urns=entity_urns)
@@ -120,7 +120,7 @@ def test_set_domains_mixed_entity_types(mock_datahub_client):
     ]
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         result = set_domains(domain_urn=domain_urn, entity_urns=entity_urns)
@@ -139,7 +139,7 @@ def test_remove_domains_single_entity(mock_datahub_client):
     mock_datahub_client._graph.execute_graphql.return_value = {"batchSetDomain": True}
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         result = remove_domains(entity_urns=entity_urns)
@@ -167,7 +167,7 @@ def test_remove_domains_multiple_entities(mock_datahub_client):
     mock_datahub_client._graph.execute_graphql.return_value = {"batchSetDomain": True}
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         result = remove_domains(entity_urns=entity_urns)
@@ -189,7 +189,7 @@ def test_set_domains_empty_domain_urn(mock_datahub_client):
     entity_urns = ["urn:li:dataset:(urn:li:dataPlatform:snowflake,db.schema.test,PROD)"]
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         with pytest.raises(ValueError, match="domain_urn cannot be empty"):
@@ -201,7 +201,7 @@ def test_set_domains_empty_entity_urns(mock_datahub_client):
     domain_urn = "urn:li:domain:test"
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         with pytest.raises(ValueError, match="entity_urns cannot be empty"):
@@ -211,7 +211,7 @@ def test_set_domains_empty_entity_urns(mock_datahub_client):
 def test_remove_domains_empty_entity_urns(mock_datahub_client):
     """Test that empty entity_urns raises ValueError."""
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         with pytest.raises(ValueError, match="entity_urns cannot be empty"):
@@ -227,7 +227,7 @@ def test_set_domains_nonexistent_domain(mock_datahub_client):
     mock_datahub_client._graph.execute_graphql.return_value = {"entity": None}
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         with pytest.raises(ValueError, match="Domain\ URN\ does\ not\ exist"):
@@ -245,7 +245,7 @@ def test_set_domains_invalid_domain_type(mock_datahub_client):
     }
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         with pytest.raises(ValueError, match="not\ a\ domain\ entity"):
@@ -266,7 +266,7 @@ def test_set_domains_mutation_returns_false(mock_datahub_client):
     ]
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         with pytest.raises(RuntimeError, match="Failed\ to\ set\ domain"):
@@ -280,7 +280,7 @@ def test_remove_domains_mutation_returns_false(mock_datahub_client):
     mock_datahub_client._graph.execute_graphql.return_value = {"batchSetDomain": False}
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         with pytest.raises(RuntimeError, match="Failed\ to\ remove\ domain"):
@@ -298,7 +298,7 @@ def test_set_domains_graphql_exception(mock_datahub_client):
     ]
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         with pytest.raises(RuntimeError, match="Error\ setting\ domain"):
@@ -312,7 +312,7 @@ def test_remove_domains_graphql_exception(mock_datahub_client):
     mock_datahub_client._graph.execute_graphql.side_effect = Exception("Network error")
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         with pytest.raises(RuntimeError, match="Error removing domain"):
@@ -329,7 +329,7 @@ def test_set_domains_validation_exception(mock_datahub_client):
     )
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         with pytest.raises(ValueError, match="Failed\ to\ validate\ domain\ URN"):

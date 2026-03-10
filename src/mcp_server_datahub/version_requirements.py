@@ -39,8 +39,10 @@ Usage (tool filtering):
     filtered_tools = filter_tools_by_version(tools)
 """
 
+import asyncio
 import dataclasses
 import re
+import threading
 from typing import Any, Callable, Sequence, TypeVar
 
 import cachetools
@@ -123,9 +125,10 @@ TOOL_VERSION_REQUIREMENTS: dict[str, VersionRequirement] = {}
 _version_info_cache: cachetools.TTLCache = cachetools.TTLCache(
     maxsize=8, ttl=VERSION_CHECK_CACHE_TTL_SECONDS
 )
+_version_info_cache_lock = threading.RLock()
 
 
-@cachetools.cached(cache=_version_info_cache)
+@cachetools.cached(cache=_version_info_cache, lock=_version_info_cache_lock)
 def _get_server_version_info(
     server_url: str,
 ) -> tuple[bool, tuple[int, int, int, int]]:
@@ -144,7 +147,7 @@ def _get_server_version_info(
         Exception: If the server config cannot be fetched.
     """
     # Import here to avoid circular imports at module load time
-    from .mcp_server import get_datahub_client
+    from .graphql_helpers import get_datahub_client
 
     client = get_datahub_client()
     config = client._graph.server_config
@@ -198,7 +201,7 @@ def filter_tools_by_version(tools: Sequence[T]) -> list[T]:
 
     try:
         # Import here to avoid circular imports at module load time
-        from .mcp_server import get_datahub_client
+        from .graphql_helpers import get_datahub_client
 
         client = get_datahub_client()
         server_url = client._graph._gms_server
@@ -252,4 +255,4 @@ class VersionFilterMiddleware(Middleware):
         call_next: CallNext,
     ) -> Any:
         tools = await call_next(context)
-        return filter_tools_by_version(tools)
+        return await asyncio.to_thread(filter_tools_by_version, tools)

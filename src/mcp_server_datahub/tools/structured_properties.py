@@ -5,6 +5,7 @@ from typing import Dict, List, Union
 
 from datahub.sdk.main_client import DataHubClient
 
+from .. import graphql_helpers
 from ..version_requirements import min_version
 
 logger = logging.getLogger(__name__)
@@ -22,8 +23,6 @@ def _validate_and_fetch_structured_property(
     Raises:
         ValueError: If the property URN does not exist or is invalid
     """
-    from ..mcp_server import execute_graphql
-
     query = """
         query getStructuredProperty($urn: String!) {
             entity(urn: $urn) {
@@ -53,7 +52,7 @@ def _validate_and_fetch_structured_property(
     """
 
     try:
-        result = execute_graphql(
+        result = graphql_helpers.execute_graphql(
             client._graph,
             query=query,
             variables={"urn": property_urn},
@@ -240,9 +239,7 @@ def add_structured_properties(
             ]
         )
     """
-    from ..mcp_server import execute_graphql, get_datahub_client
-
-    client = get_datahub_client()
+    client = graphql_helpers.get_datahub_client()
 
     if not property_values:
         raise ValueError("property_values cannot be empty")
@@ -302,7 +299,7 @@ def add_structured_properties(
         }
 
         try:
-            result = execute_graphql(
+            result = graphql_helpers.execute_graphql(
                 client._graph,
                 query=mutation,
                 variables=variables,
@@ -370,9 +367,7 @@ def remove_structured_properties(
             ]
         )
     """
-    from ..mcp_server import execute_graphql, get_datahub_client
-
-    client = get_datahub_client()
+    client = graphql_helpers.get_datahub_client()
 
     if not property_urns:
         raise ValueError("property_urns cannot be empty")
@@ -409,7 +404,7 @@ def remove_structured_properties(
         }
 
         try:
-            result = execute_graphql(
+            result = graphql_helpers.execute_graphql(
                 client._graph,
                 query=mutation,
                 variables=variables,

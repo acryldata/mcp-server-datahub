@@ -169,8 +169,8 @@ class TestDocumentToolsMiddleware:
     # =========================================================================
 
     @pytest.mark.asyncio
-    @patch("datahub_integrations.mcp.mcp_server.execute_graphql")
-    @patch("datahub_integrations.mcp.mcp_server.get_datahub_client")
+    @patch("datahub_integrations.mcp.graphql_helpers.execute_graphql")
+    @patch("datahub_integrations.mcp.graphql_helpers.get_datahub_client")
     async def test_cache_prevents_repeated_queries(
         self,
         mock_get_client,
@@ -205,8 +205,8 @@ class TestDocumentToolsMiddleware:
         assert mock_execute_graphql.call_count == 1
 
     @pytest.mark.asyncio
-    @patch("datahub_integrations.mcp.mcp_server.execute_graphql")
-    @patch("datahub_integrations.mcp.mcp_server.get_datahub_client")
+    @patch("datahub_integrations.mcp.graphql_helpers.execute_graphql")
+    @patch("datahub_integrations.mcp.graphql_helpers.get_datahub_client")
     async def test_cache_expires_after_ttl(
         self,
         mock_get_client,
@@ -248,8 +248,8 @@ class TestDocumentToolsMiddleware:
     # Test: Query implementation
     # =========================================================================
 
-    @patch("datahub_integrations.mcp.mcp_server.get_datahub_client")
-    @patch("datahub_integrations.mcp.mcp_server.execute_graphql")
+    @patch("datahub_integrations.mcp.graphql_helpers.get_datahub_client")
+    @patch("datahub_integrations.mcp.graphql_helpers.execute_graphql")
     def test_query_returns_true_when_documents_exist(
         self, mock_execute_graphql, mock_get_client
     ):
@@ -272,8 +272,8 @@ class TestDocumentToolsMiddleware:
         # Assert
         assert result is True
 
-    @patch("datahub_integrations.mcp.mcp_server.get_datahub_client")
-    @patch("datahub_integrations.mcp.mcp_server.execute_graphql")
+    @patch("datahub_integrations.mcp.graphql_helpers.get_datahub_client")
+    @patch("datahub_integrations.mcp.graphql_helpers.execute_graphql")
     def test_query_returns_false_when_no_documents(
         self, mock_execute_graphql, mock_get_client
     ):

@@ -5,6 +5,29 @@ All notable changes to mcp-server-datahub will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-03-09
+
+### Added
+
+- **Modular tool architecture**: Tools are now organized into dedicated modules under `tools/` (`search.py`, `entities.py`, `lineage.py`, `dataset_queries.py`, `assertions.py`) instead of being defined inline in `mcp_server.py`. This improves maintainability and makes the codebase easier to navigate.
+- **`search_filter_parser`**: New string-based filter syntax for the `search` tool. Filters are now passed as human-readable strings (e.g., `"entity_type = dataset"`) instead of nested dicts, making the tool much easier for LLM agents to use.
+- **`graphql_helpers`**: Extracted shared GraphQL execution logic, token budgeting, and response processing into a dedicated module.
+- **`tool_context`**: New module for tool-level context management.
+- **`view_preference`**: Configurable view preference system (`UseDefaultView`, `NoView`, `CustomView`) for controlling which DataHub view is applied during search.
+- **`tools/assertions.py`**: New tool module for data quality assertion checks.
+
+### Changed
+
+- **`search` tool**: The `filters` parameter (dict) has been replaced by `filter` (string). Use the new string-based syntax (e.g., `filter="entity_type = dataset"` instead of `filters={"entity_type": ["DATASET"]}`).
+- **`mcp_server.py`**: Significantly slimmed down — tool implementations moved to dedicated modules, GraphQL helpers extracted, filter parsing extracted.
+- **Smoke check safety**: `smoke_check.py` now refuses to run against non-localhost DataHub instances to prevent accidental mutation of production data.
+
+### Removed
+
+- **`test_custom_filter_conversion.py`**: Removed obsolete test for the old dict-based filter format, replaced by `search_filter_parser`.
+
+---
+
 ## [0.5.2] - 2026-02-24
 
 ### Fixed

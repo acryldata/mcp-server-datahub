@@ -5,6 +5,7 @@ from typing import List
 
 from datahub.sdk.main_client import DataHubClient
 
+from .. import graphql_helpers
 from ..version_requirements import min_version
 
 logger = logging.getLogger(__name__)
@@ -17,8 +18,6 @@ def _validate_domain_urn(client: DataHubClient, domain_urn: str) -> None:
     Raises:
         ValueError: If the domain URN does not exist or is invalid
     """
-    from ..mcp_server import execute_graphql
-
     query = """
         query getDomain($urn: String!) {
             entity(urn: $urn) {
@@ -34,7 +33,7 @@ def _validate_domain_urn(client: DataHubClient, domain_urn: str) -> None:
     """
 
     try:
-        result = execute_graphql(
+        result = graphql_helpers.execute_graphql(
             client._graph,
             query=query,
             variables={"urn": domain_urn},
@@ -112,9 +111,7 @@ def set_domains(
             ]
         )
     """
-    from ..mcp_server import execute_graphql, get_datahub_client
-
-    client = get_datahub_client()
+    client = graphql_helpers.get_datahub_client()
 
     if not domain_urn:
         raise ValueError("domain_urn cannot be empty")
@@ -136,7 +133,7 @@ def set_domains(
     variables = {"input": {"domainUrn": domain_urn, "resources": resources}}
 
     try:
-        result = execute_graphql(
+        result = graphql_helpers.execute_graphql(
             client._graph,
             query=mutation,
             variables=variables,
@@ -200,9 +197,7 @@ def remove_domains(
             ]
         )
     """
-    from ..mcp_server import execute_graphql, get_datahub_client
-
-    client = get_datahub_client()
+    client = graphql_helpers.get_datahub_client()
 
     if not entity_urns:
         raise ValueError("entity_urns cannot be empty")
@@ -220,7 +215,7 @@ def remove_domains(
     variables = {"input": {"domainUrn": None, "resources": resources}}
 
     try:
-        result = execute_graphql(
+        result = graphql_helpers.execute_graphql(
             client._graph,
             query=mutation,
             variables=variables,

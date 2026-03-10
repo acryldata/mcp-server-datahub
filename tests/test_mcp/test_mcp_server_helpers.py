@@ -3,7 +3,7 @@ from unittest.mock import Mock, patch
 import pytest
 from datahub.ingestion.graph.links import make_url_for_urn
 
-from datahub_integrations.mcp import mcp_server
+from datahub_integrations.mcp import graphql_helpers
 from datahub_integrations.mcp.mcp_server import (
     _clean_schema_fields,
     _sort_fields_by_priority,
@@ -23,7 +23,7 @@ def test_inject_urls_for_urns() -> None:
     )
 
     with patch(
-        "datahub_integrations.mcp.mcp_server._is_datahub_cloud", return_value=True
+        "datahub_integrations.mcp.graphql_helpers._is_datahub_cloud", return_value=True
     ):
         response = {
             "searchResults": [
@@ -483,7 +483,7 @@ def test_clean_get_entities_response_with_schema_metadata() -> None:
 
 def test_truncate_query_long() -> None:
     """Test that long queries are truncated correctly."""
-    with patch.object(mcp_server, "QUERY_LENGTH_HARD_LIMIT", 50):
+    with patch.object(graphql_helpers, "QUERY_LENGTH_HARD_LIMIT", 50):
         long_query = "SELECT * FROM very_long_table_name_that_goes_on_and_on " * 100
         result = truncate_query(long_query)
 
@@ -565,7 +565,7 @@ def test_get_lineage_normalizes_null_string() -> None:
 
     # Mock the DataHub client and related components
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client"
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client"
     ) as mock_get_client:
         mock_client = Mock()
         mock_graph = Mock()
@@ -581,7 +581,7 @@ def test_get_lineage_normalizes_null_string() -> None:
         mock_lineage_api.get_lineage.return_value = mock_lineage
 
         with patch(
-            "datahub_integrations.mcp.mcp_server.AssetLineageAPI",
+            "datahub_integrations.mcp.tools.lineage.AssetLineageAPI",
             return_value=mock_lineage_api,
         ):
             # Test with string "null" - should be normalized to None
@@ -631,7 +631,7 @@ def test_get_lineage_cleans_entities_in_results() -> None:
     }
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client"
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client"
     ) as mock_get_client:
         mock_client = Mock()
         mock_graph = Mock()
@@ -642,11 +642,11 @@ def test_get_lineage_cleans_entities_in_results() -> None:
         mock_lineage_api.get_lineage.return_value = mock_lineage_response
 
         with patch(
-            "datahub_integrations.mcp.mcp_server.AssetLineageAPI",
+            "datahub_integrations.mcp.tools.lineage.AssetLineageAPI",
             return_value=mock_lineage_api,
         ):
             with patch(
-                "datahub_integrations.mcp.mcp_server.clean_get_entities_response"
+                "datahub_integrations.mcp.graphql_helpers.clean_get_entities_response"
             ) as mock_clean:
                 mock_clean.side_effect = lambda x: {**x, "cleaned": True}
 
@@ -1045,8 +1045,8 @@ class TestCleanSchemaFields:
 class TestCleanGetEntitiesResponseFieldTruncation:
     """Tests for field truncation in clean_get_entities_response."""
 
-    @patch("datahub_integrations.mcp.mcp_server.TokenCountEstimator")
-    @patch("datahub_integrations.mcp.mcp_server.ENTITY_SCHEMA_TOKEN_BUDGET", 1000)
+    @patch("datahub_integrations.mcp.graphql_helpers.TokenCountEstimator")
+    @patch("datahub_integrations.mcp.graphql_helpers.ENTITY_SCHEMA_TOKEN_BUDGET", 1000)
     def test_truncates_fields_when_exceeds_budget(self, mock_estimator) -> None:
         """Test that fields are truncated when they exceed token budget."""
         # Each field is 300 tokens, budget is 1000, so should fit 3 fields
@@ -1068,8 +1068,8 @@ class TestCleanGetEntitiesResponseFieldTruncation:
         assert result["schemaMetadata"]["schemaFieldsTruncated"]["totalFields"] == 10
         assert result["schemaMetadata"]["schemaFieldsTruncated"]["includedFields"] == 3
 
-    @patch("datahub_integrations.mcp.mcp_server.TokenCountEstimator")
-    @patch("datahub_integrations.mcp.mcp_server.ENTITY_SCHEMA_TOKEN_BUDGET", 10000)
+    @patch("datahub_integrations.mcp.graphql_helpers.TokenCountEstimator")
+    @patch("datahub_integrations.mcp.graphql_helpers.ENTITY_SCHEMA_TOKEN_BUDGET", 10000)
     def test_no_truncation_when_within_budget(self, mock_estimator) -> None:
         """Test that no truncation occurs when fields fit within budget."""
         mock_estimator.estimate_dict_tokens.return_value = 100
@@ -1089,8 +1089,8 @@ class TestCleanGetEntitiesResponseFieldTruncation:
         assert len(result["schemaMetadata"]["fields"]) == 5
         assert "schemaFieldsTruncated" not in result["schemaMetadata"]
 
-    @patch("datahub_integrations.mcp.mcp_server.TokenCountEstimator")
-    @patch("datahub_integrations.mcp.mcp_server.ENTITY_SCHEMA_TOKEN_BUDGET", 500)
+    @patch("datahub_integrations.mcp.graphql_helpers.TokenCountEstimator")
+    @patch("datahub_integrations.mcp.graphql_helpers.ENTITY_SCHEMA_TOKEN_BUDGET", 500)
     def test_always_includes_at_least_one_field(self, mock_estimator) -> None:
         """Test that at least 1 field is included even if it exceeds budget."""
         # First field exceeds budget (1000 > 500)
@@ -1155,8 +1155,8 @@ class TestCleanGetEntitiesResponseFieldTruncation:
         # Same fields in same order
         assert fields1 == fields2
 
-    @patch("datahub_integrations.mcp.mcp_server.TokenCountEstimator")
-    @patch("datahub_integrations.mcp.mcp_server.ENTITY_SCHEMA_TOKEN_BUDGET", 1000)
+    @patch("datahub_integrations.mcp.graphql_helpers.TokenCountEstimator")
+    @patch("datahub_integrations.mcp.graphql_helpers.ENTITY_SCHEMA_TOKEN_BUDGET", 1000)
     def test_truncation_metadata_accuracy(self, mock_estimator) -> None:
         """Test that truncation metadata accurately reflects field counts."""
         # Each field is 300 tokens, budget is 1000, so 3 fields fit

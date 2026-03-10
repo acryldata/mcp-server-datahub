@@ -1,13 +1,27 @@
 """Owner management tools for DataHub MCP server."""
 
 import logging
+from enum import Enum
 from typing import List, Literal, Optional
 
 from datahub.sdk.main_client import DataHubClient
 
+from .. import graphql_helpers
 from ..version_requirements import min_version
 
 logger = logging.getLogger(__name__)
+
+
+class OwnershipType(str, Enum):
+    """Built-in ownership types in DataHub."""
+
+    TECHNICAL_OWNER = "__system__technical_owner"
+    BUSINESS_OWNER = "__system__business_owner"
+    DATA_STEWARD = "__system__data_steward"
+
+    def to_urn(self) -> str:
+        """Convert the ownership type to its URN form."""
+        return f"urn:li:ownershipType:{self.value}"
 
 
 def _validate_owner_urns(client: DataHubClient, owner_urns: List[str]) -> None:
@@ -17,9 +31,6 @@ def _validate_owner_urns(client: DataHubClient, owner_urns: List[str]) -> None:
     Raises:
         ValueError: If any owner URN does not exist or is not a valid owner entity type
     """
-    # Late import to avoid circular dependency
-    from ..mcp_server import execute_graphql
-
     # Query to check if owners exist and are valid types
     query = """
         query getOwners($urns: [String!]!) {
@@ -37,7 +48,7 @@ def _validate_owner_urns(client: DataHubClient, owner_urns: List[str]) -> None:
     """
 
     try:
-        result = execute_graphql(
+        result = graphql_helpers.execute_graphql(
             client._graph,
             query=query,
             variables={"urns": owner_urns},
@@ -79,7 +90,7 @@ def _validate_owner_urns(client: DataHubClient, owner_urns: List[str]) -> None:
 def _batch_modify_owners(
     owner_urns: List[str],
     entity_urns: List[str],
-    ownership_type_urn: Optional[str],
+    ownership_type: Optional[OwnershipType],
     operation: Literal["add", "remove"],
 ) -> dict:
     """
@@ -87,10 +98,7 @@ def _batch_modify_owners(
 
     Validates inputs, constructs GraphQL mutation, and executes the operation.
     """
-    # Late import to avoid circular dependency
-    from ..mcp_server import execute_graphql, get_datahub_client
-
-    client = get_datahub_client()
+    client = graphql_helpers.get_datahub_client()
 
     # Validate inputs
     if not owner_urns:
@@ -106,6 +114,9 @@ def _batch_modify_owners(
     for resource_urn in entity_urns:
         resource_input = {"resourceUrn": resource_urn}
         resources.append(resource_input)
+
+    # Convert ownership type to URN if provided
+    ownership_type_urn = ownership_type.to_urn() if ownership_type else None
 
     # Determine mutation and operation name based on operation type
     if operation == "add":
@@ -163,7 +174,7 @@ def _batch_modify_owners(
         failure_verb = "remove"
 
     try:
-        result = execute_graphql(
+        result = graphql_helpers.execute_graphql(
             client._graph,
             query=mutation,
             variables=variables,
@@ -192,7 +203,7 @@ def _batch_modify_owners(
 def add_owners(
     owner_urns: List[str],
     entity_urns: List[str],
-    ownership_type_urn: Optional[str] = None,
+    ownership_type: OwnershipType,
 ) -> dict:
     """Add one or more owners to multiple DataHub entities.
 
@@ -206,9 +217,10 @@ def add_owners(
         owner_urns: List of owner URNs to add (must be CorpUser or CorpGroup URNs).
                    Examples: ["urn:li:corpuser:john.doe", "urn:li:corpGroup:data-engineering"]
         entity_urns: List of entity URNs to assign ownership to (e.g., dataset URNs, dashboard URNs)
-        ownership_type_urn: Optional ownership type URN to specify the type of ownership
-                          (e.g., "urn:li:ownershipType:dataowner", "urn:li:ownershipType:technical_owner").
-                          If not provided, ownership type will be set based on the mutation default.
+        ownership_type: The type of ownership to assign. Must be one of:
+                       - OwnershipType.TECHNICAL_OWNER: Involved in production, maintenance, or distribution
+                       - OwnershipType.BUSINESS_OWNER: Principle stakeholders or domain experts
+                       - OwnershipType.DATA_STEWARD: Involved in governance
 
     Returns:
         Dictionary with:
@@ -216,26 +228,27 @@ def add_owners(
         - message: Success or error message
 
     Examples:
-        # Add owners to multiple datasets
+        # Add technical owners to multiple datasets
         add_owners(
             owner_urns=["urn:li:corpuser:john.doe", "urn:li:corpGroup:data-engineering"],
             entity_urns=[
                 "urn:li:dataset:(urn:li:dataPlatform:snowflake,db.schema.users,PROD)",
                 "urn:li:dataset:(urn:li:dataPlatform:snowflake,db.schema.customers,PROD)"
-            ]
+            ],
+            ownership_type=OwnershipType.TECHNICAL_OWNER
         )
 
-        # Add technical owner with specific ownership type
+        # Add business owner
         add_owners(
             owner_urns=["urn:li:corpuser:jane.smith"],
             entity_urns=[
                 "urn:li:dataset:(urn:li:dataPlatform:snowflake,db.schema.users,PROD)",
                 "urn:li:dataset:(urn:li:dataPlatform:snowflake,db.schema.customers,PROD)"
             ],
-            ownership_type_urn="urn:li:ownershipType:technical_owner"
+            ownership_type=OwnershipType.BUSINESS_OWNER
         )
 
-        # Add data owner to multiple entities
+        # Add data steward to multiple entities
         add_owners(
             owner_urns=["urn:li:corpuser:data.steward"],
             entity_urns=[
@@ -243,17 +256,17 @@ def add_owners(
                 "urn:li:dataset:(urn:li:dataPlatform:snowflake,db.schema.transactions,PROD)",
                 "urn:li:dashboard:(urn:li:dataPlatform:looker,sales_dashboard,PROD)"
             ],
-            ownership_type_urn="urn:li:ownershipType:dataowner"
+            ownership_type=OwnershipType.DATA_STEWARD
         )
     """
-    return _batch_modify_owners(owner_urns, entity_urns, ownership_type_urn, "add")
+    return _batch_modify_owners(owner_urns, entity_urns, ownership_type, "add")
 
 
 @min_version(cloud="0.3.16", oss="1.4.0")
 def remove_owners(
     owner_urns: List[str],
     entity_urns: List[str],
-    ownership_type_urn: Optional[str] = None,
+    ownership_type: Optional[OwnershipType] = None,
 ) -> dict:
     """Remove one or more owners from multiple DataHub entities.
 
@@ -267,9 +280,12 @@ def remove_owners(
         owner_urns: List of owner URNs to remove (must be CorpUser or CorpGroup URNs).
                    Examples: ["urn:li:corpuser:john.doe", "urn:li:corpGroup:data-engineering"]
         entity_urns: List of entity URNs to remove ownership from (e.g., dataset URNs, dashboard URNs)
-        ownership_type_urn: Optional ownership type URN to specify which type of ownership to remove
-                          (e.g., "urn:li:ownershipType:dataowner").
-                          If not provided, will remove ownership regardless of type.
+        ownership_type: Optional ownership type to specify which type of ownership to remove.
+                       If not provided, will remove ownership regardless of type.
+                       Can be one of:
+                       - OwnershipType.TECHNICAL_OWNER
+                       - OwnershipType.BUSINESS_OWNER
+                       - OwnershipType.DATA_STEWARD
 
     Returns:
         Dictionary with:
@@ -277,7 +293,7 @@ def remove_owners(
         - message: Success or error message
 
     Examples:
-        # Remove owners from multiple datasets
+        # Remove owners from multiple datasets (any ownership type)
         remove_owners(
             owner_urns=["urn:li:corpuser:former.employee", "urn:li:corpGroup:old-team"],
             entity_urns=[
@@ -293,7 +309,7 @@ def remove_owners(
                 "urn:li:dataset:(urn:li:dataPlatform:snowflake,db.schema.users,PROD)",
                 "urn:li:dataset:(urn:li:dataPlatform:snowflake,db.schema.customers,PROD)"
             ],
-            ownership_type_urn="urn:li:ownershipType:technical_owner"
+            ownership_type=OwnershipType.TECHNICAL_OWNER
         )
 
         # Remove temporary owner from multiple entities
@@ -306,4 +322,4 @@ def remove_owners(
             ]
         )
     """
-    return _batch_modify_owners(owner_urns, entity_urns, ownership_type_urn, "remove")
+    return _batch_modify_owners(owner_urns, entity_urns, ownership_type, "remove")

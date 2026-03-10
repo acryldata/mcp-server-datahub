@@ -61,7 +61,7 @@ def test_get_entities_with_query_urn(mock_client):
     mock_client._graph.url_for = lambda x: f"https://example.com/{x}"
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.execute_graphql",
+        "datahub_integrations.mcp.graphql_helpers.execute_graphql",
         side_effect=[mock_response, {"entity": {}}],
     ) as mock_gql:
         with with_datahub_client(mock_client):
@@ -104,7 +104,7 @@ def test_get_entities_with_dataset_urn(mock_client):
     mock_client._graph.url_for = lambda x: f"https://example.com/{x}"
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.execute_graphql",
+        "datahub_integrations.mcp.graphql_helpers.execute_graphql",
         side_effect=[mock_response, {"entity": {}}],
     ) as mock_gql:
         with with_datahub_client(mock_client):
@@ -153,7 +153,7 @@ def test_get_entities_mixed_urns(mock_client):
     mock_client._graph.url_for = lambda x: f"https://example.com/{x}"
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.execute_graphql",
+        "datahub_integrations.mcp.graphql_helpers.execute_graphql",
         side_effect=[
             query_response,
             {"entity": {}},
@@ -212,7 +212,7 @@ def test_get_entities_query_urn_edge_cases(mock_client):
         mock_response["entity"]["urn"] = test_urn
 
         with patch(
-            "datahub_integrations.mcp.mcp_server.execute_graphql",
+            "datahub_integrations.mcp.graphql_helpers.execute_graphql",
             side_effect=[mock_response, {"entity": {}}],
         ) as mock_gql:
             with with_datahub_client(mock_client):

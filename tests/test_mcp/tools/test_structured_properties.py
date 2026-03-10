@@ -70,7 +70,7 @@ def test_add_structured_properties_string_type(mock_datahub_client):
     ]
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         result = add_structured_properties(
@@ -128,7 +128,7 @@ def test_add_structured_properties_numeric_type(mock_datahub_client):
     ]
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         result = add_structured_properties(
@@ -182,7 +182,7 @@ def test_add_structured_properties_multiple_values(mock_datahub_client):
     ]
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         result = add_structured_properties(
@@ -259,7 +259,7 @@ def test_add_structured_properties_multiple_properties(mock_datahub_client):
     ]
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         result = add_structured_properties(
@@ -312,7 +312,7 @@ def test_add_structured_properties_multiple_entities(mock_datahub_client):
     ]
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         result = add_structured_properties(
@@ -346,7 +346,7 @@ def test_remove_structured_properties_single_property(mock_datahub_client):
     ]
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         result = remove_structured_properties(
@@ -401,7 +401,7 @@ def test_remove_structured_properties_multiple_properties(mock_datahub_client):
     ]
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         result = remove_structured_properties(
@@ -436,7 +436,7 @@ def test_remove_structured_properties_multiple_entities(mock_datahub_client):
     ]
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         result = remove_structured_properties(
@@ -455,7 +455,7 @@ def test_add_structured_properties_empty_property_values(mock_datahub_client):
     entity_urns = ["urn:li:dataset:(urn:li:dataPlatform:snowflake,db.schema.test,PROD)"]
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         with pytest.raises(ValueError, match="property_values cannot be empty"):
@@ -469,7 +469,7 @@ def test_add_structured_properties_empty_entity_urns(mock_datahub_client):
     }
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         with pytest.raises(ValueError, match="entity_urns cannot be empty"):
@@ -481,7 +481,7 @@ def test_remove_structured_properties_empty_property_urns(mock_datahub_client):
     entity_urns = ["urn:li:dataset:(urn:li:dataPlatform:snowflake,db.schema.test,PROD)"]
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         with pytest.raises(ValueError, match="property_urns cannot be empty"):
@@ -493,7 +493,7 @@ def test_remove_structured_properties_empty_entity_urns(mock_datahub_client):
     property_urns = ["urn:li:structuredProperty:io.acryl.privacy.retentionTime"]
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         with pytest.raises(ValueError, match="entity_urns cannot be empty"):
@@ -509,7 +509,7 @@ def test_add_structured_properties_nonexistent_property(mock_datahub_client):
     mock_datahub_client._graph.execute_graphql.return_value = {"entity": None}
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         with pytest.raises(ValueError, match="Structured property URN does not exist"):
@@ -529,7 +529,7 @@ def test_add_structured_properties_invalid_property_type(mock_datahub_client):
     }
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         with pytest.raises(ValueError, match="not a structured property entity"):
@@ -571,7 +571,7 @@ def test_add_structured_properties_type_mismatch(mock_datahub_client):
     }
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         with pytest.raises(ValueError, match="Value validation failed"):
@@ -623,7 +623,7 @@ def test_add_structured_properties_mixed_entity_types(mock_datahub_client):
     ]
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         result = add_structured_properties(
@@ -669,7 +669,7 @@ def test_add_structured_properties_urn_type(mock_datahub_client):
     ]
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         result = add_structured_properties(
@@ -709,7 +709,7 @@ def test_add_structured_properties_invalid_urn_type(mock_datahub_client):
     }
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         with pytest.raises(ValueError, match="invalid URN"):
@@ -751,7 +751,7 @@ def test_add_structured_properties_date_type(mock_datahub_client):
     ]
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         result = add_structured_properties(
@@ -794,7 +794,7 @@ def test_add_structured_properties_date_with_time(mock_datahub_client):
     ]
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         result = add_structured_properties(
@@ -834,7 +834,7 @@ def test_add_structured_properties_invalid_date(mock_datahub_client):
     }
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         with pytest.raises(ValueError, match="ISO 8601"):
@@ -878,7 +878,7 @@ def test_add_structured_properties_rich_text_type(mock_datahub_client):
     ]
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         result = add_structured_properties(
@@ -928,7 +928,7 @@ def test_add_structured_properties_mutation_failure(mock_datahub_client):
     ]
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         with pytest.raises(
@@ -964,7 +964,7 @@ def test_remove_structured_properties_mutation_failure(mock_datahub_client):
     ]
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         with pytest.raises(
@@ -1013,7 +1013,7 @@ def test_add_structured_properties_empty_mutation_result(mock_datahub_client):
     ]
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         with pytest.raises(
@@ -1059,7 +1059,7 @@ def test_add_structured_properties_none_mutation_result(mock_datahub_client):
     ]
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         with pytest.raises(
@@ -1094,7 +1094,7 @@ def test_remove_structured_properties_empty_mutation_result(mock_datahub_client)
     ]
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         with pytest.raises(
@@ -1127,7 +1127,7 @@ def test_remove_structured_properties_none_mutation_result(mock_datahub_client):
     ]
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         with pytest.raises(
@@ -1177,7 +1177,7 @@ def test_add_structured_properties_partial_success(mock_datahub_client):
     ]
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         with pytest.raises(RuntimeError) as exc_info:
@@ -1219,7 +1219,7 @@ def test_remove_structured_properties_partial_success(mock_datahub_client):
     ]
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         with pytest.raises(RuntimeError) as exc_info:
