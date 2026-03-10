@@ -89,21 +89,9 @@ async def test_search_no_results(mcp_client: Client) -> None:
 
 @pytest.mark.anyio
 async def test_search_simple_filter(mcp_client: Client) -> None:
-    filters_json = {"platform": [_test_platform_looker]}
     res = await mcp_client.call_tool(
         "search",
-        arguments={"query": "*", "filters": filters_json},
-    )
-    assert res.is_error is False
-    assert res.data is not None
-
-
-@pytest.mark.anyio
-async def test_search_string_filter(mcp_client: Client) -> None:
-    filters_json = {"platform": [_test_platform_looker]}
-    res = await mcp_client.call_tool(
-        "search",
-        arguments={"query": "*", "filters": json.dumps(filters_json)},
+        arguments={"query": "*", "filter": f"platform = {_test_platform_looker}"},
     )
     assert res.is_error is False
     assert res.data is not None
@@ -111,16 +99,12 @@ async def test_search_string_filter(mcp_client: Client) -> None:
 
 @pytest.mark.anyio
 async def test_search_complex_filter(mcp_client: Client) -> None:
-    filters_json = {
-        "and": [
-            {"entity_type": ["DATASET"]},
-            {"entity_subtype": ["Table"]},
-            {"not": {"platform": [_test_platform_snowflake]}},
-        ]
-    }
     res = await mcp_client.call_tool(
         "search",
-        arguments={"query": "*", "filters": filters_json},
+        arguments={
+            "query": "*",
+            "filter": f"entity_type = DATASET AND entity_subtype = Table AND NOT platform = {_test_platform_snowflake}",
+        },
     )
     assert res.is_error is False
     assert res.data is not None
@@ -163,7 +147,7 @@ async def test_search_sorting_last_operation_time(mcp_client: Client) -> None:
         "search",
         {
             "query": "*",
-            "filters": {"entity_type": ["DATASET"]},
+            "filter": "entity_type = DATASET",
             "sort_by": "lastOperationTime",
             "sort_order": "desc",
             "num_results": 5,
@@ -184,7 +168,7 @@ async def test_search_sorting_entity_name_asc(mcp_client: Client) -> None:
         "search",
         {
             "query": "*",
-            "filters": {"entity_type": ["DATASET"]},
+            "filter": "entity_type = DATASET",
             "sort_by": "_entityName",
             "sort_order": "asc",
             "num_results": 5,
@@ -205,7 +189,7 @@ async def test_search_sorting_entity_name_desc(mcp_client: Client) -> None:
         "search",
         {
             "query": "*",
-            "filters": {"entity_type": ["DATASET"]},
+            "filter": "entity_type = DATASET",
             "sort_by": "_entityName",
             "sort_order": "desc",
             "num_results": 5,
@@ -226,7 +210,7 @@ async def test_search_sorting_and_pagination(mcp_client: Client) -> None:
         "search",
         {
             "query": "*",
-            "filters": {"entity_type": ["DATASET"]},
+            "filter": "entity_type = DATASET",
             "sort_by": "lastOperationTime",
             "sort_order": "desc",
             "num_results": 3,
@@ -387,8 +371,8 @@ async def test_get_lineage_with_query(mcp_client: Client) -> None:
 
 
 @pytest.mark.anyio
-async def test_get_lineage_with_filters(mcp_client: Client) -> None:
-    """Test get_lineage with filters to filter results by entity type."""
+async def test_get_lineage_with_filter(mcp_client: Client) -> None:
+    """Test get_lineage with filter to filter results by entity type."""
     result = await mcp_client.call_tool(
         "get_lineage",
         {
@@ -396,7 +380,7 @@ async def test_get_lineage_with_filters(mcp_client: Client) -> None:
             "column": None,
             "upstream": True,
             "max_hops": 1,
-            "filters": {"entity_type": ["DATASET"]},
+            "filter": "entity_type = DATASET",
         },
     )
     assert result.content, "Tool result should have content"
