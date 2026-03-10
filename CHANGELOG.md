@@ -7,9 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.6.0] - 2026-03-09
 
-### ⚠️ Breaking Change — New Filter Syntax
+### Highlights — New SQL-like Filter Syntax
 
-The `search` and `get_lineage` tools now use a **human-readable, SQL-like filter string** instead of the previous nested JSON dict. This is the headline change of this release — it makes filters dramatically easier for LLM agents (and humans) to write correctly.
+The `search` and `get_lineage` tools now accept a **human-readable, SQL-like filter string** instead of the previous nested JSON dict. This is the headline change of this release — it makes filters dramatically easier for LLM agents (and humans) to write correctly.
+
+Since MCP tools are discovered dynamically by LLM agents at the start of every session (they read the tool schema each time), this is **not a breaking change** — agents will automatically pick up the new `filter` parameter and its syntax documentation.
 
 **Before (0.5.x):**
 ```python
@@ -44,7 +46,7 @@ Supported fields: `entity_type`, `entity_subtype`, `platform`, `domain`, `contai
 
 ### Changed
 
-- **`search` tool**: The `filters` parameter (JSON dict) is replaced by `filter` (string). See breaking change section above.
+- **`search` tool**: The `filters` parameter (JSON dict) is replaced by `filter` (string). See highlights section above.
 - **`get_lineage` tool**: Also uses the new string-based `filter` parameter for filtering lineage results.
 - **`mcp_server.py`**: Significantly slimmed down — tool implementations moved to dedicated modules, GraphQL helpers extracted, filter parsing extracted.
 - **Smoke check safety**: `smoke_check.py` now refuses to run against non-localhost DataHub instances to prevent accidental mutation of production data.
