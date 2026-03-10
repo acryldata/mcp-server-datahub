@@ -7,10 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.6.0] - 2026-03-09
 
+### ⚠️ Breaking Change — New Filter Syntax
+
+The `search` and `get_lineage` tools now use a **human-readable, SQL-like filter string** instead of the previous nested JSON dict. This is the headline change of this release — it makes filters dramatically easier for LLM agents (and humans) to write correctly.
+
+**Before (0.5.x):**
+```python
+search(query="*", filters={"entity_type": ["DATASET"]})
+search(query="*", filters={"and": [{"platform": ["snowflake"]}, {"env": ["PROD"]}]})
+```
+
+**After (0.6.0):**
+```python
+search(query="*", filter="entity_type = dataset")
+search(query="*", filter="platform = snowflake AND env = PROD")
+```
+
+The new syntax supports:
+- Simple equality: `platform = snowflake`
+- IN lists: `platform IN (snowflake, bigquery, redshift)`
+- Boolean logic: `AND`, `OR`, `NOT`, parentheses
+- Comparisons: `columnCount > 10`, `columnCount >= 5`
+- Existence checks: `tag IS NOT NULL`, `owner IS NULL`
+- Complex expressions: `entity_type = dataset AND (platform = snowflake OR platform = bigquery) AND NOT env = DEV`
+
+Supported fields: `entity_type`, `entity_subtype`, `platform`, `domain`, `container`, `tag`, `glossary_term`, `owner`, `env`, `status`, `deprecated`, `hasActiveIncidents`, `hasFailingAssertions`, `columnCount`, and any custom field name.
+
 ### Added
 
-- **Modular tool architecture**: Tools are now organized into dedicated modules under `tools/` (`search.py`, `entities.py`, `lineage.py`, `dataset_queries.py`, `assertions.py`) instead of being defined inline in `mcp_server.py`. This improves maintainability and makes the codebase easier to navigate.
-- **`search_filter_parser`**: New string-based filter syntax for the `search` tool. Filters are now passed as human-readable strings (e.g., `"entity_type = dataset"`) instead of nested dicts, making the tool much easier for LLM agents to use.
+- **`search_filter_parser`**: Full SQL-like filter parser with tokenizer and recursive-descent parser. Compiles human-readable filter strings into DataHub SDK `Filter` objects. Includes comprehensive `FILTER_DOCS` that is injected into the `search` and `get_lineage` tool descriptions so LLM agents always have the syntax reference available.
+- **Modular tool architecture**: Tools are now organized into dedicated modules under `tools/` (`search.py`, `entities.py`, `lineage.py`, `dataset_queries.py`, `assertions.py`) instead of being defined inline in `mcp_server.py`.
 - **`graphql_helpers`**: Extracted shared GraphQL execution logic, token budgeting, and response processing into a dedicated module.
 - **`tool_context`**: New module for tool-level context management.
 - **`view_preference`**: Configurable view preference system (`UseDefaultView`, `NoView`, `CustomView`) for controlling which DataHub view is applied during search.
@@ -18,7 +44,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **`search` tool**: The `filters` parameter (dict) has been replaced by `filter` (string). Use the new string-based syntax (e.g., `filter="entity_type = dataset"` instead of `filters={"entity_type": ["DATASET"]}`).
+- **`search` tool**: The `filters` parameter (JSON dict) is replaced by `filter` (string). See breaking change section above.
+- **`get_lineage` tool**: Also uses the new string-based `filter` parameter for filtering lineage results.
 - **`mcp_server.py`**: Significantly slimmed down — tool implementations moved to dedicated modules, GraphQL helpers extracted, filter parsing extracted.
 - **Smoke check safety**: `smoke_check.py` now refuses to run against non-localhost DataHub instances to prevent accidental mutation of production data.
 
