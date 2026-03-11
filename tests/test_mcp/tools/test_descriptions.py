@@ -30,7 +30,7 @@ def test_update_description_replace_container(mock_datahub_client):
     }
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         result = update_description(
@@ -57,7 +57,7 @@ def test_update_description_replace_column(mock_datahub_client):
     }
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         result = update_description(
@@ -87,7 +87,7 @@ def test_update_description_replace_with_markdown(mock_datahub_client):
     }
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         result = update_description(
@@ -122,7 +122,7 @@ def test_update_description_append_to_existing_container(mock_datahub_client):
     ]
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         result = update_description(
@@ -154,7 +154,7 @@ def test_update_description_append_to_empty_container(mock_datahub_client):
     ]
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         result = update_description(
@@ -193,7 +193,7 @@ def test_update_description_append_to_column(mock_datahub_client):
     ]
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         result = update_description(
@@ -223,7 +223,7 @@ def test_update_description_remove_from_container(mock_datahub_client):
     }
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         result = update_description(entity_urn=entity_urn, operation="remove")
@@ -246,7 +246,7 @@ def test_update_description_remove_from_column(mock_datahub_client):
     }
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         result = update_description(
@@ -266,7 +266,7 @@ def test_update_description_remove_from_column(mock_datahub_client):
 def test_update_description_empty_entity_urn(mock_datahub_client):
     """Test that empty entity_urn raises ValueError."""
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         with pytest.raises(ValueError, match="entity_urn cannot be empty"):
@@ -278,7 +278,7 @@ def test_update_description_replace_without_description(mock_datahub_client):
     entity_urn = "urn:li:container:test"
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         with pytest.raises(
@@ -292,7 +292,7 @@ def test_update_description_append_without_description(mock_datahub_client):
     entity_urn = "urn:li:container:test"
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         with pytest.raises(
@@ -306,7 +306,7 @@ def test_update_description_invalid_operation(mock_datahub_client):
     entity_urn = "urn:li:container:test"
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         # This will be caught at type-checking time, but test runtime behavior
@@ -332,7 +332,7 @@ def test_update_description_mutation_returns_false(mock_datahub_client):
     }
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         with pytest.raises(RuntimeError, match="Failed\ to\ update\ description"):
@@ -350,7 +350,7 @@ def test_update_description_graphql_exception(mock_datahub_client):
     mock_datahub_client._graph.execute_graphql.side_effect = Exception("GraphQL error")
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         with pytest.raises(RuntimeError, match="GraphQL\ error"):
@@ -371,7 +371,7 @@ def test_update_description_append_fetch_failure(mock_datahub_client):
     ]
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         result = update_description(
@@ -397,7 +397,7 @@ def test_update_description_operation_succeeds(mock_datahub_client):
     }
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         result = update_description(
@@ -426,7 +426,7 @@ def test_update_description_append_to_tag(mock_datahub_client):
     ]
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         result = update_description(
@@ -453,7 +453,7 @@ def test_update_description_append_to_glossary_term(mock_datahub_client):
     ]
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         result = update_description(
@@ -479,7 +479,7 @@ def test_update_description_append_to_glossary_node(mock_datahub_client):
     ]
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         result = update_description(
@@ -505,7 +505,7 @@ def test_update_description_append_to_domain(mock_datahub_client):
     ]
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         result = update_description(
@@ -537,7 +537,7 @@ def test_update_description_fallback_to_properties(mock_datahub_client):
     ]
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         result = update_description(
@@ -562,7 +562,7 @@ def test_update_description_replace_tag(mock_datahub_client):
     }
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         result = update_description(
@@ -582,7 +582,7 @@ def test_update_description_remove_glossary_term(mock_datahub_client):
     }
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         result = update_description(entity_urn=entity_urn, operation="remove")

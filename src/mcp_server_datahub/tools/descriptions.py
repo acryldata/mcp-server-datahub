@@ -3,12 +3,13 @@
 import logging
 from typing import Literal, Optional
 
+from .. import graphql_helpers
 from ..version_requirements import min_version
 
 logger = logging.getLogger(__name__)
 
 
-@min_version(cloud="0.3.16")
+@min_version(cloud="0.3.16", oss="1.4.0")
 def update_description(
     entity_urn: str,
     operation: Literal["replace", "append", "remove"] = "replace",
@@ -81,10 +82,7 @@ def update_description(
             column_path="old_field"
         )
     """
-    # Late import to avoid circular dependency
-    from ..mcp_server import execute_graphql, get_datahub_client
-
-    client = get_datahub_client()
+    client = graphql_helpers.get_datahub_client()
 
     # Validate inputs
     if not entity_urn:
@@ -189,7 +187,7 @@ def update_description(
         """
 
         try:
-            result = execute_graphql(
+            result = graphql_helpers.execute_graphql(
                 client._graph,
                 query=query,
                 variables={"urn": entity_urn},
@@ -252,7 +250,7 @@ def update_description(
         variables["input"]["subResourceType"] = "DATASET_FIELD"
 
     try:
-        result = execute_graphql(
+        result = graphql_helpers.execute_graphql(
             client._graph,
             query=mutation,
             variables=variables,

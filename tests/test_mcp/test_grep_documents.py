@@ -48,8 +48,8 @@ class TestGrepDocuments:
             ]
         }
 
-    @patch("datahub_integrations.mcp.mcp_server.get_datahub_client")
-    @patch("datahub_integrations.mcp.mcp_server.execute_graphql")
+    @patch("datahub_integrations.mcp.graphql_helpers.get_datahub_client")
+    @patch("datahub_integrations.mcp.graphql_helpers.execute_graphql")
     async def test_basic_pattern_match(
         self,
         mock_execute_graphql,
@@ -73,8 +73,8 @@ class TestGrepDocuments:
         assert result["results"][0]["title"] == "Deployment Guide"
         assert len(result["results"][0]["matches"]) >= 2
 
-    @patch("datahub_integrations.mcp.mcp_server.get_datahub_client")
-    @patch("datahub_integrations.mcp.mcp_server.execute_graphql")
+    @patch("datahub_integrations.mcp.graphql_helpers.get_datahub_client")
+    @patch("datahub_integrations.mcp.graphql_helpers.execute_graphql")
     async def test_case_insensitive_search(
         self,
         mock_execute_graphql,
@@ -95,8 +95,8 @@ class TestGrepDocuments:
         assert result["documents_with_matches"] == 1
         assert result["total_matches"] >= 2  # Multiple "Error:" occurrences
 
-    @patch("datahub_integrations.mcp.mcp_server.get_datahub_client")
-    @patch("datahub_integrations.mcp.mcp_server.execute_graphql")
+    @patch("datahub_integrations.mcp.graphql_helpers.get_datahub_client")
+    @patch("datahub_integrations.mcp.graphql_helpers.execute_graphql")
     async def test_regex_pattern(
         self,
         mock_execute_graphql,
@@ -117,8 +117,8 @@ class TestGrepDocuments:
         assert result["documents_with_matches"] == 1
         assert result["total_matches"] == 3  # 2 Error + 1 Warning
 
-    @patch("datahub_integrations.mcp.mcp_server.get_datahub_client")
-    @patch("datahub_integrations.mcp.mcp_server.execute_graphql")
+    @patch("datahub_integrations.mcp.graphql_helpers.get_datahub_client")
+    @patch("datahub_integrations.mcp.graphql_helpers.execute_graphql")
     async def test_max_matches_per_doc(
         self,
         mock_execute_graphql,
@@ -151,8 +151,8 @@ class TestGrepDocuments:
         assert result["results"][0]["total_matches"] == 10
         assert len(result["results"][0]["matches"]) == 3
 
-    @patch("datahub_integrations.mcp.mcp_server.get_datahub_client")
-    @patch("datahub_integrations.mcp.mcp_server.execute_graphql")
+    @patch("datahub_integrations.mcp.graphql_helpers.get_datahub_client")
+    @patch("datahub_integrations.mcp.graphql_helpers.execute_graphql")
     async def test_context_chars(
         self,
         mock_execute_graphql,
@@ -186,8 +186,8 @@ class TestGrepDocuments:
         assert excerpt.endswith("...")
         assert "MATCH" in excerpt
 
-    @patch("datahub_integrations.mcp.mcp_server.get_datahub_client")
-    @patch("datahub_integrations.mcp.mcp_server.execute_graphql")
+    @patch("datahub_integrations.mcp.graphql_helpers.get_datahub_client")
+    @patch("datahub_integrations.mcp.graphql_helpers.execute_graphql")
     async def test_empty_urns(
         self,
         mock_execute_graphql,
@@ -208,8 +208,8 @@ class TestGrepDocuments:
         # GraphQL should not be called
         mock_execute_graphql.assert_not_called()
 
-    @patch("datahub_integrations.mcp.mcp_server.get_datahub_client")
-    @patch("datahub_integrations.mcp.mcp_server.execute_graphql")
+    @patch("datahub_integrations.mcp.graphql_helpers.get_datahub_client")
+    @patch("datahub_integrations.mcp.graphql_helpers.execute_graphql")
     async def test_invalid_regex(
         self,
         mock_execute_graphql,
@@ -230,8 +230,8 @@ class TestGrepDocuments:
         assert "Invalid regex pattern" in result["error"]
         assert result["results"] == []
 
-    @patch("datahub_integrations.mcp.mcp_server.get_datahub_client")
-    @patch("datahub_integrations.mcp.mcp_server.execute_graphql")
+    @patch("datahub_integrations.mcp.graphql_helpers.get_datahub_client")
+    @patch("datahub_integrations.mcp.graphql_helpers.execute_graphql")
     async def test_no_matches(
         self,
         mock_execute_graphql,
@@ -252,8 +252,8 @@ class TestGrepDocuments:
         assert result["total_matches"] == 0
         assert result["documents_with_matches"] == 0
 
-    @patch("datahub_integrations.mcp.mcp_server.get_datahub_client")
-    @patch("datahub_integrations.mcp.mcp_server.execute_graphql")
+    @patch("datahub_integrations.mcp.graphql_helpers.get_datahub_client")
+    @patch("datahub_integrations.mcp.graphql_helpers.execute_graphql")
     async def test_document_without_content(
         self,
         mock_execute_graphql,
@@ -290,8 +290,8 @@ class TestGrepDocuments:
         assert result["documents_with_matches"] == 1
         assert result["results"][0]["urn"] == "urn:li:document:doc2"
 
-    @patch("datahub_integrations.mcp.mcp_server.get_datahub_client")
-    @patch("datahub_integrations.mcp.mcp_server.execute_graphql")
+    @patch("datahub_integrations.mcp.graphql_helpers.get_datahub_client")
+    @patch("datahub_integrations.mcp.graphql_helpers.execute_graphql")
     async def test_match_position_reported(
         self,
         mock_execute_graphql,
@@ -320,8 +320,8 @@ class TestGrepDocuments:
         # Position should be 7 (after "prefix ")
         assert result["results"][0]["matches"][0]["position"] == 7
 
-    @patch("datahub_integrations.mcp.mcp_server.get_datahub_client")
-    @patch("datahub_integrations.mcp.mcp_server.execute_graphql")
+    @patch("datahub_integrations.mcp.graphql_helpers.get_datahub_client")
+    @patch("datahub_integrations.mcp.graphql_helpers.execute_graphql")
     async def test_graphql_called_correctly(
         self,
         mock_execute_graphql,
@@ -345,8 +345,8 @@ class TestGrepDocuments:
             "urn:li:document:doc2",
         ]
 
-    @patch("datahub_integrations.mcp.mcp_server.get_datahub_client")
-    @patch("datahub_integrations.mcp.mcp_server.execute_graphql")
+    @patch("datahub_integrations.mcp.graphql_helpers.get_datahub_client")
+    @patch("datahub_integrations.mcp.graphql_helpers.execute_graphql")
     async def test_start_offset_skips_beginning(
         self,
         mock_execute_graphql,
@@ -380,8 +380,8 @@ class TestGrepDocuments:
         assert result["total_matches"] == 1
         assert len(result["results"]) == 1
 
-    @patch("datahub_integrations.mcp.mcp_server.get_datahub_client")
-    @patch("datahub_integrations.mcp.mcp_server.execute_graphql")
+    @patch("datahub_integrations.mcp.graphql_helpers.get_datahub_client")
+    @patch("datahub_integrations.mcp.graphql_helpers.execute_graphql")
     async def test_start_offset_reports_absolute_position(
         self,
         mock_execute_graphql,
@@ -413,8 +413,8 @@ class TestGrepDocuments:
         # Position should be 50 (absolute), not 20 (relative to offset)
         assert result["results"][0]["matches"][0]["position"] == 50
 
-    @patch("datahub_integrations.mcp.mcp_server.get_datahub_client")
-    @patch("datahub_integrations.mcp.mcp_server.execute_graphql")
+    @patch("datahub_integrations.mcp.graphql_helpers.get_datahub_client")
+    @patch("datahub_integrations.mcp.graphql_helpers.execute_graphql")
     async def test_start_offset_includes_content_length(
         self,
         mock_execute_graphql,
@@ -445,8 +445,8 @@ class TestGrepDocuments:
         # Should include content_length for pagination awareness
         assert result["results"][0]["content_length"] == len(text)
 
-    @patch("datahub_integrations.mcp.mcp_server.get_datahub_client")
-    @patch("datahub_integrations.mcp.mcp_server.execute_graphql")
+    @patch("datahub_integrations.mcp.graphql_helpers.get_datahub_client")
+    @patch("datahub_integrations.mcp.graphql_helpers.execute_graphql")
     async def test_start_offset_without_offset_no_content_length(
         self,
         mock_execute_graphql,
@@ -476,8 +476,8 @@ class TestGrepDocuments:
         # Should NOT include content_length when not using offset
         assert "content_length" not in result["results"][0]
 
-    @patch("datahub_integrations.mcp.mcp_server.get_datahub_client")
-    @patch("datahub_integrations.mcp.mcp_server.execute_graphql")
+    @patch("datahub_integrations.mcp.graphql_helpers.get_datahub_client")
+    @patch("datahub_integrations.mcp.graphql_helpers.execute_graphql")
     async def test_start_offset_beyond_document_length(
         self,
         mock_execute_graphql,
@@ -517,8 +517,8 @@ class TestGrepDocuments:
         assert result["documents_with_matches"] == 1
         assert result["results"][0]["urn"] == "urn:li:document:doc2"
 
-    @patch("datahub_integrations.mcp.mcp_server.get_datahub_client")
-    @patch("datahub_integrations.mcp.mcp_server.execute_graphql")
+    @patch("datahub_integrations.mcp.graphql_helpers.get_datahub_client")
+    @patch("datahub_integrations.mcp.graphql_helpers.execute_graphql")
     async def test_start_offset_raw_content_continuation(
         self,
         mock_execute_graphql,

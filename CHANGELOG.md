@@ -5,6 +5,58 @@ All notable changes to mcp-server-datahub will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.3] - 2026-03-09
+
+### Highlights — New SQL-like Filter Syntax
+
+The `search` and `get_lineage` tools now accept a **human-readable, SQL-like filter string** instead of the previous nested JSON dict. This is the headline change of this release — it makes filters dramatically easier for LLM agents (and humans) to write correctly.
+
+Since MCP tools are discovered dynamically by LLM agents at the start of every session (they read the tool schema each time), this is **not a breaking change** — agents will automatically pick up the new `filter` parameter and its syntax documentation.
+
+**Before (0.5.x):**
+```python
+search(query="*", filters={"entity_type": ["DATASET"]})
+search(query="*", filters={"and": [{"platform": ["snowflake"]}, {"env": ["PROD"]}]})
+```
+
+**After (0.5.3):**
+```python
+search(query="*", filter="entity_type = dataset")
+search(query="*", filter="platform = snowflake AND env = PROD")
+```
+
+The new syntax supports:
+- Simple equality: `platform = snowflake`
+- IN lists: `platform IN (snowflake, bigquery, redshift)`
+- Boolean logic: `AND`, `OR`, `NOT`, parentheses
+- Comparisons: `columnCount > 10`, `columnCount >= 5`
+- Existence checks: `tag IS NOT NULL`, `owner IS NULL`
+- Complex expressions: `entity_type = dataset AND (platform = snowflake OR platform = bigquery) AND NOT env = DEV`
+
+Supported fields: `entity_type`, `entity_subtype`, `platform`, `domain`, `container`, `tag`, `glossary_term`, `owner`, `env`, `status`, `deprecated`, `hasActiveIncidents`, `hasFailingAssertions`, `columnCount`, and any custom field name.
+
+### Added
+
+- **`search_filter_parser`**: Full SQL-like filter parser with tokenizer and recursive-descent parser. Compiles human-readable filter strings into DataHub SDK `Filter` objects. Includes comprehensive `FILTER_DOCS` that is injected into the `search` and `get_lineage` tool descriptions so LLM agents always have the syntax reference available.
+- **Modular tool architecture**: Tools are now organized into dedicated modules under `tools/` (`search.py`, `entities.py`, `lineage.py`, `dataset_queries.py`, `assertions.py`) instead of being defined inline in `mcp_server.py`.
+- **`graphql_helpers`**: Extracted shared GraphQL execution logic, token budgeting, and response processing into a dedicated module.
+- **`tool_context`**: New module for tool-level context management.
+- **`view_preference`**: Configurable view preference system (`UseDefaultView`, `NoView`, `CustomView`) for controlling which DataHub view is applied during search.
+- **`tools/assertions.py`**: New tool module for data quality assertion checks.
+
+### Changed
+
+- **`search` tool**: The `filters` parameter (JSON dict) is replaced by `filter` (string). See highlights section above.
+- **`get_lineage` tool**: Also uses the new string-based `filter` parameter for filtering lineage results.
+- **`mcp_server.py`**: Significantly slimmed down — tool implementations moved to dedicated modules, GraphQL helpers extracted, filter parsing extracted.
+- **Smoke check safety**: `smoke_check.py` now refuses to run against non-localhost DataHub instances to prevent accidental mutation of production data.
+
+### Removed
+
+- **`test_custom_filter_conversion.py`**: Removed obsolete test for the old dict-based filter format, replaced by `search_filter_parser`.
+
+---
+
 ## [0.5.2] - 2026-02-24
 
 ### Fixed

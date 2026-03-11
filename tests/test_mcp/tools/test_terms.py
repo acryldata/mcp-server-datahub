@@ -49,7 +49,7 @@ def test_add_glossary_terms_to_multiple_datasets(mock_datahub_client):
     ]
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         result = add_glossary_terms(term_urns=term_urns, entity_urns=entity_urns)
@@ -98,7 +98,7 @@ def test_add_glossary_terms_to_columns(mock_datahub_client):
     ]
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         result = add_glossary_terms(
@@ -139,7 +139,7 @@ def test_add_glossary_terms_mixed_entity_and_column(mock_datahub_client):
     ]
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         result = add_glossary_terms(
@@ -168,7 +168,7 @@ def test_add_glossary_terms_with_nonexistent_term(mock_datahub_client):
     mock_datahub_client._graph.execute_graphql.return_value = {"entities": []}
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         with pytest.raises(ValueError, match="do\ not\ exist\ in\ DataHub"):
@@ -188,7 +188,7 @@ def test_add_glossary_terms_with_non_term_urn(mock_datahub_client):
     }
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         with pytest.raises(ValueError, match="not\ glossary\ term\ entities"):
@@ -207,7 +207,7 @@ def test_add_glossary_terms_mismatched_column_paths_length(mock_datahub_client):
     }
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         with pytest.raises(ValueError, match="column_paths length"):
@@ -219,7 +219,7 @@ def test_add_glossary_terms_mismatched_column_paths_length(mock_datahub_client):
 def test_add_glossary_terms_empty_term_urns(mock_datahub_client):
     """Test that empty term_urns raises ValueError."""
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         with pytest.raises(ValueError, match="term_urns cannot be empty"):
@@ -229,7 +229,7 @@ def test_add_glossary_terms_empty_term_urns(mock_datahub_client):
 def test_add_glossary_terms_empty_entity_urns(mock_datahub_client):
     """Test that empty entity_urns raises ValueError."""
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         with pytest.raises(ValueError, match="entity_urns cannot be empty"):
@@ -248,7 +248,7 @@ def test_add_glossary_terms_mutation_returns_false(mock_datahub_client):
     ]
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         with pytest.raises(RuntimeError, match="Failed\ to\ add\ glossary\ terms"):
@@ -267,7 +267,7 @@ def test_add_glossary_terms_graphql_exception(mock_datahub_client):
     ]
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         with pytest.raises(RuntimeError, match="Error add\ glossary\ terms"):
@@ -300,7 +300,7 @@ def test_remove_glossary_terms_from_multiple_datasets(mock_datahub_client):
     ]
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         result = remove_glossary_terms(term_urns=term_urns, entity_urns=entity_urns)
@@ -342,7 +342,7 @@ def test_remove_glossary_terms_from_columns(mock_datahub_client):
     ]
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         result = remove_glossary_terms(
@@ -382,7 +382,7 @@ def test_remove_glossary_terms_mixed_entity_and_column(mock_datahub_client):
     ]
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         result = remove_glossary_terms(
@@ -411,7 +411,7 @@ def test_remove_glossary_terms_with_nonexistent_term(mock_datahub_client):
     mock_datahub_client._graph.execute_graphql.return_value = {"entities": []}
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         with pytest.raises(ValueError, match="do\ not\ exist\ in\ DataHub"):
@@ -431,7 +431,7 @@ def test_remove_glossary_terms_with_non_term_urn(mock_datahub_client):
     }
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         with pytest.raises(ValueError, match="not\ glossary\ term\ entities"):
@@ -450,7 +450,7 @@ def test_remove_glossary_terms_mismatched_column_paths_length(mock_datahub_clien
     }
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         with pytest.raises(ValueError, match="column_paths length"):
@@ -462,7 +462,7 @@ def test_remove_glossary_terms_mismatched_column_paths_length(mock_datahub_clien
 def test_remove_glossary_terms_empty_term_urns(mock_datahub_client):
     """Test that empty term_urns raises ValueError."""
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         with pytest.raises(ValueError, match="term_urns cannot be empty"):
@@ -472,7 +472,7 @@ def test_remove_glossary_terms_empty_term_urns(mock_datahub_client):
 def test_remove_glossary_terms_empty_entity_urns(mock_datahub_client):
     """Test that empty entity_urns raises ValueError."""
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         with pytest.raises(ValueError, match="entity_urns cannot be empty"):
@@ -493,7 +493,7 @@ def test_remove_glossary_terms_mutation_returns_false(mock_datahub_client):
     ]
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         with pytest.raises(RuntimeError, match="Failed\ to\ remove\ glossary\ terms"):
@@ -512,7 +512,7 @@ def test_remove_glossary_terms_graphql_exception(mock_datahub_client):
     ]
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         with pytest.raises(RuntimeError, match="Error remove\ glossary\ terms"):

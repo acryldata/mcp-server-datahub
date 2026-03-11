@@ -3,6 +3,7 @@
 import logging
 from typing import Any
 
+from .. import graphql_helpers
 from ..version_requirements import min_version
 
 logger = logging.getLogger(__name__)
@@ -28,10 +29,7 @@ def get_me() -> dict[str, Any]:
         # Get current user information
         get_me()
     """
-    # Late import to avoid circular dependency
-    from ..mcp_server import execute_graphql, get_datahub_client
-
-    client = get_datahub_client()
+    client = graphql_helpers.get_datahub_client()
 
     # GraphQL query to get authenticated user information
     query = """
@@ -78,7 +76,7 @@ def get_me() -> dict[str, Any]:
     """
 
     try:
-        result = execute_graphql(
+        result = graphql_helpers.execute_graphql(
             client._graph,
             query=query,
             variables={},

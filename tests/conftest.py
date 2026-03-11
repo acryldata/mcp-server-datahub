@@ -57,6 +57,30 @@ if using_oss:
     mcp_module.version_requirements = version_requirements  # type: ignore[attr-defined]
     sys.modules["datahub_integrations.mcp.version_requirements"] = version_requirements
 
+    # Import and expose graphql_helpers
+    from mcp_server_datahub import graphql_helpers
+
+    mcp_module.graphql_helpers = graphql_helpers  # type: ignore[attr-defined]
+    sys.modules["datahub_integrations.mcp.graphql_helpers"] = graphql_helpers
+
+    # Import and expose search_filter_parser
+    from mcp_server_datahub import search_filter_parser
+
+    mcp_module.search_filter_parser = search_filter_parser  # type: ignore[attr-defined]
+    sys.modules["datahub_integrations.mcp.search_filter_parser"] = search_filter_parser
+
+    # Import and expose tool_context
+    from mcp_server_datahub import tool_context
+
+    mcp_module.tool_context = tool_context  # type: ignore[attr-defined]
+    sys.modules["datahub_integrations.mcp.tool_context"] = tool_context
+
+    # Import and expose view_preference
+    from mcp_server_datahub import view_preference
+
+    mcp_module.view_preference = view_preference  # type: ignore[attr-defined]
+    sys.modules["datahub_integrations.mcp.view_preference"] = view_preference
+
     # Create datahub_integrations.mcp.tools submodule
     tools_module = types.ModuleType("datahub_integrations.mcp.tools")
     sys.modules["datahub_integrations.mcp.tools"] = tools_module
@@ -78,22 +102,40 @@ if using_oss:
     tags_module = sys.modules["mcp_server_datahub.tools.tags"]
     terms_module = sys.modules["mcp_server_datahub.tools.terms"]
 
+    assertions_module = sys.modules["mcp_server_datahub.tools.assertions"]
+    dataset_queries_module = sys.modules["mcp_server_datahub.tools.dataset_queries"]
+    entities_module = sys.modules["mcp_server_datahub.tools.entities"]
+    lineage_module = sys.modules["mcp_server_datahub.tools.lineage"]
+    search_module = sys.modules["mcp_server_datahub.tools.search"]
+
+    tools_module.assertions = assertions_module  # type: ignore[attr-defined]
+    tools_module.dataset_queries = dataset_queries_module  # type: ignore[attr-defined]
     tools_module.descriptions = descriptions_module  # type: ignore[attr-defined]
     tools_module.documents = documents_module  # type: ignore[attr-defined]
     tools_module.domains = domains_module  # type: ignore[attr-defined]
+    tools_module.entities = entities_module  # type: ignore[attr-defined]
     tools_module.get_me = get_me_module  # type: ignore[attr-defined]
+    tools_module.lineage = lineage_module  # type: ignore[attr-defined]
     tools_module.owners = owners_module  # type: ignore[attr-defined]
     tools_module.save_document = save_document_module  # type: ignore[attr-defined]
+    tools_module.search = search_module  # type: ignore[attr-defined]
     tools_module.structured_properties = structured_properties_module  # type: ignore[attr-defined]
     tools_module.tags = tags_module  # type: ignore[attr-defined]
     tools_module.terms = terms_module  # type: ignore[attr-defined]
 
+    sys.modules["datahub_integrations.mcp.tools.assertions"] = assertions_module
+    sys.modules["datahub_integrations.mcp.tools.dataset_queries"] = (
+        dataset_queries_module
+    )
     sys.modules["datahub_integrations.mcp.tools.descriptions"] = descriptions_module
     sys.modules["datahub_integrations.mcp.tools.documents"] = documents_module
     sys.modules["datahub_integrations.mcp.tools.domains"] = domains_module
+    sys.modules["datahub_integrations.mcp.tools.entities"] = entities_module
     sys.modules["datahub_integrations.mcp.tools.get_me"] = get_me_module
+    sys.modules["datahub_integrations.mcp.tools.lineage"] = lineage_module
     sys.modules["datahub_integrations.mcp.tools.owners"] = owners_module
     sys.modules["datahub_integrations.mcp.tools.save_document"] = save_document_module
+    sys.modules["datahub_integrations.mcp.tools.search"] = search_module
     sys.modules["datahub_integrations.mcp.tools.structured_properties"] = (
         structured_properties_module
     )

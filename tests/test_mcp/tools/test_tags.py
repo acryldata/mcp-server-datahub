@@ -38,7 +38,7 @@ def test_add_tags_to_multiple_datasets(mock_datahub_client):
     ]
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         result = add_tags(tag_urns=tag_urns, entity_urns=entity_urns)
@@ -78,7 +78,7 @@ def test_add_tags_to_columns(mock_datahub_client):
     ]
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         result = add_tags(
@@ -121,7 +121,7 @@ def test_add_tags_mixed_entity_and_column_level(mock_datahub_client):
     ]
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         result = add_tags(
@@ -146,7 +146,7 @@ def test_add_tags_mixed_entity_and_column_level(mock_datahub_client):
 def test_add_tags_empty_tag_urns(mock_datahub_client):
     """Test that empty tag_urns raises ValueError."""
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         with pytest.raises(ValueError, match="tag_urns cannot be empty"):
@@ -156,7 +156,7 @@ def test_add_tags_empty_tag_urns(mock_datahub_client):
 def test_add_tags_empty_entity_urns(mock_datahub_client):
     """Test that empty entity_urns raises ValueError."""
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         with pytest.raises(ValueError, match="entity_urns cannot be empty"):
@@ -175,7 +175,7 @@ def test_add_tags_mismatched_column_paths_length(mock_datahub_client):
     }
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         with pytest.raises(ValueError, match="column_paths length.*must match"):
@@ -202,7 +202,7 @@ def test_add_tags_graphql_failure(mock_datahub_client):
     ]
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         with pytest.raises(RuntimeError, match="Failed\ to\ add\ tags"):
@@ -225,7 +225,7 @@ def test_add_tags_graphql_exception(mock_datahub_client):
     ]
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         with pytest.raises(RuntimeError, match="Error add\ tags"):
@@ -258,7 +258,7 @@ def test_remove_tags_from_multiple_datasets(mock_datahub_client):
     ]
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         result = remove_tags(tag_urns=tag_urns, entity_urns=entity_urns)
@@ -292,7 +292,7 @@ def test_remove_tags_from_columns(mock_datahub_client):
     ]
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         result = remove_tags(
@@ -333,7 +333,7 @@ def test_remove_tags_mixed_entity_and_column_level(mock_datahub_client):
     ]
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         result = remove_tags(
@@ -357,7 +357,7 @@ def test_remove_tags_mixed_entity_and_column_level(mock_datahub_client):
 def test_remove_tags_empty_tag_urns(mock_datahub_client):
     """Test that empty tag_urns raises ValueError."""
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         with pytest.raises(ValueError, match="tag_urns cannot be empty"):
@@ -367,7 +367,7 @@ def test_remove_tags_empty_tag_urns(mock_datahub_client):
 def test_remove_tags_empty_entity_urns(mock_datahub_client):
     """Test that empty entity_urns raises ValueError."""
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         with pytest.raises(ValueError, match="entity_urns cannot be empty"):
@@ -386,7 +386,7 @@ def test_remove_tags_mismatched_column_paths_length(mock_datahub_client):
     }
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         with pytest.raises(ValueError, match="column_paths length.*must match"):
@@ -412,7 +412,7 @@ def test_remove_tags_graphql_failure(mock_datahub_client):
     ]
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         with pytest.raises(RuntimeError, match="Failed\ to\ remove\ tags"):
@@ -434,7 +434,7 @@ def test_remove_tags_graphql_exception(mock_datahub_client):
     ]
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         with pytest.raises(RuntimeError, match="Error remove\ tags"):
@@ -457,7 +457,7 @@ def test_add_tags_with_empty_string_subresource(mock_datahub_client):
     ]
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         result = add_tags(
@@ -491,7 +491,7 @@ def test_remove_tags_with_empty_string_subresource(mock_datahub_client):
     ]
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         result = remove_tags(
@@ -518,7 +518,7 @@ def test_add_tags_with_nonexistent_tag(mock_datahub_client):
     mock_datahub_client._graph.execute_graphql.return_value = {"entities": []}
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         with pytest.raises(ValueError, match="do\ not\ exist\ in\ DataHub"):
@@ -536,7 +536,7 @@ def test_add_tags_with_non_tag_urn(mock_datahub_client):
     }
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         with pytest.raises(ValueError, match="not\ tag\ entities"):
@@ -552,7 +552,7 @@ def test_remove_tags_with_nonexistent_tag(mock_datahub_client):
     mock_datahub_client._graph.execute_graphql.return_value = {"entities": []}
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         with pytest.raises(ValueError, match="do\ not\ exist\ in\ DataHub"):
@@ -570,7 +570,7 @@ def test_remove_tags_with_non_tag_urn(mock_datahub_client):
     }
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         with pytest.raises(ValueError, match="not\ tag\ entities"):

@@ -161,7 +161,7 @@ class TestFilterToolsByVersion:
         client = MagicMock()
         client._graph._gms_server = "http://localhost:8080"
         with patch(
-            "datahub_integrations.mcp.mcp_server.get_datahub_client",
+            "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
             return_value=client,
         ):
             yield client
@@ -281,7 +281,7 @@ class TestVersionFilterMiddleware:
 
     @pytest.mark.asyncio
     @patch("datahub_integrations.mcp.version_requirements._get_server_version_info")
-    @patch("datahub_integrations.mcp.mcp_server.get_datahub_client")
+    @patch("datahub_integrations.mcp.graphql_helpers.get_datahub_client")
     async def test_middleware_filters_incompatible_tools(
         self, mock_get_client, mock_version_info, middleware, mock_tools, mock_context
     ):

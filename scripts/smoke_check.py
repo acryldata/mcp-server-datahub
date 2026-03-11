@@ -201,7 +201,7 @@ async def discover_urns(
     search_result = await call_tool(
         mcp_client,
         "search",
-        {"query": "*", "filters": {"entity_type": ["DATASET"]}, "num_results": 10},
+        {"query": "*", "filter": "entity_type = dataset", "num_results": 10},
     )
     search_data = json.loads(search_result.content[0].text)
     for sr in search_data.get("searchResults", []):
@@ -716,6 +716,18 @@ async def run_smoke_check(
 
     report = SmokeCheckReport()
     client = DataHubClient.from_env(client_mode=ClientMode.SDK)
+
+    # Safety check: only allow smoke tests against localhost
+    gms_server = str(client._graph.config.server)
+    from urllib.parse import urlparse
+
+    parsed = urlparse(gms_server)
+    if parsed.hostname not in ("localhost", "127.0.0.1", "::1"):
+        raise click.ClickException(
+            f"Smoke tests must run against localhost, but DATAHUB_GMS_URL is "
+            f"'{gms_server}'. Update ~/.datahubenv or set DATAHUB_GMS_URL to "
+            f"a local instance."
+        )
 
     # For in-process mode, we set the ContextVar directly (same effect as
     # _DataHubClientMiddleware, which is tested via HTTP/SSE/stdio modes).

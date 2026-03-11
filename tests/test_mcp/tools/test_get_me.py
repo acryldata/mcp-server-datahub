@@ -102,7 +102,7 @@ def test_get_me_successful(mock_datahub_client):
     }
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         result = get_me()
@@ -189,7 +189,7 @@ def test_get_me_minimal_user_data(mock_datahub_client):
     }
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         result = get_me()
@@ -277,7 +277,7 @@ def test_get_me_user_with_multiple_groups(mock_datahub_client):
     }
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         result = get_me()
@@ -297,7 +297,7 @@ def test_get_me_no_authenticated_user(mock_datahub_client):
     mock_datahub_client._graph.execute_graphql.return_value = {"me": None}
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         with pytest.raises(RuntimeError, match="No authenticated user found"):
@@ -312,7 +312,7 @@ def test_get_me_graphql_exception(mock_datahub_client):
     )
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         with pytest.raises(RuntimeError, match="Authentication failed"):
@@ -327,7 +327,7 @@ def test_get_me_network_error(mock_datahub_client):
     )
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         with pytest.raises(RuntimeError, match="Network unreachable"):
@@ -402,7 +402,7 @@ def test_get_me_admin_user(mock_datahub_client):
     }
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         result = get_me()
@@ -475,7 +475,7 @@ def test_get_me_readonly_user(mock_datahub_client):
     }
 
     with patch(
-        "datahub_integrations.mcp.mcp_server.get_datahub_client",
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
         return_value=mock_datahub_client,
     ):
         result = get_me()

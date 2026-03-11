@@ -5,6 +5,7 @@ from typing import List, Literal, Optional
 
 from datahub.sdk.main_client import DataHubClient
 
+from .. import graphql_helpers
 from ..version_requirements import min_version
 
 logger = logging.getLogger(__name__)
@@ -17,9 +18,6 @@ def _validate_glossary_term_urns(client: DataHubClient, term_urns: List[str]) ->
     Raises:
         ValueError: If any term URN does not exist or is invalid
     """
-
-    # Late import to avoid circular dependency
-    from ..mcp_server import execute_graphql
 
     # Query to check if glossary terms exist
     query = """
@@ -35,7 +33,7 @@ def _validate_glossary_term_urns(client: DataHubClient, term_urns: List[str]) ->
     """
 
     try:
-        result = execute_graphql(
+        result = graphql_helpers.execute_graphql(
             client._graph,
             query=query,
             variables={"urns": term_urns},
@@ -85,10 +83,7 @@ def _batch_modify_glossary_terms(
 
     Validates inputs, constructs GraphQL mutation, and executes the operation.
     """
-    # Late import to avoid circular dependency
-    from ..mcp_server import execute_graphql, get_datahub_client
-
-    client = get_datahub_client()
+    client = graphql_helpers.get_datahub_client()
 
     # Validate inputs
     if not term_urns:
@@ -142,7 +137,7 @@ def _batch_modify_glossary_terms(
     variables = {"input": {"termUrns": term_urns, "resources": resources}}
 
     try:
-        result = execute_graphql(
+        result = graphql_helpers.execute_graphql(
             client._graph,
             query=mutation,
             variables=variables,

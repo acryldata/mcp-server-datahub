@@ -182,7 +182,7 @@ class TestSaveDocument:
         }
 
         with patch(
-            "datahub_integrations.mcp.mcp_server.get_datahub_client",
+            "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
             return_value=mock_datahub_client,
         ):
             result = save_document(
@@ -204,7 +204,7 @@ class TestSaveDocument:
     def test_save_document_empty_title_fails(self, mock_datahub_client):
         """Test that empty title returns error."""
         with patch(
-            "datahub_integrations.mcp.mcp_server.get_datahub_client",
+            "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
             return_value=mock_datahub_client,
         ):
             result = save_document(
@@ -219,7 +219,7 @@ class TestSaveDocument:
     def test_save_document_empty_content_fails(self, mock_datahub_client):
         """Test that empty content returns error."""
         with patch(
-            "datahub_integrations.mcp.mcp_server.get_datahub_client",
+            "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
             return_value=mock_datahub_client,
         ):
             result = save_document(
@@ -234,7 +234,7 @@ class TestSaveDocument:
     def test_save_document_invalid_document_type_fails(self, mock_datahub_client):
         """Test that invalid document type returns error."""
         with patch(
-            "datahub_integrations.mcp.mcp_server.get_datahub_client",
+            "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
             return_value=mock_datahub_client,
         ):
             result = save_document(
@@ -254,7 +254,7 @@ class TestSaveDocument:
         }
 
         with patch(
-            "datahub_integrations.mcp.mcp_server.get_datahub_client",
+            "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
             return_value=mock_datahub_client,
         ):
             result = save_document(
@@ -287,7 +287,7 @@ class TestSaveDocument:
         with (
             patch.dict(os.environ, {"SAVE_DOCUMENT_RESTRICT_UPDATES": "false"}),
             patch(
-                "datahub_integrations.mcp.mcp_server.get_datahub_client",
+                "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
                 return_value=mock_datahub_client,
             ),
         ):
@@ -305,7 +305,7 @@ class TestSaveDocument:
     def test_save_document_invalid_urn_format(self, mock_datahub_client):
         """Test that invalid URN format returns error."""
         with patch(
-            "datahub_integrations.mcp.mcp_server.get_datahub_client",
+            "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
             return_value=mock_datahub_client,
         ):
             result = save_document(
@@ -338,7 +338,7 @@ class TestSaveDocument:
         with (
             patch.dict(os.environ, {"SAVE_DOCUMENT_RESTRICT_UPDATES": "true"}),
             patch(
-                "datahub_integrations.mcp.mcp_server.get_datahub_client",
+                "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
                 return_value=mock_datahub_client,
             ),
         ):
@@ -362,7 +362,7 @@ class TestSaveDocument:
         }
 
         with patch(
-            "datahub_integrations.mcp.mcp_server.get_datahub_client",
+            "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
             return_value=mock_datahub_client,
         ):
             result = save_document(
@@ -397,7 +397,7 @@ class TestSaveDocument:
         }
 
         with patch(
-            "datahub_integrations.mcp.mcp_server.get_datahub_client",
+            "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
             return_value=mock_datahub_client,
         ):
             for document_type in valid_types:
@@ -413,7 +413,7 @@ class TestSaveDocument:
     def test_save_document_exception_handling(
         self, mock_datahub_client, mock_user_info
     ):
-        """Test handling of exceptions during save."""
+        """Test that exceptions during save are raised as RuntimeError."""
         mock_datahub_client.entities.get.return_value = Mock()
         mock_datahub_client._graph.execute_graphql.return_value = {
             "me": {"corpUser": mock_user_info}
@@ -421,17 +421,15 @@ class TestSaveDocument:
         mock_datahub_client.entities.upsert.side_effect = Exception("Network error")
 
         with patch(
-            "datahub_integrations.mcp.mcp_server.get_datahub_client",
+            "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
             return_value=mock_datahub_client,
         ):
-            result = save_document(
-                document_type="Insight",
-                title="Test Document",
-                content="Some content",
-            )
-
-        assert result["success"] is False
-        assert "Error saving document" in result["message"]
+            with pytest.raises(RuntimeError, match="Error saving document"):
+                save_document(
+                    document_type="Insight",
+                    title="Test Document",
+                    content="Some content",
+                )
 
     def test_save_document_without_user_info(self, mock_datahub_client):
         """Test saving when user info is not available."""
@@ -439,7 +437,7 @@ class TestSaveDocument:
         mock_datahub_client._graph.execute_graphql.return_value = {"me": None}
 
         with patch(
-            "datahub_integrations.mcp.mcp_server.get_datahub_client",
+            "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
             return_value=mock_datahub_client,
         ):
             result = save_document(
@@ -454,7 +452,7 @@ class TestSaveDocument:
     def test_save_document_whitespace_title_fails(self, mock_datahub_client):
         """Test that whitespace-only title returns error."""
         with patch(
-            "datahub_integrations.mcp.mcp_server.get_datahub_client",
+            "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
             return_value=mock_datahub_client,
         ):
             result = save_document(
@@ -469,7 +467,7 @@ class TestSaveDocument:
     def test_save_document_whitespace_content_fails(self, mock_datahub_client):
         """Test that whitespace-only content returns error."""
         with patch(
-            "datahub_integrations.mcp.mcp_server.get_datahub_client",
+            "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
             return_value=mock_datahub_client,
         ):
             result = save_document(
@@ -493,7 +491,7 @@ class TestSaveDocument:
         with (
             patch.dict(os.environ, {"SAVE_DOCUMENT_ORGANIZE_BY_USER": "false"}),
             patch(
-                "datahub_integrations.mcp.mcp_server.get_datahub_client",
+                "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
                 return_value=mock_datahub_client,
             ),
         ):
@@ -519,7 +517,7 @@ class TestSaveDocument:
         with (
             patch.dict(os.environ, {"SAVE_DOCUMENT_PARENT_TITLE": "My Custom Folder"}),
             patch(
-                "datahub_integrations.mcp.mcp_server.get_datahub_client",
+                "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
                 return_value=mock_datahub_client,
             ),
         ):
@@ -570,7 +568,7 @@ class TestDocumentInSharedFolder:
         mock_datahub_client.entities.get.return_value = mock_doc
 
         with patch(
-            "datahub_integrations.mcp.mcp_server.get_datahub_client",
+            "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
             return_value=mock_datahub_client,
         ):
             is_valid, error = _is_document_in_shared_folder(
@@ -592,7 +590,7 @@ class TestDocumentInSharedFolder:
         mock_datahub_client.entities.get.return_value = mock_doc
 
         with patch(
-            "datahub_integrations.mcp.mcp_server.get_datahub_client",
+            "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
             return_value=mock_datahub_client,
         ):
             is_valid, error = _is_document_in_shared_folder(
@@ -611,7 +609,7 @@ class TestDocumentInSharedFolder:
         mock_datahub_client.entities.get.return_value = mock_doc
 
         with patch(
-            "datahub_integrations.mcp.mcp_server.get_datahub_client",
+            "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
             return_value=mock_datahub_client,
         ):
             is_valid, error = _is_document_in_shared_folder(
@@ -626,7 +624,7 @@ class TestDocumentInSharedFolder:
         mock_datahub_client.entities.get.return_value = None
 
         with patch(
-            "datahub_integrations.mcp.mcp_server.get_datahub_client",
+            "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
             return_value=mock_datahub_client,
         ):
             is_valid, error = _is_document_in_shared_folder(
@@ -641,7 +639,7 @@ class TestDocumentInSharedFolder:
         root_urn = _get_root_parent_urn()
 
         with patch(
-            "datahub_integrations.mcp.mcp_server.get_datahub_client",
+            "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
             return_value=mock_datahub_client,
         ):
             is_valid, error = _is_document_in_shared_folder(root_urn)
@@ -656,7 +654,7 @@ class TestDocumentInSharedFolder:
         mock_datahub_client.entities.get.return_value = mock_doc
 
         with patch(
-            "datahub_integrations.mcp.mcp_server.get_datahub_client",
+            "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
             return_value=mock_datahub_client,
         ):
             is_valid, error = _is_document_in_shared_folder(
@@ -689,7 +687,7 @@ class TestTopicsToTags:
         mock_datahub_client.entities.upsert = capture_upsert
 
         with patch(
-            "datahub_integrations.mcp.mcp_server.get_datahub_client",
+            "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
             return_value=mock_datahub_client,
         ):
             result = save_document(
@@ -715,7 +713,7 @@ class TestUpdateOwnership:
         }
 
         with patch(
-            "datahub_integrations.mcp.mcp_server.get_datahub_client",
+            "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
             return_value=mock_datahub_client,
         ):
             result = save_document(
@@ -747,7 +745,7 @@ class TestUpdateOwnership:
         existing_urn = "urn:li:document:shared-existing-doc-123"
 
         with patch(
-            "datahub_integrations.mcp.mcp_server.get_datahub_client",
+            "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
             return_value=mock_datahub_client,
         ):
             result = save_document(
@@ -774,7 +772,7 @@ class TestOrganizeByUser:
         with (
             patch.dict(os.environ, {"SAVE_DOCUMENT_ORGANIZE_BY_USER": "true"}),
             patch(
-                "datahub_integrations.mcp.mcp_server.get_datahub_client",
+                "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
                 return_value=mock_datahub_client,
             ),
         ):
@@ -801,7 +799,7 @@ class TestRelatedDocuments:
         }
 
         with patch(
-            "datahub_integrations.mcp.mcp_server.get_datahub_client",
+            "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
             return_value=mock_datahub_client,
         ):
             result = save_document(
@@ -826,7 +824,7 @@ class TestRelatedDocuments:
         }
 
         with patch(
-            "datahub_integrations.mcp.mcp_server.get_datahub_client",
+            "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
             return_value=mock_datahub_client,
         ):
             result = save_document(

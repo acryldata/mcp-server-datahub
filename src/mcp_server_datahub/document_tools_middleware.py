@@ -31,7 +31,9 @@ Usage (tool filtering):
     filtered_tools = filter_document_tools(tools)
 """
 
+import asyncio
 import os
+import threading
 from typing import Any, Sequence, TypeVar
 
 import cachetools
@@ -58,11 +60,15 @@ def _are_document_tools_disabled() -> bool:
 DOCUMENT_CHECK_CACHE_TTL_SECONDS = 60  # 1 minute
 
 
+_document_check_cache_lock = threading.RLock()
+
+
 # NOTE: If document visibility ever becomes user-specific (e.g., based on permissions),
 # we'll need to add the current user ID as a parameter to this function so that
 # caching works properly per user instead of globally.
 @cachetools.cached(
-    cache=cachetools.TTLCache(maxsize=1, ttl=DOCUMENT_CHECK_CACHE_TTL_SECONDS)
+    cache=cachetools.TTLCache(maxsize=1, ttl=DOCUMENT_CHECK_CACHE_TTL_SECONDS),
+    lock=_document_check_cache_lock,
 )
 def _query_documents_exist_cached() -> bool:
     """
@@ -86,7 +92,7 @@ def _query_documents_exist_cached() -> bool:
         Exception: If the GraphQL query fails
     """
     # Import here to avoid circular imports at module load time
-    from .mcp_server import execute_graphql, get_datahub_client
+    from .graphql_helpers import execute_graphql, get_datahub_client
     from .tools.documents import document_search_gql
 
     logger.debug("Document check cache miss, querying DataHub")
@@ -223,8 +229,5 @@ class DocumentToolsMiddleware(Middleware):
         Returns:
             The list of tools, with document tools filtered out if no documents exist
         """
-        # First, get the full list of tools from the next handler
         tools = await call_next(context)
-
-        # Filter document tools using the shared helper function
-        return filter_document_tools(tools)
+        return await asyncio.to_thread(filter_document_tools, tools)
