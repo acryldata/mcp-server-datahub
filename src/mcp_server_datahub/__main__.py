@@ -1,11 +1,13 @@
 import logging
-from typing import Any
+import os
+from typing import Any, Optional
 
 import click
-from datahub.ingestion.graph.config import ClientMode
+from datahub.ingestion.graph.config import ClientMode, DatahubClientConfig
 from datahub.sdk.main_client import DataHubClient
 from datahub.telemetry import telemetry
 from fastmcp import FastMCP
+from fastmcp.server.dependencies import get_http_request
 from fastmcp.server.middleware import Middleware
 from fastmcp.server.middleware.logging import LoggingMiddleware
 from starlette.requests import Request
@@ -24,6 +26,31 @@ logging.basicConfig(level=logging.INFO)
 register_all_tools(is_oss=True)
 
 
+_GET_ME_QUERY = "query getMe { me { corpUser { urn username } } }"
+
+
+def _verify_client(client: DataHubClient) -> None:
+    """Verify the client can authenticate by calling the me query."""
+    client._graph.execute_graphql(_GET_ME_QUERY)
+
+
+def _token_from_request() -> Optional[str]:
+    """Extract a DataHub token from the current HTTP request.
+
+    Checks, in order:
+    1. ``Authorization: Bearer <token>`` header
+    2. ``token`` query parameter
+    """
+    try:
+        request = get_http_request()
+    except RuntimeError:
+        return None
+    auth = request.headers.get("authorization", "")
+    if auth.startswith("Bearer "):
+        return auth[len("Bearer "):]
+    return request.query_params.get("token") or None
+
+
 class _DataHubClientMiddleware(Middleware):
     """Middleware that propagates the DataHub client ContextVar into each request.
 
@@ -32,18 +59,42 @@ class _DataHubClientMiddleware(Middleware):
     thread. This middleware ensures the DataHub client is available in every request
     context by setting the ContextVar at the start of each MCP message.
 
+    If the request carries a token (via ``Authorization: Bearer`` header or ``token``
+    query parameter) a per-request client is constructed using that token against the
+    same server URL. Otherwise the env-configured default client is used.
+
     Must be added as the first middleware so it wraps all other middlewares.
     """
 
-    def __init__(self, client: DataHubClient) -> None:
-        self._client = client
+    def __init__(self, server_url: str, default_client: Optional[DataHubClient]) -> None:
+        self._server_url = server_url
+        self._default_client = default_client
+
+    def _client_for_request(self) -> DataHubClient:
+        token = _token_from_request()
+        if token is not None:
+            client = DataHubClient(
+                config=DatahubClientConfig(
+                    server=self._server_url,
+                    token=token,
+                    client_mode=ClientMode.SDK,
+                    datahub_component=f"mcp-server-datahub/{__version__}",
+                )
+            )
+            _verify_client(client)
+            return client
+        elif self._default_client is not None:
+            return self._default_client
+        raise ValueError(
+            "No DataHub token provided. Supply a token via the Authorization header or ?token= query parameter."
+        )
 
     async def on_message(
         self,
         context: Any,
         call_next: Any,
     ) -> Any:
-        with with_datahub_client(self._client):
+        with with_datahub_client(self._client_for_request()):
             return await call_next(context)
 
 
@@ -72,16 +123,28 @@ def create_app() -> FastMCP:
     if _app_initialized:
         return mcp
 
-    client = DataHubClient.from_env(
-        client_mode=ClientMode.SDK,
-        datahub_component=f"mcp-server-datahub/{__version__}",
-    )
+    server_url = os.environ.get("DATAHUB_GMS_URL")
+    if not server_url:
+        raise RuntimeError("DATAHUB_GMS_URL environment variable is required.")
+
+    global_token = os.environ.get("DATAHUB_GMS_TOKEN")
+    default_client: Optional[DataHubClient] = None
+    if global_token:
+        default_client = DataHubClient(
+            config=DatahubClientConfig(
+                server=server_url,
+                token=global_token,
+                client_mode=ClientMode.SDK,
+                datahub_component=f"mcp-server-datahub/{__version__}",
+            )
+        )
+        default_client.test_connection()
 
     # _DataHubClientMiddleware must be first so the client ContextVar is
     # available to all subsequent middlewares and tool handlers.  This is
     # especially important for HTTP transport where each request runs in a
     # separate async context.
-    mcp.add_middleware(_DataHubClientMiddleware(client))
+    mcp.add_middleware(_DataHubClientMiddleware(server_url, default_client))
     mcp.add_middleware(TelemetryMiddleware())
     mcp.add_middleware(VersionFilterMiddleware())
     mcp.add_middleware(DocumentToolsMiddleware())
@@ -115,7 +178,7 @@ def main(transport: Literal["stdio", "sse", "http"], debug: bool) -> None:
     create_app()
 
     if transport == "http":
-        mcp.run(transport=transport, show_banner=False, stateless_http=True)
+        mcp.run(transport=transport, show_banner=False, stateless_http=True, host="0.0.0.0")
     else:
         mcp.run(transport=transport, show_banner=False)
 

@@ -272,23 +272,30 @@ The agent may either:
 
 ## Docker (HTTP Deployment)
 
-The server can be run as a standalone HTTP service using Docker.
+The server can be run as a standalone HTTP service using Docker. In this mode, authentication tokens are supplied **per request** rather than baked into the server — making it suitable for multi-user deployments where each client has its own DataHub token.
+
+### Authentication
+
+`DATAHUB_GMS_URL` is required at startup. `DATAHUB_GMS_TOKEN` is optional — if omitted, every request must supply a token via:
+
+- **`Authorization` header** (recommended):
+  ```
+  Authorization: Bearer <your-datahub-token>
+  ```
+- **`token` query parameter**:
+  ```
+  http://localhost:8000/mcp?token=<your-datahub-token>
+  ```
+
+If `DATAHUB_GMS_TOKEN` is set, it acts as a fallback for requests that don't provide their own token. A per-request token always takes priority.
 
 ### Docker Compose (recommended)
 
-Copy the required environment variables and start the server:
-
-```bash
-DATAHUB_GMS_URL=https://your-datahub-instance \
-DATAHUB_GMS_TOKEN=your-token \
-docker compose up
-```
-
-Or create a `.env` file:
+Create a `.env` file:
 
 ```env
 DATAHUB_GMS_URL=https://your-datahub-instance
-DATAHUB_GMS_TOKEN=your-token
+# DATAHUB_GMS_TOKEN=your-token  # optional: omit to require per-request auth
 ```
 
 Then run:
@@ -303,7 +310,6 @@ docker compose up
 docker build -t mcp-server-datahub .
 docker run -p 8000:8000 \
   -e DATAHUB_GMS_URL=https://your-datahub-instance \
-  -e DATAHUB_GMS_TOKEN=your-token \
   mcp-server-datahub
 ```
 
