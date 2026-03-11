@@ -7,6 +7,8 @@ from datahub.ingestion.graph.config import ClientMode, DatahubClientConfig
 from datahub.sdk.main_client import DataHubClient
 from datahub.telemetry import telemetry
 from fastmcp import FastMCP
+from fastmcp.server.auth import TokenVerifier
+from fastmcp.server.auth.auth import AccessToken
 from fastmcp.server.dependencies import get_http_request
 from fastmcp.server.middleware import Middleware
 from fastmcp.server.middleware.logging import LoggingMiddleware
@@ -29,6 +31,17 @@ register_all_tools(is_oss=True)
 _GET_ME_QUERY = "query getMe { me { corpUser { urn username } } }"
 
 
+def _build_client(server_url: str, token: str) -> DataHubClient:
+    return DataHubClient(
+        config=DatahubClientConfig(
+            server=server_url,
+            token=token,
+            client_mode=ClientMode.SDK,
+            datahub_component=f"mcp-server-datahub/{__version__}",
+        )
+    )
+
+
 def _verify_client(client: DataHubClient) -> None:
     """Verify the client can authenticate by calling the me query."""
     client._graph.execute_graphql(_GET_ME_QUERY)
@@ -37,9 +50,7 @@ def _verify_client(client: DataHubClient) -> None:
 def _token_from_request() -> Optional[str]:
     """Extract a DataHub token from the current HTTP request.
 
-    Checks, in order:
-    1. ``Authorization: Bearer <token>`` header
-    2. ``token`` query parameter
+    Reads the ``Authorization: Bearer <token>`` header.
     """
     try:
         request = get_http_request()
@@ -47,8 +58,30 @@ def _token_from_request() -> Optional[str]:
         return None
     auth = request.headers.get("authorization", "")
     if auth.startswith("Bearer "):
-        return auth[len("Bearer "):]
-    return request.query_params.get("token") or None
+        return auth[len("Bearer ") :]
+    return None
+
+
+class _DataHubTokenVerifier(TokenVerifier):
+    """FastMCP TokenVerifier that validates DataHub bearer tokens.
+
+    Called by FastMCP's BearerAuthBackend for every HTTP request that carries
+    an Authorization: Bearer header.  If the token is valid a synthetic
+    AccessToken is returned; otherwise None causes FastMCP to reply with
+    401 WWW-Authenticate: Bearer automatically.
+    """
+
+    def __init__(self, server_url: str) -> None:
+        super().__init__()
+        self._server_url = server_url
+
+    async def verify_token(self, token: str) -> Optional[AccessToken]:
+        try:
+            client = _build_client(self._server_url, token)
+            _verify_client(client)
+            return AccessToken(client_id="datahub", scopes=[], token=token)
+        except Exception:
+            return None
 
 
 class _DataHubClientMiddleware(Middleware):
@@ -59,34 +92,28 @@ class _DataHubClientMiddleware(Middleware):
     thread. This middleware ensures the DataHub client is available in every request
     context by setting the ContextVar at the start of each MCP message.
 
-    If the request carries a token (via ``Authorization: Bearer`` header or ``token``
-    query parameter) a per-request client is constructed using that token against the
-    same server URL. Otherwise the env-configured default client is used.
+    Token validation is handled upstream by ``_DataHubTokenVerifier`` for Bearer
+    tokens. This middleware only needs to build the client for the current request
+    (or fall back to the default client when a global token is configured).
 
     Must be added as the first middleware so it wraps all other middlewares.
     """
 
-    def __init__(self, server_url: str, default_client: Optional[DataHubClient]) -> None:
+    def __init__(
+        self, server_url: str, default_client: Optional[DataHubClient]
+    ) -> None:
         self._server_url = server_url
         self._default_client = default_client
 
     def _client_for_request(self) -> DataHubClient:
         token = _token_from_request()
         if token is not None:
-            client = DataHubClient(
-                config=DatahubClientConfig(
-                    server=self._server_url,
-                    token=token,
-                    client_mode=ClientMode.SDK,
-                    datahub_component=f"mcp-server-datahub/{__version__}",
-                )
-            )
-            _verify_client(client)
-            return client
-        elif self._default_client is not None:
+            # Token already validated by _DataHubTokenVerifier.
+            return _build_client(self._server_url, token)
+        if self._default_client is not None:
             return self._default_client
         raise ValueError(
-            "No DataHub token provided. Supply a token via the Authorization header or ?token= query parameter."
+            "No DataHub token provided. Supply a token via the Authorization header."
         )
 
     async def on_message(
@@ -130,15 +157,8 @@ def create_app() -> FastMCP:
     global_token = os.environ.get("DATAHUB_GMS_TOKEN")
     default_client: Optional[DataHubClient] = None
     if global_token:
-        default_client = DataHubClient(
-            config=DatahubClientConfig(
-                server=server_url,
-                token=global_token,
-                client_mode=ClientMode.SDK,
-                datahub_component=f"mcp-server-datahub/{__version__}",
-            )
-        )
-        default_client.test_connection()
+        default_client = _build_client(server_url, global_token)
+        _verify_client(default_client)
 
     # _DataHubClientMiddleware must be first so the client ContextVar is
     # available to all subsequent middlewares and tool handlers.  This is
@@ -178,7 +198,15 @@ def main(transport: Literal["stdio", "sse", "http"], debug: bool) -> None:
     create_app()
 
     if transport == "http":
-        mcp.run(transport=transport, show_banner=False, stateless_http=True, host="0.0.0.0")
+        server_url = os.environ.get("DATAHUB_GMS_URL", "")
+        if not os.environ.get("DATAHUB_GMS_TOKEN"):
+            mcp.auth = _DataHubTokenVerifier(server_url)
+        mcp.run(
+            transport=transport,
+            show_banner=False,
+            stateless_http=True,
+            host="0.0.0.0",
+        )
     else:
         mcp.run(transport=transport, show_banner=False)
 
