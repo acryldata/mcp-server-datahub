@@ -42,6 +42,7 @@ class TelemetryMiddleware(Middleware):
 
             except Exception as e:
                 telemetry_data["tool_call_error"] = e.__class__.__name__
+                telemetry_data["tool_call_error_message"] = str(e)[:500]
                 telemetry_data["tool_result_is_error"] = True
                 raise
             finally:
