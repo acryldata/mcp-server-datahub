@@ -39,6 +39,8 @@ jobs:
         with:
           context: .
           push: true
+          build-args: |
+            VERSION=${{ steps.version.outputs.version }}
           tags: |
             acryldata/mcp-server-datahub:${{ steps.version.outputs.version }}
             acryldata/mcp-server-datahub:latest
