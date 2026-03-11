@@ -276,13 +276,11 @@ The server can be run as a standalone HTTP service using Docker. In this mode, a
 
 ### Authentication
 
-`DATAHUB_GMS_URL` is required at startup. `DATAHUB_GMS_TOKEN` is optional — if omitted, every request must supply a token via the `Authorization` header:
+Each request must supply a DataHub token via the `Authorization` header:
 
 ```
 Authorization: Bearer <your-datahub-token>
 ```
-
-If `DATAHUB_GMS_TOKEN` is set, it acts as a fallback for requests that don't provide their own token. A per-request token always takes priority.
 
 ### Docker Compose (recommended)
 
@@ -290,7 +288,6 @@ Create a `.env` file:
 
 ```env
 DATAHUB_GMS_URL=https://your-datahub-instance
-# DATAHUB_GMS_TOKEN=your-token  # optional: omit to require per-request auth
 ```
 
 Then run:

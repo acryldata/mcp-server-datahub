@@ -1,8 +1,12 @@
 """Unit tests for per-request auth token extraction and _DataHubClientMiddleware."""
 
+from typing import Optional
 from unittest.mock import MagicMock, patch
 
+import httpx
 import pytest
+from fastmcp.server.auth import TokenVerifier
+from fastmcp.server.auth.auth import AccessToken
 
 import mcp_server_datahub.__main__  # noqa: F401 -- registers /health route on mcp
 from mcp_server_datahub.__main__ import (
@@ -203,3 +207,114 @@ def test_create_app_with_token_builds_default_client(
             assert args[1] is mock_build.return_value
     finally:
         main_mod._app_initialized = original
+
+
+# ---------------------------------------------------------------------------
+# HTTP auth smoke tests — verify the Bearer-token gating works end-to-end
+# ---------------------------------------------------------------------------
+
+
+class _StaticTokenVerifier(TokenVerifier):
+    """Test verifier that accepts only a fixed token."""
+
+    def __init__(self, valid_token: str) -> None:
+        super().__init__()
+        self._valid_token = valid_token
+
+    async def verify_token(self, token: str) -> Optional[AccessToken]:
+        if token == self._valid_token:
+            return AccessToken(client_id="test-client", scopes=[], token=token)
+        return None
+
+
+def _make_http_app(verifier: TokenVerifier):  # type: ignore[return]
+    """Return the FastMCP HTTP ASGI app with *verifier* installed."""
+    from fastmcp import FastMCP
+
+    test_mcp = FastMCP("smoke-test")
+    test_mcp.auth = verifier
+    return test_mcp.http_app(transport="streamable-http", stateless_http=True)
+
+
+_MCP_INIT_PAYLOAD = {
+    "jsonrpc": "2.0",
+    "method": "initialize",
+    "id": 1,
+    "params": {
+        "protocolVersion": "2024-11-05",
+        "capabilities": {},
+        "clientInfo": {"name": "smoke-test", "version": "1"},
+    },
+}
+
+
+@pytest.mark.anyio
+async def test_http_auth_missing_token_returns_401() -> None:
+    """MCP HTTP endpoint must reject requests that carry no Authorization header."""
+    app = _make_http_app(_StaticTokenVerifier("secret"))
+    transport = httpx.ASGITransport(app=app)  # type: ignore[arg-type]
+    async with httpx.AsyncClient(
+        transport=transport, base_url="http://test", follow_redirects=True
+    ) as client:
+        resp = await client.post("/mcp/", json=_MCP_INIT_PAYLOAD)
+    assert resp.status_code == 401
+
+
+@pytest.mark.anyio
+async def test_http_auth_invalid_token_returns_401() -> None:
+    """MCP HTTP endpoint must reject requests that carry an invalid Bearer token."""
+    app = _make_http_app(_StaticTokenVerifier("secret"))
+    transport = httpx.ASGITransport(app=app)  # type: ignore[arg-type]
+    async with httpx.AsyncClient(
+        transport=transport, base_url="http://test", follow_redirects=True
+    ) as client:
+        resp = await client.post(
+            "/mcp/",
+            json=_MCP_INIT_PAYLOAD,
+            headers={"Authorization": "Bearer wrong-token"},
+        )
+    assert resp.status_code == 401
+
+
+@pytest.mark.anyio
+async def test_http_auth_valid_token_is_not_rejected() -> None:
+    """MCP HTTP endpoint must not return 401 when a valid Bearer token is supplied."""
+    app = _make_http_app(_StaticTokenVerifier("secret"))
+    transport = httpx.ASGITransport(app=app)  # type: ignore[arg-type]
+    async with app.lifespan(app):
+        async with httpx.AsyncClient(
+            transport=transport, base_url="http://test", follow_redirects=True
+        ) as client:
+            resp = await client.post(
+                "/mcp/",
+                json=_MCP_INIT_PAYLOAD,
+                headers={"Authorization": "Bearer secret"},
+            )
+    assert resp.status_code != 401
+
+
+@pytest.mark.anyio
+async def test_main_http_mode_installs_token_verifier(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """main() with transport=http and no DATAHUB_GMS_TOKEN must set mcp.auth."""
+    import mcp_server_datahub.__main__ as main_mod
+
+    monkeypatch.setenv("DATAHUB_GMS_URL", "http://datahub:8080")
+    monkeypatch.delenv("DATAHUB_GMS_TOKEN", raising=False)
+    original_initialized = main_mod._app_initialized
+    original_auth = mcp.auth
+    main_mod._app_initialized = False
+    try:
+        with patch("mcp_server_datahub.__main__._verify_client"):
+            with patch("mcp_server_datahub.__main__._build_client"):
+                with patch.object(mcp, "add_middleware"):
+                    with patch.object(mcp, "run"):
+                        from click.testing import CliRunner
+
+                        runner = CliRunner()
+                        runner.invoke(main_mod.main, ["--transport", "http"])
+        assert isinstance(mcp.auth, _DataHubTokenVerifier)
+    finally:
+        main_mod._app_initialized = original_initialized
+        mcp.auth = original_auth  # type: ignore[assignment]
