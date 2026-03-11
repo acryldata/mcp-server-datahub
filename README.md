@@ -270,6 +270,52 @@ The agent may either:
 | `get_lineage_paths_between` | Understand deeper relationships between datasets. |
 
 
+## Docker (HTTP Deployment)
+
+The server can be run as a standalone HTTP service using Docker.
+
+### Docker Compose (recommended)
+
+Copy the required environment variables and start the server:
+
+```bash
+DATAHUB_GMS_URL=https://your-datahub-instance \
+DATAHUB_GMS_TOKEN=your-token \
+docker compose up
+```
+
+Or create a `.env` file:
+
+```env
+DATAHUB_GMS_URL=https://your-datahub-instance
+DATAHUB_GMS_TOKEN=your-token
+```
+
+Then run:
+
+```bash
+docker compose up
+```
+
+### Docker (manual)
+
+```bash
+docker build -t mcp-server-datahub .
+docker run -p 8000:8000 \
+  -e DATAHUB_GMS_URL=https://your-datahub-instance \
+  -e DATAHUB_GMS_TOKEN=your-token \
+  mcp-server-datahub
+```
+
+The server exposes two endpoints:
+
+- `http://localhost:8000/mcp` — MCP endpoint (stateless HTTP transport)
+- `http://localhost:8000/health` — Health check
+
+### Optional environment variables
+
+Pass any [configuration variables](#environment-variables) via `.env` or `-e` flags. For example, to enable mutation tools set `TOOLS_IS_MUTATION_ENABLED=true`.
+
 ## Developing
 
 See [DEVELOPING.md](DEVELOPING.md).
