@@ -1,6 +1,6 @@
 """Unit tests for per-request auth token extraction and _DataHubClientMiddleware."""
 
-from typing import Optional
+from typing import Any, Optional
 from unittest.mock import MagicMock, patch
 
 import httpx
@@ -82,7 +82,9 @@ def test_falls_back_to_global_client_when_no_request_token() -> None:
 
 
 def test_raises_when_no_token_and_no_default_client() -> None:
-    middleware = _DataHubClientMiddleware("http://datahub:8080", use_global_client=False)
+    middleware = _DataHubClientMiddleware(
+        "http://datahub:8080", use_global_client=False
+    )
     with patch("mcp_server_datahub.__main__._token_from_request", return_value=None):
         with pytest.raises(ValueError, match="No DataHub token provided"):
             middleware._client_for_request()
@@ -312,6 +314,129 @@ async def test_main_http_mode_installs_token_verifier(
                         runner = CliRunner()
                         runner.invoke(main_mod.main, ["--transport", "http"])
         assert isinstance(mcp.auth, _DataHubTokenVerifier)
+    finally:
+        main_mod._app_initialized = original_initialized
+        mcp.auth = original_auth  # type: ignore[assignment]
+
+
+# ---------------------------------------------------------------------------
+# Smoke tests — token passed as Authorization header reaches DataHub client
+# ---------------------------------------------------------------------------
+
+
+def _make_real_http_app(monkeypatch: pytest.MonkeyPatch, valid_token: str):
+    """
+    Build the real MCP HTTP ASGI app using create_app() with auth wired up.
+
+    The DataHub network calls are patched out:
+    - _build_client returns a MagicMock so no real HTTP is made.
+    - _verify_client is a no-op.
+    - _DataHubTokenVerifier.verify_token is patched to accept only *valid_token*.
+    """
+    import mcp_server_datahub.__main__ as main_mod
+
+    monkeypatch.setenv("DATAHUB_GMS_URL", "http://datahub:8080")
+    monkeypatch.delenv("DATAHUB_GMS_TOKEN", raising=False)
+
+    # Reset so create_app() actually runs.
+    main_mod._app_initialized = False
+
+    mock_client = MagicMock()
+
+    async def _patched_verify_token(self: Any, token: str) -> Optional[AccessToken]:
+        if token == valid_token:
+            return AccessToken(client_id="smoke-test", scopes=[], token=token)
+        return None
+
+    with patch("mcp_server_datahub.__main__._build_client", return_value=mock_client):
+        with patch("mcp_server_datahub.__main__._verify_client"):
+            with patch.object(
+                _DataHubTokenVerifier, "verify_token", _patched_verify_token
+            ):
+                create_app()
+                mcp.auth = _DataHubTokenVerifier("http://datahub:8080")
+                # Patch verify_token on the installed instance too.
+                mcp.auth.verify_token = lambda token: _patched_verify_token(  # type: ignore[method-assign]
+                    mcp.auth, token
+                )
+                app = mcp.http_app(transport="streamable-http", stateless_http=True)
+
+    # Re-patch _build_client for the lifetime of the app so per-request client
+    # construction also never makes real network calls.
+    monkeypatch.setattr(main_mod, "_build_client", lambda *_: mock_client)
+    return app
+
+
+@pytest.mark.anyio
+async def test_smoke_missing_token_returns_401(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Real app must reject requests with no Authorization header with 401."""
+    import mcp_server_datahub.__main__ as main_mod
+
+    original_initialized = main_mod._app_initialized
+    original_auth = mcp.auth
+    try:
+        app = _make_real_http_app(monkeypatch, valid_token="real-secret")
+        transport = httpx.ASGITransport(app=app)  # type: ignore[arg-type]
+        async with httpx.AsyncClient(
+            transport=transport, base_url="http://test", follow_redirects=True
+        ) as client:
+            resp = await client.post("/mcp/", json=_MCP_INIT_PAYLOAD)
+        assert resp.status_code == 401
+    finally:
+        main_mod._app_initialized = original_initialized
+        mcp.auth = original_auth  # type: ignore[assignment]
+
+
+@pytest.mark.anyio
+async def test_smoke_invalid_token_returns_401(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Real app must reject requests with a wrong Bearer token with 401."""
+    import mcp_server_datahub.__main__ as main_mod
+
+    original_initialized = main_mod._app_initialized
+    original_auth = mcp.auth
+    try:
+        app = _make_real_http_app(monkeypatch, valid_token="real-secret")
+        transport = httpx.ASGITransport(app=app)  # type: ignore[arg-type]
+        async with httpx.AsyncClient(
+            transport=transport, base_url="http://test", follow_redirects=True
+        ) as client:
+            resp = await client.post(
+                "/mcp/",
+                json=_MCP_INIT_PAYLOAD,
+                headers={"Authorization": "Bearer wrong-token"},
+            )
+        assert resp.status_code == 401
+    finally:
+        main_mod._app_initialized = original_initialized
+        mcp.auth = original_auth  # type: ignore[assignment]
+
+
+@pytest.mark.anyio
+async def test_smoke_valid_token_is_not_rejected(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Real app must not return 401 when the correct Bearer token is supplied."""
+    import mcp_server_datahub.__main__ as main_mod
+
+    original_initialized = main_mod._app_initialized
+    original_auth = mcp.auth
+    try:
+        app = _make_real_http_app(monkeypatch, valid_token="real-secret")
+        transport = httpx.ASGITransport(app=app)  # type: ignore[arg-type]
+        async with app.lifespan(app):
+            async with httpx.AsyncClient(
+                transport=transport, base_url="http://test", follow_redirects=True
+            ) as client:
+                resp = await client.post(
+                    "/mcp/",
+                    json=_MCP_INIT_PAYLOAD,
+                    headers={"Authorization": "Bearer real-secret"},
+                )
+        assert resp.status_code != 401
     finally:
         main_mod._app_initialized = original_initialized
         mcp.auth = original_auth  # type: ignore[assignment]
