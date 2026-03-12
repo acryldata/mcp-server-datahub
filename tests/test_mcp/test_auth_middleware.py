@@ -59,18 +59,8 @@ def test_no_http_request_returns_none() -> None:
 # ---------------------------------------------------------------------------
 
 
-def _make_middleware(
-    server_url: str = "http://datahub:8080",
-    default_token: str | None = None,
-) -> _DataHubClientMiddleware:
-    default_client = None
-    if default_token is not None:
-        default_client = MagicMock()
-    return _DataHubClientMiddleware(server_url, default_client)
-
-
 def test_per_request_token_returns_new_client() -> None:
-    middleware = _make_middleware(default_token="default")
+    middleware = _DataHubClientMiddleware("http://datahub:8080", use_global_client=True)
     with patch(
         "mcp_server_datahub.__main__._token_from_request", return_value="per-request"
     ):
@@ -80,31 +70,37 @@ def test_per_request_token_returns_new_client() -> None:
             assert client is mock_build.return_value
 
 
-def test_falls_back_to_default_client_when_no_request_token() -> None:
-    default_client = MagicMock()
-    middleware = _DataHubClientMiddleware("http://datahub:8080", default_client)
+def test_falls_back_to_global_client_when_no_request_token() -> None:
+    middleware = _DataHubClientMiddleware("http://datahub:8080", use_global_client=True)
     with patch("mcp_server_datahub.__main__._token_from_request", return_value=None):
-        result = middleware._client_for_request()
-        assert result is default_client
+        with patch(
+            "mcp_server_datahub.__main__._build_global_client"
+        ) as mock_build_global:
+            result = middleware._client_for_request()
+            mock_build_global.assert_called_once()
+            assert result is mock_build_global.return_value
 
 
 def test_raises_when_no_token_and_no_default_client() -> None:
-    middleware = _DataHubClientMiddleware("http://datahub:8080", None)
+    middleware = _DataHubClientMiddleware("http://datahub:8080", use_global_client=False)
     with patch("mcp_server_datahub.__main__._token_from_request", return_value=None):
         with pytest.raises(ValueError, match="No DataHub token provided"):
             middleware._client_for_request()
 
 
-def test_per_request_token_does_not_use_default_client() -> None:
-    default_client = MagicMock()
-    middleware = _DataHubClientMiddleware("http://datahub:8080", default_client)
+def test_per_request_token_does_not_use_global_client() -> None:
+    middleware = _DataHubClientMiddleware("http://datahub:8080", use_global_client=True)
     with patch(
         "mcp_server_datahub.__main__._token_from_request", return_value="req-token"
     ):
         with patch("mcp_server_datahub.__main__._build_client") as mock_build:
-            result = middleware._client_for_request()
-            assert result is mock_build.return_value
-            assert result is not default_client
+            with patch(
+                "mcp_server_datahub.__main__._build_global_client"
+            ) as mock_build_global:
+                result = middleware._client_for_request()
+                mock_build.assert_called_once_with("http://datahub:8080", "req-token")
+                mock_build_global.assert_not_called()
+                assert result is mock_build.return_value
 
 
 # ---------------------------------------------------------------------------
@@ -179,13 +175,13 @@ def test_create_app_no_token_builds_no_default_client(
         with patch("mcp_server_datahub.__main__._DataHubClientMiddleware") as MockMW:
             with patch.object(mcp, "add_middleware"):
                 create_app()
-            args = MockMW.call_args.args if MockMW.call_args else ()
-            assert args[1] is None
+            kwargs = MockMW.call_args.kwargs if MockMW.call_args else {}
+            assert kwargs.get("use_global_client") is False
     finally:
         main_mod._app_initialized = original
 
 
-def test_create_app_with_token_builds_default_client(
+def test_create_app_with_token_passes_use_global_client_to_middleware(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     import mcp_server_datahub.__main__ as main_mod
@@ -195,16 +191,17 @@ def test_create_app_with_token_builds_default_client(
     original = main_mod._app_initialized
     main_mod._app_initialized = False
     try:
-        with patch("mcp_server_datahub.__main__._build_client") as mock_build:
+        with patch("mcp_server_datahub.__main__._build_global_client"):
             with patch("mcp_server_datahub.__main__._verify_client"):
                 with patch(
                     "mcp_server_datahub.__main__._DataHubClientMiddleware"
                 ) as MockMW:
                     with patch.object(mcp, "add_middleware"):
                         create_app()
-            mock_build.assert_called_once_with("http://datahub:8080", "globaltoken")
             args = MockMW.call_args.args
-            assert args[1] is mock_build.return_value
+            kwargs = MockMW.call_args.kwargs
+            assert args[0] == "http://datahub:8080"
+            assert kwargs.get("use_global_client") is True
     finally:
         main_mod._app_initialized = original
 
