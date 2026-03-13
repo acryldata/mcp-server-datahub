@@ -321,8 +321,7 @@ async def token_proxy(request: Request) -> Response:
         async with httpx.AsyncClient() as client:
             resp = await client.post(
                 token_endpoint,
-                json=form_data,
-                headers={"Content-Type": "application/json"},
+                data=form_data,
                 timeout=30.0,
             )
 
