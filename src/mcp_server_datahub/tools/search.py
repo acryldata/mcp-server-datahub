@@ -152,7 +152,8 @@ def enhanced_search(
        -> Examine tags/glossaryTerms facets to see what metadata exists
     2. Filtered search: search(query="*", filter="tag = urn:li:tag:pii", num_results=30)
        -> Get entities with specific tag using URN from step 1
-    3. Get details: Use get_entities() on specific results
+    3. Get details: Use get_entities(urns, include=["properties"]) for lightweight follow-ups.
+       Only request additional aspect groups (ownership, tags, schema, …) when actually needed.
 
     $FILTER_DOCS
 
@@ -228,7 +229,8 @@ def search(
        -> Examine tags/glossaryTerms facets to see what metadata exists
     2. Filtered search: search(query="*", filter="tag = urn:li:tag:pii", num_results=30)
        -> Get entities with specific tag using URN from step 1
-    3. Get details: Use get_entities() on specific results
+    3. Get details: Use get_entities(urns, include=["properties"]) for lightweight follow-ups.
+       Only request additional aspect groups (ownership, tags, schema, …) when actually needed.
 
     $FILTER_DOCS
 

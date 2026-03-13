@@ -929,6 +929,27 @@ fragment entityPreview on Entity {
             description
         }
     }
+    ... on Application {
+        urn
+        properties {
+            name
+            description
+        }
+        ownership {
+            ...ownershipFields
+        }
+        tags {
+            ...globalTagsFields
+        }
+        glossaryTerms {
+            ...glossaryTerms
+        }
+        structuredProperties {
+            properties {
+                ...structuredPropertiesFields
+            }
+        }
+    }
     ... on DataPlatform {
         ...nonConflictingPlatformFields
     }

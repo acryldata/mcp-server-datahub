@@ -1,13 +1,112 @@
 """Entity retrieval tools for DataHub MCP server."""
 
 import json
-from typing import Callable, Iterator, List, Optional
+from typing import Callable, Iterator, List, Optional, Set
 
 from datahub.errors import ItemNotFoundError
 from json_repair import repair_json
 from loguru import logger
 
 from .. import graphql_helpers
+
+# ---------------------------------------------------------------------------
+# Aspect group filtering
+# ---------------------------------------------------------------------------
+# DataHub entities share a consistent metadata model: each entity has a set of
+# "aspects" (ownership, tags, glossaryTerms, …).  The mapping below lets
+# callers request only the aspect groups they need, keeping responses small.
+#
+# Keys that are NOT mapped to any group (urn, type, url, name, subTypes,
+# entity-specific identifiers like dashboardId, flowId, …) are **always
+# retained** regardless of the ``include`` selection.
+# ---------------------------------------------------------------------------
+
+ASPECT_GROUPS: dict[str, set[str]] = {
+    # Core identity — name, description, custom properties.
+    # Maps to "properties" / "editableProperties" on most entities,
+    # "info" on Assertions & Documents, "definition" on StructuredProperties.
+    "properties": {
+        "properties",
+        "editableProperties",
+        "customProperties",
+        "info",
+        "definition",
+    },
+    "ownership": {"ownership"},
+    "tags": {"tags"},
+    "glossary_terms": {"glossaryTerms"},
+    "structured_properties": {"structuredProperties"},
+    "schema": {"schemaMetadata", "editableSchemaMetadata", "viewProperties"},
+    "deprecation": {"deprecation"},
+    "platform": {"platform"},
+    "domain": {"domain"},
+    "data_product": {"dataProduct"},
+    "incidents": {"activeIncidents"},
+    "assertions": {"assertions", "runEvents"},
+    "status": {"status", "health", "statsSummary"},
+    "documents": {"relatedDocuments"},
+}
+
+# Sentinel: when the caller passes "all", every group is included.
+_ALL_GROUP = "all"
+
+
+def _parse_include(
+    include: Optional[List[str]] | str,
+) -> Optional[Set[str]]:
+    """Normalise the ``include`` parameter into a validated set of group names.
+
+    Returns ``None`` when *all* groups should be included (i.e. ``"all"`` was
+    requested or the resulting set covers every group).
+    """
+    if include is None:
+        # Default: properties only — minimal response.
+        return {"properties"}
+
+    # Handle JSON-stringified lists from LLMs.
+    raw: List[str]
+    if isinstance(include, str):
+        try:
+            parsed = json.loads(repair_json(include.strip()))
+            raw = (
+                [str(v) for v in parsed] if isinstance(parsed, list) else [str(parsed)]
+            )
+        except Exception:
+            raw = [include.strip()]
+    else:
+        raw = include
+
+    groups: set[str] = {g.strip().lower() for g in raw}
+
+    # "all" → return everything.
+    if _ALL_GROUP in groups:
+        return None
+
+    unknown = groups - ASPECT_GROUPS.keys()
+    if unknown:
+        logger.warning(f"Unknown aspect groups ignored: {unknown}")
+        groups -= unknown
+
+    # If every group was requested explicitly, short-circuit.
+    if groups == ASPECT_GROUPS.keys():
+        return None
+
+    return groups
+
+
+def _filter_aspects(entity: dict, include_groups: Set[str]) -> dict:
+    """Remove aspect keys that belong to non-requested groups.
+
+    Keys not mapped to any group (e.g. urn, type, name, url, subTypes)
+    are always retained.
+    """
+    excluded_keys: set[str] = set()
+    for group_name, group_keys in ASPECT_GROUPS.items():
+        if group_name not in include_groups:
+            excluded_keys.update(group_keys)
+
+    return {k: v for k, v in entity.items() if k not in excluded_keys}
+
 
 entity_details_fragment_gql = (
     graphql_helpers.GQL_DIR / "entity_details.gql"
@@ -16,7 +115,10 @@ query_entity_gql = (graphql_helpers.GQL_DIR / "query_entity.gql").read_text()
 related_documents_gql = (graphql_helpers.GQL_DIR / "related_documents.gql").read_text()
 
 
-def get_entities(urns: List[str] | str) -> List[dict] | dict:
+def get_entities(
+    urns: List[str] | str,
+    include: Optional[List[str]] = None,
+) -> List[dict] | dict:
     """Get detailed information about one or more entities by their DataHub URNs.
 
     IMPORTANT: Pass an array of URNs to retrieve multiple entities in a single call - this is much
@@ -24,10 +126,74 @@ def get_entities(urns: List[str] | str) -> List[dict] | dict:
     an array with the top 3-10 result URNs to compare and find the best match.
 
     Accepts an array of URNs or a single URN. Supports all entity types including datasets,
-    assertions, incidents, dashboards, charts, users, groups, and more. The response fields vary
-    based on the entity type.
+    assertions, incidents, dashboards, charts, users, groups, and more.
+
+    DataHub's metadata model is aspect-based: every entity carries a set of standard
+    aspects (properties, ownership, tags, …). Use ``include`` to request only the
+    aspects you need — this dramatically reduces response size and token usage.
+
+    Args:
+        urns: One or more DataHub URNs.
+        include: Aspect groups to return.  **Defaults to ["properties"]** (name,
+            description, custom properties) for a minimal response.  Add more
+            groups as needed, or pass ["all"] for the full entity.
+
+            Available groups (consistent across all entity types):
+            - "properties": name, description, custom properties. The baseline
+              for almost every query — always include unless you only need
+              structural metadata. (default when include is omitted)
+            - "ownership": owners (users/groups) and ownership types. Use when
+              the user asks "who owns …", "who is responsible for …", or for
+              access / contact questions.
+            - "tags": classification tags applied to the entity. Use for
+              compliance (PII, sensitive), categorization, or filtering questions.
+            - "glossary_terms": business glossary terms linked to the entity.
+              Use when the user asks about business definitions, data meaning,
+              or standardization.
+            - "structured_properties": custom key-value metadata defined by
+              admins. Use when asking about custom attributes, business metadata
+              fields, or organization-specific properties.
+            - "schema": column-level schema fields, types, and view SQL
+              (datasets only). Use when the user asks about table structure,
+              columns, data types, or wants to write queries. Can be large.
+            - "deprecation": whether the entity is deprecated, with notes and
+              replacement info. Use when checking if something is still active
+              or finding alternatives.
+            - "platform": which data platform hosts this entity (e.g. Snowflake,
+              Kafka, Looker). Use when asking "where does this live?" or
+              filtering by technology.
+            - "domain": the business domain the entity belongs to. Use for
+              organizational questions like "which team/domain owns this?".
+            - "data_product": which data product this entity is part of. Use
+              when asking about data products or logical groupings.
+            - "incidents": active incidents on the entity. Use when asking about
+              ongoing issues, broken pipelines, or data freshness problems.
+            - "assertions": data quality assertions and their latest run results.
+              Use for data quality checks, test results, or SLA questions.
+            - "status": health signals, soft-delete status, and usage statistics
+              (query counts, user counts — Cloud only). Use when asking "is this
+              healthy?", "is this actively used?", or "how popular is this?".
+            - "documents": related documentation (wiki pages, design docs).
+              Use when the user asks for documentation or context beyond the
+              description.
+            - "all": return every aspect. Use sparingly — produces large
+              responses. Prefer selecting specific groups.
+
+            Fields that identify the entity (urn, type, subTypes, entity-specific
+            IDs) are always included regardless of this parameter.
+
+            Examples:
+            - Quick lookup: include=["properties"]
+            - Governance review: include=["properties", "ownership", "tags", "glossary_terms"]
+            - Data quality: include=["properties", "assertions", "incidents"]
+            - Schema exploration: include=["properties", "schema", "platform"]
+            - Full detail: include=["all"]
     """
     client = graphql_helpers.get_datahub_client()
+
+    # Parse and validate include parameter.
+    # None → apply default filtering; set → filter to those groups.
+    include_set = _parse_include(include)
 
     # Handle JSON-stringified arrays (same issue as filters in search tool)
     # Some MCP clients/LLMs pass arrays as JSON strings instead of proper lists
@@ -95,34 +261,38 @@ def get_entities(urns: List[str] | str) -> List[dict] | dict:
                     f"This can happen if the entity has no aspects ingested yet, or if there's a permissions issue."
                 )
 
-            # Fetch related documents for supported entity types
-            try:
-                related_docs_input = {"start": 0, "count": 10}
-                related_docs_result = graphql_helpers.execute_graphql(
-                    client._graph,
-                    query=related_documents_gql,
-                    variables={"urn": urn, "input": related_docs_input},
-                    operation_name="getRelatedDocuments",
-                )
-                if (
-                    related_docs_result
-                    and related_docs_result.get("entity")
-                    and related_docs_result["entity"].get("relatedDocuments")
-                ):
-                    result["relatedDocuments"] = (
-                        graphql_helpers.clean_related_documents_response(
-                            related_docs_result["entity"]["relatedDocuments"]
-                        )
+            # Fetch related documents only when requested (saves a GraphQL call).
+            if include_set is None or "documents" in include_set:
+                try:
+                    related_docs_input = {"start": 0, "count": 10}
+                    related_docs_result = graphql_helpers.execute_graphql(
+                        client._graph,
+                        query=related_documents_gql,
+                        variables={"urn": urn, "input": related_docs_input},
+                        operation_name="getRelatedDocuments",
                     )
-            except Exception as e:
-                logger.debug(
-                    f"Could not fetch related documents for {urn}: {e}. This entity type may not support related documents."
-                )
+                    if (
+                        related_docs_result
+                        and related_docs_result.get("entity")
+                        and related_docs_result["entity"].get("relatedDocuments")
+                    ):
+                        result["relatedDocuments"] = (
+                            graphql_helpers.clean_related_documents_response(
+                                related_docs_result["entity"]["relatedDocuments"]
+                            )
+                        )
+                except Exception as e:
+                    logger.debug(
+                        f"Could not fetch related documents for {urn}: {e}. This entity type may not support related documents."
+                    )
 
             graphql_helpers.inject_urls_for_urns(client._graph, result, [""])
             graphql_helpers.truncate_descriptions(result)
 
-            results.append(graphql_helpers.clean_get_entities_response(result))
+            cleaned = graphql_helpers.clean_get_entities_response(result)
+            if include_set is not None:
+                cleaned = _filter_aspects(cleaned, include_set)
+            results.append(cleaned)
 
         except Exception as e:
             logger.warning(f"Error fetching entity {urn}: {e}")

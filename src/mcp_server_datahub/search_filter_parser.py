@@ -96,7 +96,7 @@ FILTER SYNTAX (SQL-like WHERE clause):
       entity_type = dataset AND env = PROD AND (platform = snowflake OR platform = bigquery)
 
     SUPPORTED FILTER FIELDS:
-    - entity_type: dataset, dashboard, chart, corp_user, corp_group, dataProduct, etc.
+    - entity_type: dataset, dashboard, chart, corp_user, corp_group, dataProduct, application, etc.
     - entity_subtype (or subtype): Table, View, Model, etc.
     - platform: snowflake, bigquery, looker, tableau, etc.
     - domain: full URN required, e.g. urn:li:domain:marketing
