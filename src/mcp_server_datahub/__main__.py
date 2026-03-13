@@ -81,30 +81,33 @@ class _DataHubTokenVerifier(TokenVerifier):
     an Authorization: Bearer header.  If the token is valid a synthetic
     AccessToken is returned; otherwise None causes FastMCP to reply with
     401 WWW-Authenticate: Bearer automatically.
+
+    The verified client is cached (TTL 5 minutes, max 1024 entries) and shared
+    with ``_DataHubClientMiddleware`` to avoid redundant client construction.
     """
 
     def __init__(self, server_url: str) -> None:
         super().__init__()
         self._server_url = server_url
-        # Cache keyed by (server_url, token); TTL of 5 minutes, max 1024 entries.
-        self._cache: TTLCache = TTLCache(maxsize=1024, ttl=300)
+        # Cache keyed by token → DataHubClient; TTL of 5 minutes, max 1024 entries.
+        self.client_cache: TTLCache = TTLCache(maxsize=1024, ttl=300)
 
     async def verify_token(self, token: str) -> Optional[AccessToken]:
-        cache_key = (self._server_url, token)
-        if cache_key in self._cache:
-            return self._cache[cache_key]
+        if token in self.client_cache:
+            return AccessToken(
+                client_id=f"mcp-server-datahub/{__version__}", scopes=[], token=token
+            )
         try:
             client = _build_client(self._server_url, token)
             loop = asyncio.get_running_loop()
             await loop.run_in_executor(None, _verify_client, client)
-            result: Optional[AccessToken] = AccessToken(
-                client_id=f"mcp-server-datahub/{__version__}", scopes=[], token=token
-            )
         except Exception as e:
             logger.warning("DataHub token verification failed: %s", e)
             return None
-        self._cache[cache_key] = result
-        return result
+        self.client_cache[token] = client
+        return AccessToken(
+            client_id=f"mcp-server-datahub/{__version__}", scopes=[], token=token
+        )
 
 
 class _DataHubClientMiddleware(Middleware):
@@ -126,14 +129,18 @@ class _DataHubClientMiddleware(Middleware):
         self,
         server_url: str,
         use_global_client: bool = False,
+        token_verifier: Optional[_DataHubTokenVerifier] = None,
     ) -> None:
         self._server_url = server_url
         self._use_global_client = use_global_client
+        self._token_verifier = token_verifier
 
     def _client_for_request(self) -> DataHubClient:
         token = _token_from_request()
         if token is not None:
-            # Token already validated by _DataHubTokenVerifier.
+            # Token already validated by _DataHubTokenVerifier; reuse cached client.
+            if self._token_verifier is not None and token in self._token_verifier.client_cache:
+                return self._token_verifier.client_cache[token]
             return _build_client(self._server_url, token)
         if self._use_global_client:
             return _build_global_client()
@@ -159,6 +166,7 @@ async def health(request: Request) -> Response:
 
 
 _app_initialized = False
+_token_verifier: Optional[_DataHubTokenVerifier] = None
 
 
 def create_app() -> FastMCP:
@@ -171,7 +179,7 @@ def create_app() -> FastMCP:
     The function is idempotent — calling it more than once returns the same
     ``mcp`` instance without adding duplicate middlewares.
     """
-    global _app_initialized
+    global _app_initialized, _token_verifier
     if _app_initialized:
         return mcp
 
@@ -182,13 +190,19 @@ def create_app() -> FastMCP:
     has_global_token = bool(os.environ.get("DATAHUB_GMS_TOKEN"))
     if has_global_token:
         _verify_client(_build_global_client())
+    else:
+        _token_verifier = _DataHubTokenVerifier(server_url)
 
     # _DataHubClientMiddleware must be first so the client ContextVar is
     # available to all subsequent middlewares and tool handlers.  This is
     # especially important for HTTP transport where each request runs in a
     # separate async context.
     mcp.add_middleware(
-        _DataHubClientMiddleware(server_url, use_global_client=has_global_token)
+        _DataHubClientMiddleware(
+            server_url,
+            use_global_client=has_global_token,
+            token_verifier=_token_verifier,
+        )
     )
     mcp.add_middleware(TelemetryMiddleware())
     mcp.add_middleware(VersionFilterMiddleware())
@@ -223,9 +237,8 @@ def main(transport: Literal["stdio", "sse", "http"], debug: bool) -> None:
     create_app()
 
     if transport == "http":
-        server_url = os.environ.get("DATAHUB_GMS_URL", "")
-        if not os.environ.get("DATAHUB_GMS_TOKEN"):
-            mcp.auth = _DataHubTokenVerifier(server_url)
+        if _token_verifier is not None:
+            mcp.auth = _token_verifier
         mcp.run(
             transport=transport,
             show_banner=False,
