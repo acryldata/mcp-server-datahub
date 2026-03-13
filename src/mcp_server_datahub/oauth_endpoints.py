@@ -60,6 +60,13 @@ class _OAuth2Session:
 # state -> session mapping (cleaned up on access)
 _sessions: dict[str, _OAuth2Session] = {}
 
+# Registered redirect URIs per client_id (from dynamic client registration).
+# Used to validate redirect_uri in the authorize endpoint per RFC 6749 §3.1.2.
+# Inner dict maps URI -> registration time; bounded to prevent unbounded
+# growth from dynamic ports.
+_registered_redirect_uris: dict[str, dict[str, float]] = {}
+_MAX_REGISTERED_URIS = int(os.getenv("OAUTH_MAX_REGISTERED_URIS", "50"))
+
 
 def _store_session(state: str, redirect_uri: str, client_id: str, scope: str) -> None:
     _cleanup_expired()
@@ -108,6 +115,28 @@ def _get_server_url(request: Request) -> str:
         if port not in ("443",):
             proto = "http"
     return f"{proto}://{host}"
+
+
+def _is_valid_redirect_uri(client_id: str, uri: str) -> bool:
+    """Validate redirect_uri against registered URIs for the client.
+
+    Per RFC 6749 §3.1.2, the authorization server must validate the
+    redirect_uri against the set registered during client registration.
+
+    As a fallback (e.g. if registration was skipped), only localhost
+    URIs are allowed to prevent open-redirect attacks.
+    """
+    registered = _registered_redirect_uris.get(client_id)
+    if registered is not None:
+        return uri in registered
+
+    # Fallback: allow localhost only
+    try:
+        parsed = urlparse(uri)
+        hostname = parsed.hostname or ""
+        return hostname in ("localhost", "127.0.0.1", "::1")
+    except Exception:
+        return False
 
 
 # ---------------------------------------------------------------------------
@@ -202,9 +231,29 @@ async def register_client(request: Request) -> Response:
     base = _get_server_url(request)
     client_id = _oauth_client_id()
 
+    # Store the client's registered redirect URIs for later validation.
+    client_redirect_uris = body.get("redirect_uris", [])
+    if client_redirect_uris:
+        existing = _registered_redirect_uris.get(client_id, {})
+        now = time.time()
+        for uri in client_redirect_uris:
+            existing[uri] = now
+        # Evict oldest entries if over capacity.
+        if len(existing) > _MAX_REGISTERED_URIS:
+            sorted_uris = sorted(existing, key=existing.get)  # type: ignore[arg-type]
+            for uri in sorted_uris[: len(existing) - _MAX_REGISTERED_URIS]:
+                del existing[uri]
+        _registered_redirect_uris[client_id] = existing
+        logger.info(
+            "Registered redirect URIs for client %s: %s (total: %d)",
+            client_id,
+            client_redirect_uris,
+            len(existing),
+        )
+
     response = {
         "client_id": client_id,
-        "redirect_uris": [f"{base}/oauth/callback"],
+        "redirect_uris": client_redirect_uris or [f"{base}/oauth/callback"],
         "response_types": ["code"],
         "grant_types": ["authorization_code"],
         "token_endpoint_auth_method": "none",
@@ -225,6 +274,22 @@ async def authorize_proxy(request: Request) -> Response:
     state = params.get("state", "")
     client_id = params.get("client_id", "")
     scope = params.get("scope", "")
+
+    if original_redirect_uri and not _is_valid_redirect_uri(
+        client_id, original_redirect_uri
+    ):
+        logger.warning(
+            "Rejected unregistered redirect_uri: %s (client_id=%s)",
+            original_redirect_uri,
+            client_id,
+        )
+        return JSONResponse(
+            {
+                "error": "invalid_request",
+                "error_description": "redirect_uri does not match registered URIs",
+            },
+            status_code=400,
+        )
 
     if state and original_redirect_uri:
         _store_session(state, original_redirect_uri, client_id, scope)

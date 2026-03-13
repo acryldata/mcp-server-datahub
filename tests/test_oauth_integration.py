@@ -96,7 +96,7 @@ class TestOAuthDiscoveryEndpoints:
         content = json.loads(response.body)
 
         assert content["client_id"] == "test-client-123"
-        assert "https://example.com/oauth/callback" in content["redirect_uris"]
+        assert "http://localhost:8000/callback" in content["redirect_uris"]
         assert content["token_endpoint_auth_method"] == "none"
 
 
@@ -157,9 +157,15 @@ class TestOAuthFlow:
     async def test_authorize_proxy(self, mock_get_server_url, mock_request):
         """Test authorization request proxying."""
         mock_get_server_url.return_value = "https://example.com"
+
+        # Register the redirect URI first (as the client would during registration)
+        from mcp_server_datahub.oauth_endpoints import _registered_redirect_uris
+
+        _registered_redirect_uris["test-client"] = {"http://localhost:9999/callback": 0}
+
         mock_request.query_params = {
             "client_id": "test-client",
-            "redirect_uri": "http://client/callback",
+            "redirect_uri": "http://localhost:9999/callback",
             "state": "state123",
             "scope": "openid profile",
             "response_type": "code",

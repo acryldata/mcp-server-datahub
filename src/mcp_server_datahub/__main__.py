@@ -46,13 +46,15 @@ def setup_logging(debug: bool = False) -> None:
             )
             self._thread_names: dict[int | None, str] = {}
             self._thread_counter = 1
+            self._lock = threading.Lock()
 
         def format(self, record: logging.LogRecord) -> str:
             thread_id = threading.current_thread().ident
-            if thread_id not in self._thread_names:
-                self._thread_names[thread_id] = f"{self._thread_counter:02d}"
-                self._thread_counter += 1
-            record.thread_short = self._thread_names[thread_id]  # type: ignore[attr-defined]
+            with self._lock:
+                if thread_id not in self._thread_names:
+                    self._thread_names[thread_id] = f"{self._thread_counter:02d}"
+                    self._thread_counter += 1
+                record.thread_short = self._thread_names[thread_id]  # type: ignore[attr-defined]
             return super().format(record)
 
     level = logging.DEBUG if debug else logging.INFO
