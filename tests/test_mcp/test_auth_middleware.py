@@ -74,7 +74,7 @@ def test_falls_back_to_global_client_when_no_request_token() -> None:
     middleware = _DataHubClientMiddleware("http://datahub:8080", use_global_client=True)
     with patch("mcp_server_datahub.__main__._token_from_request", return_value=None):
         with patch(
-            "mcp_server_datahub.__main__._build_global_client"
+            "mcp_server_datahub.__main__._get_global_client"
         ) as mock_build_global:
             result = middleware._client_for_request()
             mock_build_global.assert_called_once()
@@ -97,7 +97,7 @@ def test_per_request_token_does_not_use_global_client() -> None:
     ):
         with patch("mcp_server_datahub.__main__._build_client") as mock_build:
             with patch(
-                "mcp_server_datahub.__main__._build_global_client"
+                "mcp_server_datahub.__main__._get_global_client"
             ) as mock_build_global:
                 result = middleware._client_for_request()
                 mock_build.assert_called_once_with("http://datahub:8080", "req-token")
@@ -113,23 +113,23 @@ def test_per_request_token_does_not_use_global_client() -> None:
 @pytest.mark.anyio
 async def test_token_verifier_returns_access_token_on_valid_token() -> None:
     verifier = _DataHubTokenVerifier("http://datahub:8080")
-    with patch("mcp_server_datahub.__main__._build_client") as mock_build:
-        with patch("mcp_server_datahub.__main__._verify_client"):
-            result = await verifier.verify_token("good-token")
+    with patch(
+        "mcp_server_datahub.__main__._build_and_verify_client"
+    ) as mock_build_and_verify:
+        result = await verifier.verify_token("good-token")
     assert result is not None
     assert result.token == "good-token"
-    mock_build.assert_called_once_with("http://datahub:8080", "good-token")
+    mock_build_and_verify.assert_called_once_with("http://datahub:8080", "good-token")
 
 
 @pytest.mark.anyio
 async def test_token_verifier_returns_none_on_invalid_token() -> None:
     verifier = _DataHubTokenVerifier("http://datahub:8080")
     with patch(
-        "mcp_server_datahub.__main__._verify_client",
+        "mcp_server_datahub.__main__._build_and_verify_client",
         side_effect=Exception("401 Unauthorized"),
     ):
-        with patch("mcp_server_datahub.__main__._build_client"):
-            result = await verifier.verify_token("bad-token")
+        result = await verifier.verify_token("bad-token")
     assert result is None
 
 
@@ -137,11 +137,10 @@ async def test_token_verifier_returns_none_on_invalid_token() -> None:
 async def test_token_verifier_returns_none_on_any_exception() -> None:
     verifier = _DataHubTokenVerifier("http://datahub:8080")
     with patch(
-        "mcp_server_datahub.__main__._verify_client",
+        "mcp_server_datahub.__main__._build_and_verify_client",
         side_effect=RuntimeError("connection refused"),
     ):
-        with patch("mcp_server_datahub.__main__._build_client"):
-            result = await verifier.verify_token("some-token")
+        result = await verifier.verify_token("some-token")
     assert result is None
 
 
@@ -193,7 +192,7 @@ def test_create_app_with_token_passes_use_global_client_to_middleware(
     original = main_mod._app_initialized
     main_mod._app_initialized = False
     try:
-        with patch("mcp_server_datahub.__main__._build_global_client"):
+        with patch("mcp_server_datahub.__main__._get_global_client"):
             with patch("mcp_server_datahub.__main__._verify_client"):
                 with patch(
                     "mcp_server_datahub.__main__._DataHubClientMiddleware"

@@ -46,16 +46,28 @@ def _build_client(server_url: str, token: str) -> DataHubClient:
     )
 
 
-def _build_global_client() -> DataHubClient:
-    return DataHubClient.from_env(
-        client_mode=ClientMode.SDK,
-        datahub_component=f"mcp-server-datahub/{__version__}",
-    )
+_global_client: Optional[DataHubClient] = None
+
+
+def _get_global_client() -> DataHubClient:
+    global _global_client
+    if _global_client is None:
+        _global_client = DataHubClient.from_env(
+            client_mode=ClientMode.SDK,
+            datahub_component=f"mcp-server-datahub/{__version__}",
+        )
+    return _global_client
 
 
 def _verify_client(client: DataHubClient) -> None:
     """Verify the client can authenticate by calling the me query."""
     client._graph.execute_graphql(_GET_ME_QUERY)
+
+
+def _build_and_verify_client(server_url: str, token: str) -> DataHubClient:
+    client = _build_client(server_url, token)
+    _verify_client(client)
+    return client
 
 
 def _token_from_request() -> Optional[str]:
@@ -67,6 +79,8 @@ def _token_from_request() -> Optional[str]:
     try:
         request = get_http_request()
     except RuntimeError:
+        # get_http_request raises RuntimeError when there is no active HTTP request,
+        # e.g. when the server is running in stdio mode instead of HTTP/SSE mode.
         return None
     auth = request.headers.get("authorization", "")
     if auth.startswith("Bearer "):
@@ -98,12 +112,16 @@ class _DataHubTokenVerifier(TokenVerifier):
                 client_id=f"mcp-server-datahub/{__version__}", scopes=[], token=token
             )
         try:
-            client = _build_client(self._server_url, token)
             loop = asyncio.get_running_loop()
-            await loop.run_in_executor(None, _verify_client, client)
+            # _build_and_verify_client will raise exception if token does not validate.
+            # We only cache clients created from valid tokens.
+            client = await loop.run_in_executor(
+                None, _build_and_verify_client, self._server_url, token
+            )
         except Exception as e:
             logger.warning("DataHub token verification failed: %s", e)
             return None
+        # We only cache clients created from valid tokens.
         self.client_cache[token] = client
         return AccessToken(
             client_id=f"mcp-server-datahub/{__version__}", scopes=[], token=token
@@ -139,11 +157,17 @@ class _DataHubClientMiddleware(Middleware):
         token = _token_from_request()
         if token is not None:
             # Token already validated by _DataHubTokenVerifier; reuse cached client.
-            if self._token_verifier is not None and token in self._token_verifier.client_cache:
+            if (
+                self._token_verifier is not None
+                and token in self._token_verifier.client_cache
+            ):
                 return self._token_verifier.client_cache[token]
+            # Create a new token. Only triggers in limited cache miss scenario
+            # or if not running _DataHubTokenVerifier for non http mode.
             return _build_client(self._server_url, token)
         if self._use_global_client:
-            return _build_global_client()
+            # Use cached global client for server provided credentials.
+            return _get_global_client()
         raise ValueError(
             "No DataHub token provided. Supply a token via the Authorization header."
         )
@@ -189,7 +213,7 @@ def create_app() -> FastMCP:
 
     has_global_token = bool(os.environ.get("DATAHUB_GMS_TOKEN"))
     if has_global_token:
-        _verify_client(_build_global_client())
+        _verify_client(_get_global_client())
     else:
         _token_verifier = _DataHubTokenVerifier(server_url)
 
