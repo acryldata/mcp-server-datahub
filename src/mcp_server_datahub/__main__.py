@@ -97,7 +97,7 @@ class _DataHubTokenVerifier(TokenVerifier):
     401 WWW-Authenticate: Bearer automatically.
 
     The verified client is cached (TTL 5 minutes, max 1024 entries) and shared
-    with ``_DataHubClientMiddleware`` to avoid redundant client construction.
+    with ``_HeaderTokenMiddleware`` to avoid redundant client construction.
     """
 
     def __init__(self, server_url: str) -> None:
@@ -107,76 +107,82 @@ class _DataHubTokenVerifier(TokenVerifier):
         self.client_cache: TTLCache = TTLCache(maxsize=1024, ttl=300)
 
     async def verify_token(self, token: str) -> Optional[AccessToken]:
-        if token in self.client_cache:
+        if self.client_cache.get(token) is not None:
             return AccessToken(
                 client_id=f"mcp-server-datahub/{__version__}", scopes=[], token=token
             )
         try:
             loop = asyncio.get_running_loop()
-            # _build_and_verify_client will raise exception if token does not validate.
-            # We only cache clients created from valid tokens.
+            # Build and verify in a thread (blocking I/O); cache write stays on
+            # the event loop after the executor returns to avoid TTLCache data races.
             client = await loop.run_in_executor(
                 None, _build_and_verify_client, self._server_url, token
             )
+            self.client_cache[token] = client
         except Exception as e:
             logger.warning("DataHub token verification failed: %s", e)
             return None
-        # We only cache clients created from valid tokens.
-        self.client_cache[token] = client
         return AccessToken(
             client_id=f"mcp-server-datahub/{__version__}", scopes=[], token=token
         )
 
 
-class _DataHubClientMiddleware(Middleware):
-    """Middleware that propagates the DataHub client ContextVar into each request.
+class _GlobalTokenMiddleware(Middleware):
+    """Middleware for the global-token codepath (DATAHUB_GMS_TOKEN is set).
 
-    When running with HTTP transport (stateless_http=True), each request is handled
-    in a separate async context that does not inherit ContextVars from the main
-    thread. This middleware ensures the DataHub client is available in every request
-    context by setting the ContextVar at the start of each MCP message.
-
-    Token validation is handled upstream by ``_DataHubTokenVerifier`` for Bearer
-    tokens. This middleware only needs to build the client for the current request
-    (or fall back to the global client when a global token is configured).
+    Uses the pre-verified global client singleton for every request.  If a
+    per-request Authorization header is also present it takes precedence, but
+    no additional verification is performed — the header token is used as-is to
+    build a client on the fly.
 
     Must be added as the first middleware so it wraps all other middlewares.
     """
 
-    def __init__(
-        self,
-        server_url: str,
-        use_global_client: bool = False,
-        token_verifier: Optional[_DataHubTokenVerifier] = None,
-    ) -> None:
+    def __init__(self, server_url: str) -> None:
         self._server_url = server_url
-        self._use_global_client = use_global_client
+
+    def _client_for_request(self) -> DataHubClient:
+        # Per-request header token overrides the global token.
+        token = _token_from_request()
+        if token is not None:
+            return _build_client(self._server_url, token)
+        return _get_global_client()
+
+    async def on_message(self, context: Any, call_next: Any) -> Any:
+        with with_datahub_client(self._client_for_request()):
+            return await call_next(context)
+
+
+class _HeaderTokenMiddleware(Middleware):
+    """Middleware for the header-token codepath (no DATAHUB_GMS_TOKEN configured).
+
+    Requires every request to supply an ``Authorization: Bearer <token>`` header.
+    The token must have already been validated by ``_DataHubTokenVerifier``; the
+    verified client is reused from the verifier's TTL cache.  On a cache miss a
+    new (unverified) client is built — this only happens in non-HTTP transports
+    where ``_DataHubTokenVerifier`` is not installed.
+
+    Must be added as the first middleware so it wraps all other middlewares.
+    """
+
+    def __init__(self, server_url: str, token_verifier: _DataHubTokenVerifier) -> None:
+        self._server_url = server_url
         self._token_verifier = token_verifier
 
     def _client_for_request(self) -> DataHubClient:
         token = _token_from_request()
-        if token is not None:
-            # Token already validated by _DataHubTokenVerifier; reuse cached client.
-            if (
-                self._token_verifier is not None
-                and token in self._token_verifier.client_cache
-            ):
-                return self._token_verifier.client_cache[token]
-            # Create a new token. Only triggers in limited cache miss scenario
-            # or if not running _DataHubTokenVerifier for non http mode.
-            return _build_client(self._server_url, token)
-        if self._use_global_client:
-            # Use cached global client for server provided credentials.
-            return _get_global_client()
-        raise ValueError(
-            "No DataHub token provided. Supply a token via the Authorization header."
-        )
+        if token is None:
+            raise ValueError(
+                "No DataHub token provided. Supply a token via the Authorization header."
+            )
+        # Token already validated by _DataHubTokenVerifier; reuse cached client.
+        cached = self._token_verifier.client_cache.get(token)
+        if cached is not None:
+            return cached
+        # Cache miss — build a new client (non-HTTP transport or evicted entry).
+        return _build_client(self._server_url, token)
 
-    async def on_message(
-        self,
-        context: Any,
-        call_next: Any,
-    ) -> Any:
+    async def on_message(self, context: Any, call_next: Any) -> Any:
         with with_datahub_client(self._client_for_request()):
             return await call_next(context)
 
@@ -211,23 +217,17 @@ def create_app() -> FastMCP:
     if not server_url:
         raise RuntimeError("DATAHUB_GMS_URL environment variable is required.")
 
+    # The client middleware must be first so the client ContextVar is available
+    # to all subsequent middlewares and tool handlers.  This is especially
+    # important for HTTP transport where each request runs in a separate async
+    # context.
     has_global_token = bool(os.environ.get("DATAHUB_GMS_TOKEN"))
     if has_global_token:
         _verify_client(_get_global_client())
+        mcp.add_middleware(_GlobalTokenMiddleware(server_url))
     else:
         _token_verifier = _DataHubTokenVerifier(server_url)
-
-    # _DataHubClientMiddleware must be first so the client ContextVar is
-    # available to all subsequent middlewares and tool handlers.  This is
-    # especially important for HTTP transport where each request runs in a
-    # separate async context.
-    mcp.add_middleware(
-        _DataHubClientMiddleware(
-            server_url,
-            use_global_client=has_global_token,
-            token_verifier=_token_verifier,
-        )
-    )
+        mcp.add_middleware(_HeaderTokenMiddleware(server_url, _token_verifier))
     mcp.add_middleware(TelemetryMiddleware())
     mcp.add_middleware(VersionFilterMiddleware())
     mcp.add_middleware(DocumentToolsMiddleware())
