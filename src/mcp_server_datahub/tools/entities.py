@@ -206,7 +206,7 @@ def get_entities(
                 # Use json_repair to handle malformed JSON from LLMs
                 urns = json.loads(repair_json(urns_str))
                 return_single = False
-            except (json.JSONDecodeError, Exception) as e:
+            except (json.JSONDecodeError, ValueError) as e:
                 logger.warning(
                     f"Failed to parse URNs as JSON array: {e}. Treating as single URN."
                 )

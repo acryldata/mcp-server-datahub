@@ -7,21 +7,17 @@ When making changes, ensure both versions remain identical. Use relative imports
 compatibility across both repositories.
 """
 
-import functools
-import inspect
 import string
 import threading
 from enum import Enum
 from typing import (
-    Awaitable,
+    Any,
     Callable,
+    Dict,
     List,
     Optional,
-    ParamSpec,
-    TypeVar,
 )
 
-import asyncer
 import cachetools
 from datahub.cli.env_utils import get_boolean_env_variable
 from datahub.ingestion.graph.client import DataHubGraph
@@ -101,8 +97,34 @@ from .tools.terms import (
 )
 from .version_requirements import TOOL_VERSION_REQUIREMENTS
 
-_P = ParamSpec("_P")
-_R = TypeVar("_R")
+# ---------------------------------------------------------------------------
+# MCP tool annotation presets
+# ---------------------------------------------------------------------------
+# See https://spec.modelcontextprotocol.io/specification/2025-03-26/server/tools/#annotations
+_READ_ONLY: Dict[str, Any] = {
+    "readOnlyHint": True,
+    "destructiveHint": False,
+    "idempotentHint": True,
+    "openWorldHint": True,
+}
+_MUTATION: Dict[str, Any] = {
+    "readOnlyHint": False,
+    "destructiveHint": False,
+    "idempotentHint": True,
+    "openWorldHint": True,
+}
+_DESTRUCTIVE: Dict[str, Any] = {
+    "readOnlyHint": False,
+    "destructiveHint": True,
+    "idempotentHint": True,
+    "openWorldHint": True,
+}
+_NON_IDEMPOTENT_MUTATION: Dict[str, Any] = {
+    "readOnlyHint": False,
+    "destructiveHint": False,
+    "idempotentHint": False,
+    "openWorldHint": True,
+}
 
 
 class ToolType(Enum):
@@ -114,26 +136,6 @@ class ToolType(Enum):
     DEFAULT = "default"  # Fallback tag
 
 
-# See https://github.com/jlowin/fastmcp/issues/864#issuecomment-3103678258
-# for why we need to wrap sync functions with asyncify.
-def async_background(fn: Callable[_P, _R]) -> Callable[_P, Awaitable[_R]]:
-    if inspect.iscoroutinefunction(fn):
-        raise RuntimeError("async_background can only be used on non-async functions")
-
-    @functools.wraps(fn)
-    async def wrapper(*args: _P.args, **kwargs: _P.kwargs) -> _R:
-        try:
-            return await asyncer.asyncify(fn)(*args, **kwargs)
-        except Exception:
-            # Log with full stack trace before FastMCP catches it
-            logger.exception(
-                f"Tool function {fn.__name__} failed with args={args}, kwargs={kwargs}"
-            )
-            raise
-
-    return wrapper
-
-
 def _register_tool(
     mcp_instance: FastMCP,
     name: str,
@@ -141,14 +143,12 @@ def _register_tool(
     *,
     description: Optional[str] = None,
     tags: Optional[set] = None,
+    annotations: Optional[Dict[str, Any]] = None,
 ) -> None:
     """Register a tool on the MCP instance and capture its version requirement.
 
-    This is a convenience wrapper that:
-    1. Wraps the sync function with async_background
-    2. Registers it on the MCP instance
-    3. Reads the _version_requirement attribute (set by @min_version decorator)
-       and populates TOOL_VERSION_REQUIREMENTS
+    FastMCP v3 automatically dispatches sync functions to a threadpool,
+    so no manual async wrapping is needed.
 
     Args:
         mcp_instance: The FastMCP instance to register on.
@@ -156,12 +156,14 @@ def _register_tool(
         fn: The tool function (sync).
         description: Tool description. Defaults to fn.__doc__.
         tags: Optional set of tag strings.
+        annotations: Optional MCP tool annotations (readOnlyHint, etc.).
     """
     mcp_instance.tool(
         name=name,
         description=description or fn.__doc__,
         tags=tags,
-    )(async_background(fn))
+        annotations=annotations,
+    )(fn)
 
     req = getattr(fn, "_version_requirement", None)
     if req is not None:
@@ -254,42 +256,90 @@ def register_mutation_tools(mcp_instance: FastMCP, is_oss: bool = False) -> None
     if not enabled:
         return
 
-    _register_tool(mcp_instance, "add_tags", add_tags, tags={ToolType.MUTATION.value})
     _register_tool(
-        mcp_instance, "remove_tags", remove_tags, tags={ToolType.MUTATION.value}
+        mcp_instance,
+        "add_tags",
+        add_tags,
+        tags={ToolType.MUTATION.value},
+        annotations=_MUTATION,
     )
     _register_tool(
-        mcp_instance, "add_terms", add_glossary_terms, tags={ToolType.MUTATION.value}
+        mcp_instance,
+        "remove_tags",
+        remove_tags,
+        tags={ToolType.MUTATION.value},
+        annotations=_DESTRUCTIVE,
+    )
+    _register_tool(
+        mcp_instance,
+        "add_terms",
+        add_glossary_terms,
+        tags={ToolType.MUTATION.value},
+        annotations=_MUTATION,
     )
     _register_tool(
         mcp_instance,
         "remove_terms",
         remove_glossary_terms,
         tags={ToolType.MUTATION.value},
+        annotations=_DESTRUCTIVE,
     )
     _register_tool(
-        mcp_instance, "add_owners", add_owners, tags={ToolType.MUTATION.value}
+        mcp_instance,
+        "add_owners",
+        add_owners,
+        tags={ToolType.MUTATION.value},
+        annotations=_MUTATION,
     )
     _register_tool(
-        mcp_instance, "remove_owners", remove_owners, tags={ToolType.MUTATION.value}
+        mcp_instance,
+        "remove_owners",
+        remove_owners,
+        tags={ToolType.MUTATION.value},
+        annotations=_DESTRUCTIVE,
     )
     _register_tool(
-        mcp_instance, "set_domains", set_domains, tags={ToolType.MUTATION.value}
+        mcp_instance,
+        "set_domains",
+        set_domains,
+        tags={ToolType.MUTATION.value},
+        annotations=_MUTATION,
     )
     _register_tool(
-        mcp_instance, "remove_domains", remove_domains, tags={ToolType.MUTATION.value}
+        mcp_instance,
+        "remove_domains",
+        remove_domains,
+        tags={ToolType.MUTATION.value},
+        annotations=_DESTRUCTIVE,
     )
-    _register_tool(mcp_instance, "update_description", update_description)
-    _register_tool(mcp_instance, "add_structured_properties", add_structured_properties)
     _register_tool(
-        mcp_instance, "remove_structured_properties", remove_structured_properties
+        mcp_instance,
+        "update_description",
+        update_description,
+        annotations=_NON_IDEMPOTENT_MUTATION,
+    )
+    _register_tool(
+        mcp_instance,
+        "add_structured_properties",
+        add_structured_properties,
+        annotations=_MUTATION,
+    )
+    _register_tool(
+        mcp_instance,
+        "remove_structured_properties",
+        remove_structured_properties,
+        annotations=_DESTRUCTIVE,
     )
 
     # Register save_document tool (only if enabled via environment variable)
     if is_save_document_enabled():
         logger.info("Save Document ENABLED - registering save_document tool")
         _register_tool(
-            mcp_instance, "save_document", save_document, tags={ToolType.MUTATION.value}
+            mcp_instance,
+            "save_document",
+            save_document,
+            tags={ToolType.MUTATION.value},
+            annotations=_NON_IDEMPOTENT_MUTATION,
         )
     else:
         logger.info("Save Document DISABLED - save_document tool not registered")
@@ -312,7 +362,13 @@ def register_user_tools(mcp_instance: FastMCP, is_oss: bool = False) -> None:
     if not enabled:
         return
 
-    _register_tool(mcp_instance, "get_me", get_me, tags={ToolType.USER.value})
+    _register_tool(
+        mcp_instance,
+        "get_me",
+        get_me,
+        tags={ToolType.USER.value},
+        annotations=_READ_ONLY,
+    )
 
 
 def register_search_tools(mcp_instance: FastMCP, is_oss: bool = False) -> None:
@@ -363,7 +419,11 @@ def register_search_tools(mcp_instance: FastMCP, is_oss: bool = False) -> None:
         # This allows the tool to be registered even if validation would fail,
         # but provides clear error messages when semantic search is actually attempted
         _register_tool(
-            mcp_instance, "search", enhanced_search, tags={ToolType.SEARCH.value}
+            mcp_instance,
+            "search",
+            enhanced_search,
+            tags={ToolType.SEARCH.value},
+            annotations=_READ_ONLY,
         )
     else:
         # Register original search tool with deployment-specific description
@@ -373,34 +433,56 @@ def register_search_tools(mcp_instance: FastMCP, is_oss: bool = False) -> None:
             search,
             description=search_description,
             tags={ToolType.SEARCH.value},
+            annotations=_READ_ONLY,
         )
 
     _register_tool(
-        mcp_instance, "get_lineage", get_lineage, tags={ToolType.SEARCH.value}
+        mcp_instance,
+        "get_lineage",
+        get_lineage,
+        tags={ToolType.SEARCH.value},
+        annotations=_READ_ONLY,
     )
     _register_tool(
         mcp_instance,
         "get_dataset_queries",
         get_dataset_queries,
         tags={ToolType.SEARCH.value},
+        annotations=_READ_ONLY,
     )
     _register_tool(
-        mcp_instance, "get_entities", get_entities, tags={ToolType.SEARCH.value}
+        mcp_instance,
+        "get_entities",
+        get_entities,
+        tags={ToolType.SEARCH.value},
+        annotations=_READ_ONLY,
     )
     _register_tool(
         mcp_instance,
         "list_schema_fields",
         list_schema_fields,
         tags={ToolType.SEARCH.value},
+        annotations=_READ_ONLY,
     )
     _register_tool(
         mcp_instance,
         "get_lineage_paths_between",
         get_lineage_paths_between,
         tags={ToolType.SEARCH.value},
+        annotations=_READ_ONLY,
     )
-    _register_tool(mcp_instance, "search_documents", search_documents)
-    _register_tool(mcp_instance, "grep_documents", grep_documents)
+    _register_tool(
+        mcp_instance,
+        "search_documents",
+        search_documents,
+        annotations=_READ_ONLY,
+    )
+    _register_tool(
+        mcp_instance,
+        "grep_documents",
+        grep_documents,
+        annotations=_READ_ONLY,
+    )
 
 
 def register_data_quality_tools(mcp_instance: FastMCP, is_oss: bool = False) -> None:
@@ -426,6 +508,7 @@ def register_data_quality_tools(mcp_instance: FastMCP, is_oss: bool = False) -> 
         "get_dataset_assertions",
         get_dataset_assertions,
         tags={ToolType.SEARCH.value},
+        annotations=_READ_ONLY,
     )
 
 
@@ -482,7 +565,11 @@ def get_valid_tools_from_mcp(
             filter_fn=lambda tool: bool((tool.tags or set()) & {"search", "user"})
         )
     """
-    tools = list(mcp._tool_manager._tools.values())
+    tools = [
+        comp
+        for comp in mcp._local_provider._components.values()  # type: ignore[attr-defined]
+        if isinstance(comp, FastMCPTool)
+    ]
     if filter_fn:
         return [tool for tool in tools if filter_fn(tool)]
     return tools

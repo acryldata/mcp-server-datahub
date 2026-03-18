@@ -293,6 +293,9 @@ def _tokenize(s: str) -> List[_Token]:
 # ---------------------------------------------------------------------------
 
 
+MAX_NESTING_DEPTH = 50
+
+
 class _Parser:
     """Recursive-descent parser that converts a token list into a ``Filter`` tree.
 
@@ -303,6 +306,7 @@ class _Parser:
     def __init__(self, tokens: List[_Token]):
         self.tokens = tokens
         self.pos = 0
+        self._depth = 0
 
     def _peek(self) -> _Token:
         return self.tokens[self.pos]
@@ -362,17 +366,25 @@ class _Parser:
 
     def _parse_factor(self) -> Filter:
         """factor := NOT factor | '(' expr ')' | condition"""
-        if self._peek().type == _TokenType.NOT:
-            self._advance()  # consume NOT
-            inner = self._parse_factor()
-            return _negate_filter(inner)
-        elif self._peek().type == _TokenType.LPAREN:
-            self._advance()  # consume (
-            result = self._parse_expr()
-            self._expect(_TokenType.RPAREN)
-            return result
-        else:
-            return self._parse_condition()
+        self._depth += 1
+        if self._depth > MAX_NESTING_DEPTH:
+            raise ValueError(
+                f"Filter exceeds maximum nesting depth of {MAX_NESTING_DEPTH}"
+            )
+        try:
+            if self._peek().type == _TokenType.NOT:
+                self._advance()  # consume NOT
+                inner = self._parse_factor()
+                return _negate_filter(inner)
+            elif self._peek().type == _TokenType.LPAREN:
+                self._advance()  # consume (
+                result = self._parse_expr()
+                self._expect(_TokenType.RPAREN)
+                return result
+            else:
+                return self._parse_condition()
+        finally:
+            self._depth -= 1
 
     _COMPARISON_OPS: dict = {
         _TokenType.GT: "GREATER_THAN",

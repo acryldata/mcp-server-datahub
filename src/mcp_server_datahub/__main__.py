@@ -1,4 +1,5 @@
 import logging
+import os
 from typing import Any
 
 import click
@@ -12,6 +13,11 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from typing_extensions import Literal
 
+from mcp_server_datahub._auth import (
+    DataHubTokenVerifier,
+    PerUserClientMiddleware,
+    is_auth_enabled,
+)
 from mcp_server_datahub._telemetry import TelemetryMiddleware
 from mcp_server_datahub._version import __version__
 from mcp_server_datahub.document_tools_middleware import DocumentToolsMiddleware
@@ -67,11 +73,31 @@ def create_app() -> FastMCP:
 
     The function is idempotent — calling it more than once returns the same
     ``mcp`` instance without adding duplicate middlewares.
+
+    When ``DATAHUB_MCP_AUTH_ENABLED=true``, the server is configured with
+    a :class:`DataHubTokenVerifier` that validates incoming Bearer tokens
+    against the DataHub backend.  A :class:`PerUserClientMiddleware` then
+    creates a per-request ``DataHubClient`` so mutations are attributed to the
+    calling user.  STDIO transport is unaffected by this setting.
     """
     global _app_initialized
     if _app_initialized:
         return mcp
 
+    # --- Auth provider (HTTP transport only) ---
+    if is_auth_enabled():
+        gms_url = os.environ.get("DATAHUB_GMS_URL", "")
+        if not gms_url:
+            raise RuntimeError(
+                "DATAHUB_MCP_AUTH_ENABLED=true requires DATAHUB_GMS_URL to be set"
+            )
+        auth_provider = DataHubTokenVerifier(gms_url)
+        mcp.auth = auth_provider
+        logging.getLogger(__name__).info(
+            "Auth enabled — DataHub token verification active for HTTP transport"
+        )
+
+    # --- Service-account client (always created as fallback) ---
     client = DataHubClient.from_env(
         client_mode=ClientMode.SDK,
         datahub_component=f"mcp-server-datahub/{__version__}",
@@ -82,6 +108,13 @@ def create_app() -> FastMCP:
     # especially important for HTTP transport where each request runs in a
     # separate async context.
     mcp.add_middleware(_DataHubClientMiddleware(client))
+
+    # When auth is enabled, PerUserClientMiddleware overrides the default
+    # client with a per-request client using the authenticated user's token.
+    if is_auth_enabled():
+        gms_url = os.environ.get("DATAHUB_GMS_URL", "")
+        mcp.add_middleware(PerUserClientMiddleware(gms_url))
+
     mcp.add_middleware(TelemetryMiddleware())
     mcp.add_middleware(VersionFilterMiddleware())
     mcp.add_middleware(DocumentToolsMiddleware())

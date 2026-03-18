@@ -25,6 +25,7 @@ from typing import (
     TypeVar,
 )
 
+import cachetools
 import jmespath
 from datahub.cli.env_utils import get_boolean_env_variable
 from datahub.ingestion.graph.client import DataHubGraph
@@ -353,9 +354,11 @@ def _disable_cloud_fields(query: str) -> str:
     return "\n".join(processed_lines)
 
 
-# Cache to track whether newer GMS fields are supported for each graph instance
-# Key: id(graph), Value: bool indicating if newer GMS fields are supported
-_newer_gms_fields_support_cache: dict[int, bool] = {}
+# Cache to track whether newer GMS fields are supported for each graph instance.
+# Bounded to prevent unbounded growth when many graph instances are created.
+_newer_gms_fields_support_cache: cachetools.LRUCache[int, bool] = cachetools.LRUCache(
+    maxsize=64
+)
 
 
 def _is_datahub_cloud(graph: DataHubGraph) -> bool:
