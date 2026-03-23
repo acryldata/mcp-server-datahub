@@ -91,11 +91,33 @@ def create_app() -> FastMCP:
             raise RuntimeError(
                 "DATAHUB_MCP_AUTH_ENABLED=true requires DATAHUB_GMS_URL to be set"
             )
-        auth_provider = DataHubTokenVerifier(gms_url)
-        mcp.auth = auth_provider
-        logging.getLogger(__name__).info(
-            "Auth enabled — DataHub token verification active for HTTP transport"
-        )
+
+        from mcp_server_datahub._auth_obo import build_obo_auth, get_obo_config_from_env
+
+        obo_config = get_obo_config_from_env()
+        pat_verifier = DataHubTokenVerifier(gms_url)
+
+        if obo_config:
+            from fastmcp.server.auth.auth import MultiAuth
+
+            obo_auth = build_obo_auth(obo_config)
+            # OBO provider first (quick JWT rejection for non-JWTs),
+            # PAT verifier as fallback for DataHub native tokens.
+            if hasattr(obo_auth, "token_verifier"):
+                # RemoteAuthProvider — use as server (provides discovery routes)
+                mcp.auth = MultiAuth(server=obo_auth, verifiers=[pat_verifier])
+            else:
+                # Bare EntraOBOVerifier (no base_url → no discovery routes)
+                mcp.auth = MultiAuth(verifiers=[obo_auth, pat_verifier])
+
+            logging.getLogger(__name__).info(
+                "Auth enabled — Entra ID OBO + DataHub PAT verification active"
+            )
+        else:
+            mcp.auth = pat_verifier
+            logging.getLogger(__name__).info(
+                "Auth enabled — DataHub PAT verification active (no OBO config)"
+            )
 
     # --- Service-account client (always created as fallback) ---
     client = DataHubClient.from_env(
