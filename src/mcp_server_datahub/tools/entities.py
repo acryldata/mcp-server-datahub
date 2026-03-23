@@ -136,7 +136,7 @@ def get_entities(urns: List[str] | str) -> List[dict] | dict:
 
 def list_schema_fields(
     urn: str,
-    keywords: Optional[List[str] | str] = None,
+    keywords: Optional[List[str] ] = None,
     limit: int = 100,
     offset: int = 0,
 ) -> dict:
@@ -147,9 +147,9 @@ def list_schema_fields(
 
     Args:
         urn: Dataset URN
-        keywords: Optional keywords to filter schema fields (OR matching).
-                 - Single string: Treated as one keyword (NOT split on whitespace). Use for field names or exact phrases.
-                 - List of strings: Multiple keywords, matches any (OR logic).
+        keywords: Optional list of keywords to filter schema fields (OR matching).
+                 - Single keyword: Treated as one keyword (NOT split on whitespace). Use for field names or exact phrases.
+                 - Multiple keywords: Multiple keywords, matches any (OR logic).
                  - None or empty list: Returns all fields in priority order (same as get_entities).
                  Matches against fieldPath, description, label, tags, and glossary terms.
                  Matching fields are returned first, sorted by match count.
@@ -167,8 +167,8 @@ def list_schema_fields(
         - offset: The offset used
 
     Examples:
-        # Single keyword (string) - search for exact field name or phrase
-        list_schema_fields(urn="urn:li:dataset:(...)", keywords="user_email")
+        # Single keyword (list) - search for exact field name or phrase
+        list_schema_fields(urn="urn:li:dataset:(...)", keywords=["user_email"])
         # Returns fields matching "user_email" (like user_email_address, primary_user_email)
 
         # Multiple keywords (list) - OR matching

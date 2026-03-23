@@ -115,7 +115,7 @@ class TestListSchemaFields:
                 from datahub_integrations.mcp.mcp_server import list_schema_fields
 
                 result = await async_background(list_schema_fields)(
-                    urn=urn, keywords="email"
+                    urn=urn, keywords=["email"]
                 )
 
                 # Should work with string keyword
