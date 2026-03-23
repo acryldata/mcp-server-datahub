@@ -10,6 +10,7 @@ import logging
 from typing import List, Literal, Optional
 
 from datahub.sdk.main_client import DataHubClient
+from fastmcp.exceptions import ToolError
 
 from .. import graphql_helpers
 
@@ -51,7 +52,7 @@ def validate_urns(
         missing_urns = [urn for urn in urns if urn not in found_urns]
 
         if missing_urns:
-            raise ValueError(
+            raise ToolError(
                 f"The following {entity_label} URNs do not exist in DataHub: {', '.join(missing_urns)}. "
                 f"Please use the search tool with entity_type filter to find existing {entity_label}s, "
                 f"or create the {entity_label}s first before assigning them."
@@ -63,14 +64,14 @@ def validate_urns(
             if entity and entity.get("type") != expected_type
         ]
         if wrong_type:
-            raise ValueError(
+            raise ToolError(
                 f"The following URNs are not {entity_label} entities: {', '.join(wrong_type)}"
             )
 
+    except ToolError:
+        raise
     except Exception as e:
-        if isinstance(e, ValueError):
-            raise
-        raise ValueError(f"Failed to validate {entity_label} URNs: {str(e)}") from e
+        raise ToolError(f"Failed to validate {entity_label} URNs: {str(e)}") from e
 
 
 def build_resources(
@@ -92,7 +93,7 @@ def build_resources(
     if column_paths is None:
         column_paths = [None] * len(entity_urns)
     elif len(column_paths) != len(entity_urns):
-        raise ValueError(
+        raise ToolError(
             f"column_paths length ({len(column_paths)}) must match entity_urns length ({len(entity_urns)})"
         )
 
@@ -152,9 +153,9 @@ def batch_modify(
     client = graphql_helpers.get_datahub_client()
 
     if not item_urns:
-        raise ValueError(f"{item_urns_key} cannot be empty")
+        raise ToolError(f"{item_urns_key} cannot be empty")
     if not entity_urns:
-        raise ValueError("entity_urns cannot be empty")
+        raise ToolError("entity_urns cannot be empty")
 
     # Validate URNs exist
     validate_fn(client, item_urns)  # type: ignore[operator]
@@ -193,11 +194,11 @@ def batch_modify(
                 ),
             }
         else:
-            raise RuntimeError(
+            raise ToolError(
                 f"Failed to {failure_verb} {entity_label}s - operation returned false"
             )
 
+    except ToolError:
+        raise
     except Exception as e:
-        if isinstance(e, RuntimeError):
-            raise
-        raise RuntimeError(f"Error {failure_verb} {entity_label}s: {str(e)}") from e
+        raise ToolError(f"Error {failure_verb} {entity_label}s: {str(e)}") from e

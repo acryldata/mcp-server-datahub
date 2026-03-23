@@ -3,7 +3,8 @@
 import json
 from typing import Callable, Iterator, List, Optional, Set
 
-from datahub.errors import ItemNotFoundError
+from fastmcp import Context
+from fastmcp.exceptions import ToolError
 from json_repair import repair_json
 from loguru import logger
 
@@ -118,6 +119,7 @@ related_documents_gql = (graphql_helpers.GQL_DIR / "related_documents.gql").read
 def get_entities(
     urns: List[str] | str,
     include: Optional[List[str]] = None,
+    ctx: Optional[Context] = None,
 ) -> List[dict] | dict:
     """Get detailed information about one or more entities by their DataHub URNs.
 
@@ -224,13 +226,18 @@ def get_entities(
     urns = [urn.strip() for urn in urns]
 
     results = []
-    for urn in urns:
+    total_urns = len(urns)
+    for idx, urn in enumerate(urns):
         try:
+            # Report progress for batch requests via MCP Context
+            if ctx is not None and total_urns > 1:
+                ctx.report_progress(progress=idx, total=total_urns)
+
             # Check if entity exists first
             if not client._graph.exists(urn):
                 logger.warning(f"Entity not found during existence check: {urn}")
                 if return_single:
-                    raise ItemNotFoundError(f"Entity {urn} not found")
+                    raise ToolError(f"Entity {urn} not found")
                 results.append({"error": f"Entity {urn} not found", "urn": urn})
                 continue
 
@@ -256,7 +263,7 @@ def get_entities(
 
             # Check if entity data was returned
             if result is None:
-                raise ItemNotFoundError(
+                raise ToolError(
                     f"Entity {urn} exists but no data could be retrieved. "
                     f"This can happen if the entity has no aspects ingested yet, or if there's a permissions issue."
                 )
@@ -294,11 +301,19 @@ def get_entities(
                 cleaned = _filter_aspects(cleaned, include_set)
             results.append(cleaned)
 
+        except ToolError as te:
+            if return_single:
+                raise
+            results.append({"error": str(te), "urn": urn})
         except Exception as e:
             logger.warning(f"Error fetching entity {urn}: {e}")
             if return_single:
-                raise
+                raise ToolError(f"Error fetching entity {urn}: {e}") from e
             results.append({"error": str(e), "urn": urn})
+
+    # Report completion
+    if ctx is not None and total_urns > 1:
+        ctx.report_progress(progress=total_urns, total=total_urns)
 
     # Return single dict if single URN was passed, array otherwise
     return results[0] if return_single else results
@@ -363,7 +378,7 @@ def list_schema_fields(
 
     # Fetch entity
     if not client._graph.exists(urn):
-        raise ItemNotFoundError(f"Entity {urn} not found")
+        raise ToolError(f"Entity {urn} not found")
 
     # Execute GraphQL query to get full schema
     variables = {"urn": urn}
@@ -376,7 +391,7 @@ def list_schema_fields(
 
     # Check if entity data was returned
     if result is None:
-        raise ItemNotFoundError(
+        raise ToolError(
             f"Entity {urn} exists but no data could be retrieved. "
             f"This can happen if the entity has no aspects ingested yet, or if there's a permissions issue."
         )

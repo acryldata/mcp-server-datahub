@@ -7,8 +7,8 @@ When making changes, ensure both versions remain identical. Use relative imports
 compatibility across both repositories.
 """
 
+import json
 import string
-import threading
 from enum import Enum
 from typing import (
     Any,
@@ -136,6 +136,15 @@ class ToolType(Enum):
     DEFAULT = "default"  # Fallback tag
 
 
+# ---------------------------------------------------------------------------
+# Default tool timeouts (in seconds)
+# ---------------------------------------------------------------------------
+# Protects against hung GraphQL calls. Search/read tools get more time since
+# they may traverse large lineage graphs; mutations are typically fast.
+_DEFAULT_READ_TIMEOUT_SECONDS = 60
+_DEFAULT_MUTATION_TIMEOUT_SECONDS = 30
+
+
 def _register_tool(
     mcp_instance: FastMCP,
     name: str,
@@ -144,6 +153,7 @@ def _register_tool(
     description: Optional[str] = None,
     tags: Optional[set] = None,
     annotations: Optional[Dict[str, Any]] = None,
+    timeout: Optional[int] = None,
 ) -> None:
     """Register a tool on the MCP instance and capture its version requirement.
 
@@ -157,12 +167,24 @@ def _register_tool(
         description: Tool description. Defaults to fn.__doc__.
         tags: Optional set of tag strings.
         annotations: Optional MCP tool annotations (readOnlyHint, etc.).
+        timeout: Optional per-tool timeout in seconds. Defaults based on
+                 whether the tool is read-only or a mutation.
     """
+    # Infer default timeout from annotations if not explicitly set
+    if timeout is None:
+        is_read_only = (annotations or {}).get("readOnlyHint", False)
+        timeout = (
+            _DEFAULT_READ_TIMEOUT_SECONDS
+            if is_read_only
+            else _DEFAULT_MUTATION_TIMEOUT_SECONDS
+        )
+
     mcp_instance.tool(
         name=name,
         description=description or fn.__doc__,
         tags=tags,
         annotations=annotations,
+        timeout=timeout,
     )(fn)
 
     req = getattr(fn, "_version_requirement", None)
@@ -172,6 +194,8 @@ def _register_tool(
 
 mcp = FastMCP[None](
     name="datahub",
+    on_duplicate="error",
+    strict_input_validation=True,
 )
 
 
@@ -232,9 +256,10 @@ def fetch_global_default_view(graph: DataHubGraph) -> Optional[str]:
     return None
 
 
-# Track if tools have been registered to prevent duplicate registration
+# Track if tools have been registered to prevent duplicate registration.
+# Note: on_duplicate_tools="error" on the FastMCP instance provides a safety net,
+# but we still guard here to avoid noisy errors on legitimate double-calls.
 _tools_registered = False
-_tools_registration_lock = threading.Lock()
 
 
 def register_mutation_tools(mcp_instance: FastMCP, is_oss: bool = False) -> None:
@@ -524,14 +549,12 @@ def register_all_tools(is_oss: bool = False) -> None:
     """
     global _tools_registered
 
-    # Thread-safe check-and-set using lock
-    with _tools_registration_lock:
-        if _tools_registered:
-            logger.debug("Tools already registered, skipping duplicate registration")
-            return
+    if _tools_registered:
+        logger.debug("Tools already registered, skipping duplicate registration")
+        return
 
-        _tools_registered = True
-        logger.info(f"Registering MCP tools (is_oss={is_oss})")
+    _tools_registered = True
+    logger.info(f"Registering MCP tools (is_oss={is_oss})")
 
     # Call the core registration logic on the global mcp instance
     register_search_tools(mcp, is_oss)
@@ -573,3 +596,236 @@ def get_valid_tools_from_mcp(
     if filter_fn:
         return [tool for tool in tools if filter_fn(tool)]
     return tools
+
+
+# ---------------------------------------------------------------------------
+# Resources — read-only catalog metadata for LLM browsing
+# ---------------------------------------------------------------------------
+# These expose catalog metadata that was previously only accessible via the
+# facet-exploration workaround (search with num_results=0). Resources provide
+# a cleaner, purpose-built interface for discovering what exists in the catalog.
+# ---------------------------------------------------------------------------
+
+
+@mcp.resource("datahub://catalog/domains")
+def list_domains_resource() -> str:
+    """List all domains in the DataHub catalog with their URNs and names."""
+    client = graphql_helpers.get_datahub_client()
+    result = graphql_helpers.execute_graphql(
+        client._graph,
+        query="""
+        query listDomains {
+            listDomains(input: { start: 0, count: 100 }) {
+                domains {
+                    urn
+                    properties {
+                        name
+                        description
+                    }
+                }
+                total
+            }
+        }
+        """,
+        operation_name="listDomains",
+    )
+    domains = result.get("listDomains", {})
+    cleaned = graphql_helpers.clean_gql_response(domains)
+    return json.dumps(cleaned, indent=2)
+
+
+@mcp.resource("datahub://catalog/platforms")
+def list_platforms_resource() -> str:
+    """List all data platforms registered in the DataHub catalog."""
+    client = graphql_helpers.get_datahub_client()
+    result = graphql_helpers.execute_graphql(
+        client._graph,
+        query="""
+        query searchPlatforms {
+            searchAcrossEntities(
+                input: {
+                    types: [DATA_PLATFORM]
+                    query: "*"
+                    start: 0
+                    count: 100
+                }
+            ) {
+                total
+                searchResults {
+                    entity {
+                        urn
+                        ... on DataPlatform {
+                            name
+                            properties {
+                                displayName
+                                type
+                                logoUrl
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        """,
+        operation_name="searchPlatforms",
+    )
+    search = result.get("searchAcrossEntities", {})
+    cleaned = graphql_helpers.clean_gql_response(search)
+    return json.dumps(cleaned, indent=2)
+
+
+@mcp.resource("datahub://catalog/tags")
+def list_tags_resource() -> str:
+    """List all tags defined in the DataHub catalog with their URNs and names."""
+    client = graphql_helpers.get_datahub_client()
+    result = graphql_helpers.execute_graphql(
+        client._graph,
+        query="""
+        query searchTags {
+            searchAcrossEntities(
+                input: {
+                    types: [TAG]
+                    query: "*"
+                    start: 0
+                    count: 200
+                }
+            ) {
+                total
+                searchResults {
+                    entity {
+                        urn
+                        ... on Tag {
+                            properties {
+                                name
+                                description
+                                colorHex
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        """,
+        operation_name="searchTags",
+    )
+    search = result.get("searchAcrossEntities", {})
+    cleaned = graphql_helpers.clean_gql_response(search)
+    return json.dumps(cleaned, indent=2)
+
+
+@mcp.resource("datahub://catalog/glossary-terms")
+def list_glossary_terms_resource() -> str:
+    """List all glossary terms in the DataHub catalog with their URNs, names, and definitions."""
+    client = graphql_helpers.get_datahub_client()
+    result = graphql_helpers.execute_graphql(
+        client._graph,
+        query="""
+        query searchGlossaryTerms {
+            searchAcrossEntities(
+                input: {
+                    types: [GLOSSARY_TERM]
+                    query: "*"
+                    start: 0
+                    count: 200
+                }
+            ) {
+                total
+                searchResults {
+                    entity {
+                        urn
+                        ... on GlossaryTerm {
+                            name
+                            properties {
+                                name
+                                definition
+                                termSource
+                            }
+                            parentNodes {
+                                nodes {
+                                    urn
+                                    properties {
+                                        name
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        """,
+        operation_name="searchGlossaryTerms",
+    )
+    search = result.get("searchAcrossEntities", {})
+    cleaned = graphql_helpers.clean_gql_response(search)
+    return json.dumps(cleaned, indent=2)
+
+
+# ---------------------------------------------------------------------------
+# Prompt Templates — pre-built workflows for common DataHub tasks
+# ---------------------------------------------------------------------------
+
+
+@mcp.prompt()
+def governance_review(entity_urn: str) -> str:
+    """Review governance metadata for a DataHub entity — ownership, tags, terms, domain, and compliance."""
+    return f"""Please perform a governance review for the entity: {entity_urn}
+
+Steps:
+1. Fetch entity details: get_entities(urns="{entity_urn}", include=["properties", "ownership", "tags", "glossary_terms", "domain", "deprecation"])
+2. Check ownership:
+   - Is there a designated owner (both business and technical)?
+   - Are ownership types properly assigned?
+3. Check classification tags:
+   - Are compliance tags applied (PII, sensitive data, BCBS 239, etc.)?
+   - Are there any missing classifications based on the data content?
+4. Check glossary terms:
+   - Are business glossary terms linked for standardization?
+5. Check domain assignment:
+   - Is the entity assigned to a business domain?
+6. Check deprecation status:
+   - Is the entity still active, or should it be deprecated?
+7. Summarize findings and recommend any governance gaps to address.
+"""
+
+
+@mcp.prompt()
+def impact_analysis(dataset_urn: str) -> str:
+    """Analyze the downstream impact of changes to a dataset — who and what would be affected."""
+    return f"""Please analyze the downstream impact of changes to: {dataset_urn}
+
+Steps:
+1. Get dataset details: get_entities(urns="{dataset_urn}", include=["properties", "ownership"])
+2. Get downstream lineage: get_lineage(urn="{dataset_urn}", upstream=false, max_hops=2)
+3. For each downstream entity:
+   - Identify the entity type (dataset, dashboard, chart, etc.)
+   - Note the owner/team responsible
+   - Assess the degree of separation (direct vs transitive dependency)
+4. Get upstream lineage: get_lineage(urn="{dataset_urn}", upstream=true, max_hops=1)
+5. Summarize:
+   - Total downstream consumers affected
+   - Breakdown by entity type (tables, dashboards, etc.)
+   - Key stakeholders to notify
+   - Risk assessment (high/medium/low impact)
+"""
+
+
+@mcp.prompt()
+def data_quality_check(dataset_urn: str) -> str:
+    """Check data quality status for a dataset — assertions, incidents, and freshness."""
+    return f"""Please check the data quality status for: {dataset_urn}
+
+Steps:
+1. Fetch entity with quality metadata: get_entities(urns="{dataset_urn}", include=["properties", "assertions", "incidents", "status"])
+2. Review assertions:
+   - What data quality assertions are defined?
+   - What are the latest run results (pass/fail)?
+   - Are there any failing assertions that need attention?
+3. Review incidents:
+   - Are there any active incidents on this dataset?
+   - What is the severity and description?
+4. Review health status:
+   - Is the dataset marked as healthy?
+   - When was the last successful operation?
+5. Summarize the overall data quality posture and flag any issues.
+"""
