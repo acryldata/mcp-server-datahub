@@ -157,10 +157,18 @@ def create_app() -> FastMCP:
     is_flag=True,
     default=False,
 )
+@click.option(
+    "--code-mode",
+    is_flag=True,
+    default=False,
+    help="Enable FastMCP Code Mode: replaces tools with search/execute meta-tools.",
+)
 @telemetry.with_telemetry(
     capture_kwargs=["transport"],
 )
-def main(transport: Literal["stdio", "sse", "http"], debug: bool) -> None:
+def main(
+    transport: Literal["stdio", "sse", "http"], debug: bool, code_mode: bool
+) -> None:
     if debug:
         # Add LoggingMiddleware before create_app() so it becomes the
         # outermost middleware (FastMCP reverses the list) and logs the
@@ -168,6 +176,22 @@ def main(transport: Literal["stdio", "sse", "http"], debug: bool) -> None:
         mcp.add_middleware(LoggingMiddleware(include_payloads=True))
 
     create_app()
+
+    if code_mode or os.environ.get("DATAHUB_MCP_CODE_MODE", "").lower() == "true":
+        from fastmcp.experimental.transforms.code_mode import (
+            CodeMode,
+            MontySandboxProvider,
+        )
+
+        sandbox = MontySandboxProvider(
+            limits={
+                "max_duration_secs": 30,
+                "max_memory": 50_000_000,
+                "max_recursion_depth": 50,
+            },
+        )
+        mcp.add_transform(CodeMode(sandbox_provider=sandbox))
+        logging.getLogger(__name__).info("Code Mode enabled")
 
     if transport == "http":
         mcp.run(transport=transport, show_banner=False, stateless_http=True)

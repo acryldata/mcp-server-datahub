@@ -17,6 +17,9 @@ dependencies = [
 ]
 license = "Apache-2.0"
 
+[project.optional-dependencies]
+code-mode = ["fastmcp[code-mode]>=3.1.0,<4"]
+
 [dependency-groups]
 dev = [
     "anyio>=4.9.0",
