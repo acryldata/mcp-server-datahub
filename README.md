@@ -26,11 +26,14 @@ With DataHub MCP Server, you can instantly give AI agents visibility into of you
 
 ###  **Structured Search with Context Filtering**
 
-Go beyond keyword matching with powerful query & filtering syntax:
+Go beyond keyword matching with powerful query & filtering via a SQL-like filter syntax:
 
-- Wildcard matching: `/q revenue_*` finds `revenue_kpis`, `revenue_daily`, `revenue_forecast`
-- Field searches: `/q tag:PII` finds all PII-tagged data
-- Boolean logic: `/q (sales OR revenue) AND quarterly` for complex queries
+- Wildcard matching: `query="revenue_*"` finds `revenue_kpis`, `revenue_daily`, `revenue_forecast`
+- Simple equality: `filter="platform = snowflake"`
+- IN lists: `filter="platform IN (snowflake, bigquery, redshift)"`
+- Boolean logic: `filter="entity_type = dataset AND (platform = snowflake OR platform = bigquery) AND NOT env = DEV"`
+- Comparisons: `filter="columnCount > 10"`
+- Existence checks: `filter="tag IS NOT NULL"`
 
 ###  **SQL Intelligence & Query Generation**
 
@@ -62,6 +65,16 @@ Understand how your data is organized before searching:
 
 See instructions in the [DataHub MCP server docs](https://docs.datahub.com/docs/features/feature-guides/mcp).
 
+### CLI Options
+
+```
+mcp-server-datahub [--transport {stdio|sse|http}] [--debug] [--code-mode]
+```
+
+- `--transport` — Transport mode (default: `stdio`). Use `sse` or `http` for remote/multi-client setups.
+- `--debug` — Enable verbose logging middleware with full request/response payloads.
+- `--code-mode` — Enable experimental Code Mode (see [Code Mode](#code-mode-experimental)).
+
 ## Demo
 
 Check out the [demo video](https://youtu.be/VXRvHIZ3Eww?t=1878), done in collaboration with the team at Block.
@@ -72,7 +85,7 @@ The DataHub MCP Server provides the following tools:
 
 `search`
 
-Search DataHub using structured keyword search (/q syntax) with boolean logic, filters, pagination, and optional sorting by usage metrics.
+Search DataHub using structured keyword search with SQL-like filters, boolean logic, pagination, and optional sorting by usage metrics.
 
 `get_lineage`
 
@@ -146,6 +159,77 @@ Search within document content using regex patterns. Useful for finding specific
 
 Save standalone documents (insights, decisions, FAQs, notes) to DataHub's knowledge base. Documents are organized under a configurable parent folder.
 
+### Data Quality Tools
+
+These tools provide data quality assertion information. Enabled via `DATA_QUALITY_TOOLS_ENABLED=true`.
+
+`get_dataset_assertions`
+
+Get data quality assertions for a dataset with their latest run results. Supports filtering by column, assertion type, or status, and includes run history.
+
+## Code Mode (Experimental)
+
+Code Mode replaces traditional tools with search/execute meta-tools, allowing AI agents to dynamically compose code within a sandboxed environment. This uses FastMCP's experimental `CodeMode` transform with a Monty sandbox.
+
+Enable via the `--code-mode` CLI flag or `DATAHUB_MCP_CODE_MODE=true` environment variable.
+
+Sandbox limits: 30s execution, ~50MB memory, recursion depth of 50.
+
+Requires the optional `code-mode` dependency group:
+
+```bash
+pip install "mcp-server-datahub[code-mode]"
+```
+
+## Authentication
+
+### Service Account (Default)
+
+The server requires a base DataHub connection via:
+
+- Environment variables: `DATAHUB_GMS_URL`, `DATAHUB_GMS_TOKEN`
+- Or `~/.datahubenv` configuration file
+
+This service-account client is always created and used as the fallback for all requests (and the only client for STDIO transport).
+
+### Per-User Token Verification (HTTP/SSE)
+
+When running with HTTP/SSE transport, you can enable per-request authentication so that mutations are attributed to the calling user instead of the service account. Set `DATAHUB_MCP_AUTH_ENABLED=true` to activate this.
+
+The server supports two authentication methods, which can be used independently or together:
+
+#### DataHub PAT Authentication
+
+Agents send a DataHub Personal Access Token as a Bearer token. The server verifies it against the GMS backend (`/me` query) and creates a per-user client for that request.
+
+This is the simplest setup — no additional configuration beyond `DATAHUB_MCP_AUTH_ENABLED=true` and `DATAHUB_GMS_URL`.
+
+#### Entra ID On-Behalf-Of (OBO) Flow
+
+For organizations using Microsoft Entra ID (e.g., with GitHub Copilot or Copilot Studio), the server supports an OAuth On-Behalf-Of flow:
+
+1. The agent authenticates the user via Entra ID and sends the Entra JWT to the MCP server
+2. The server validates the JWT (signature, issuer, audience, expiry)
+3. The server exchanges it for a DataHub-scoped token via MSAL OBO
+4. A per-user DataHub client is created using the exchanged token
+
+Required environment variables:
+
+| Variable | Description |
+|----------|-------------|
+| `AZURE_TENANT_ID` | Entra ID tenant (GUID, `organizations`, or `consumers`) |
+| `MCP_OAUTH_CLIENT_ID` | App registration client ID |
+| `MCP_OAUTH_CLIENT_SECRET` | App registration client secret |
+| `DATAHUB_OAUTH_SCOPE` | Target scope for OBO exchange (e.g., `api://<datahub-app-id>/.default`) |
+| `MCP_SERVER_BASE_URL` | Optional. Enables `.well-known/oauth-protected-resource` auto-discovery (needed for GitHub Copilot) |
+| `MCP_OAUTH_REQUIRED_SCOPES` | Optional. Comma-separated list of required Entra scopes |
+
+#### Multi-Auth
+
+When both OBO and PAT are configured, the server uses multi-auth: OBO verification is attempted first (quick JWT rejection for non-JWTs), with PAT verification as fallback. This allows both Entra ID-authenticated agents and DataHub PAT-authenticated agents to connect to the same server.
+
+> **Note:** STDIO transport always uses the service-account client and is unaffected by auth settings.
+
 ## Configuration
 
 ### Environment Variables
@@ -154,6 +238,9 @@ Save standalone documents (insights, decisions, FAQs, notes) to DataHub's knowle
 |----------|---------|-------------|
 | `TOOLS_IS_MUTATION_ENABLED` | `false` | Enable mutation tools (add/remove tags, owners, etc.) |
 | `TOOLS_IS_USER_ENABLED` | `false` | Enable user tools (get_me) |
+| `DATA_QUALITY_TOOLS_ENABLED` | `false` | Enable data quality tools (get_dataset_assertions) |
+| `DATAHUB_MCP_AUTH_ENABLED` | `false` | Enable per-request token verification on HTTP transport |
+| `DATAHUB_MCP_CODE_MODE` | `false` | Enable Code Mode (experimental sandboxed execution) |
 | `DATAHUB_MCP_DOCUMENT_TOOLS_DISABLED` | `false` | Completely disable document tools |
 | `SAVE_DOCUMENT_TOOL_ENABLED` | `true` | Enable/disable the save_document tool |
 | `SAVE_DOCUMENT_PARENT_TITLE` | `Shared` | Title for the parent folder of saved documents |
