@@ -4,6 +4,7 @@ import logging
 from typing import Dict, List, Union
 
 from datahub.sdk.main_client import DataHubClient
+from fastmcp.exceptions import ToolError
 
 from .. import graphql_helpers
 from ..version_requirements import min_version
@@ -62,23 +63,23 @@ def _validate_and_fetch_structured_property(
         entity = result.get("entity")
 
         if entity is None:
-            raise ValueError(
+            raise ToolError(
                 f"Structured property URN does not exist in DataHub: {property_urn}. "
                 f"Please use the search tool to find existing structured properties, "
                 f"or create the property first before assigning it."
             )
 
         if entity.get("type") != "STRUCTURED_PROPERTY":
-            raise ValueError(
+            raise ToolError(
                 f"The URN is not a structured property entity: {property_urn} (type: {entity.get('type')})"
             )
 
         return entity.get("definition", {})
 
+    except ToolError:
+        raise
     except Exception as e:
-        if isinstance(e, ValueError):
-            raise
-        raise ValueError(f"Failed to validate structured property URN: {str(e)}") from e
+        raise ToolError(f"Failed to validate structured property URN: {str(e)}") from e
 
 
 def _validate_property_value(
@@ -128,11 +129,11 @@ def _validate_property_value(
             try:
                 return {"numberValue": float(value)}
             except ValueError as e:
-                raise ValueError(
+                raise ToolError(
                     f"Property expects numeric type ({qualified_name}), but got non-numeric string: {value}"
                 ) from e
         else:
-            raise ValueError(
+            raise ToolError(
                 f"Property expects numeric type ({qualified_name}), got {type(value).__name__}"
             )
 
@@ -146,7 +147,7 @@ def _validate_property_value(
             Urn.from_string(value)
             return {"stringValue": value}
         except Exception as e:
-            raise ValueError(
+            raise ToolError(
                 f"Property expects URN type ({qualified_name}), but got invalid URN: {value}. "
                 f"URNs must be in format 'urn:li:entityType:...' Error: {str(e)}"
             ) from e
@@ -163,7 +164,7 @@ def _validate_property_value(
             datetime.fromisoformat(value.replace("Z", "+00:00"))
             return {"stringValue": value}
         except ValueError as e:
-            raise ValueError(
+            raise ToolError(
                 f"Property expects date type ({qualified_name}), but got invalid date format: {value}. "
                 f"Dates must be in ISO 8601 format (e.g., '2024-12-22', '2024-12-22T10:30:00Z')"
             ) from e
@@ -184,7 +185,7 @@ def _validate_property_value(
             # Convert to string for non-string types
             return {"stringValue": str(value)}
 
-    raise ValueError(
+    raise ToolError(
         f"Value type mismatch: property expects {qualified_name}, got {type(value).__name__}"
     )
 
@@ -242,9 +243,9 @@ def add_structured_properties(
     client = graphql_helpers.get_datahub_client()
 
     if not property_values:
-        raise ValueError("property_values cannot be empty")
+        raise ToolError("property_values cannot be empty")
     if not entity_urns:
-        raise ValueError("entity_urns cannot be empty")
+        raise ToolError("entity_urns cannot be empty")
 
     # Validate all structured properties and fetch their definitions
     property_definitions = {}
@@ -264,8 +265,10 @@ def add_structured_properties(
             try:
                 converted_value = _validate_property_value(property_def, value)
                 converted_values.append(converted_value)
+            except ToolError:
+                raise
             except ValueError as e:
-                raise ValueError(
+                raise ToolError(
                     f"Value validation failed for {property_urn}: {str(e)}"
                 ) from e
 
@@ -322,7 +325,7 @@ def add_structured_properties(
         error_details = "; ".join(error_messages[:3])
         if len(error_messages) > 3:
             error_details += f"; and {len(error_messages) - 3} more error(s)"
-        raise RuntimeError(
+        raise ToolError(
             f"Failed to add structured properties to {len(failed_urns)} entit(ies). Errors: {error_details}"
         )
 
@@ -370,9 +373,9 @@ def remove_structured_properties(
     client = graphql_helpers.get_datahub_client()
 
     if not property_urns:
-        raise ValueError("property_urns cannot be empty")
+        raise ToolError("property_urns cannot be empty")
     if not entity_urns:
-        raise ValueError("entity_urns cannot be empty")
+        raise ToolError("entity_urns cannot be empty")
 
     # Validate all structured properties exist
     for property_urn in property_urns:
@@ -427,7 +430,7 @@ def remove_structured_properties(
         error_details = "; ".join(error_messages[:3])
         if len(error_messages) > 3:
             error_details += f"; and {len(error_messages) - 3} more error(s)"
-        raise RuntimeError(
+        raise ToolError(
             f"Failed to remove structured properties from {len(failed_urns)} entit(ies). Errors: {error_details}"
         )
 

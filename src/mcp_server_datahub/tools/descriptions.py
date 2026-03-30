@@ -3,6 +3,8 @@
 import logging
 from typing import Literal, Optional
 
+from fastmcp.exceptions import ToolError
+
 from .. import graphql_helpers
 from ..version_requirements import min_version
 
@@ -86,16 +88,16 @@ def update_description(
 
     # Validate inputs
     if not entity_urn:
-        raise ValueError("entity_urn cannot be empty")
+        raise ToolError("entity_urn cannot be empty")
 
     if operation in ("replace", "append"):
         if not description:
-            raise ValueError(f"description is required for '{operation}' operation")
+            raise ToolError(f"description is required for '{operation}' operation")
     elif operation == "remove":
         # For remove operation, ignore description parameter
         description = ""
     else:
-        raise ValueError(
+        raise ToolError(
             f"Invalid operation '{operation}'. Must be 'replace', 'append', or 'remove'"
         )
 
@@ -267,17 +269,17 @@ def update_description(
             }
         else:
             action = "update" if operation in ("replace", "append") else "remove"
-            raise RuntimeError(
+            raise ToolError(
                 f"Failed to {action} description for {entity_urn}"
                 + (f" column {column_path}" if column_path else "")
                 + " - operation returned false"
             )
 
+    except ToolError:
+        raise
     except Exception as e:
-        if isinstance(e, RuntimeError):
-            raise
         action = "update" if operation in ("replace", "append") else "remove"
-        raise RuntimeError(
+        raise ToolError(
             f"Error {action} description for {entity_urn}"
             + (f" column {column_path}" if column_path else "")
             + f": {str(e)}"

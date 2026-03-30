@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from typing import Any
 
@@ -47,6 +48,14 @@ def _get_client_info(context: MiddlewareContext[Any]) -> dict[str, str]:
     return info
 
 
+def _send_telemetry(event_name: str, data: dict[str, Any]) -> None:
+    """Send telemetry synchronously. Intended to be run in a thread."""
+    try:
+        telemetry.telemetry_instance.ping(event_name, data)
+    except Exception:
+        logger.debug("Failed to send telemetry", exc_info=True)
+
+
 class TelemetryMiddleware(Middleware):
     """Middleware that logs tool calls."""
 
@@ -82,6 +91,8 @@ class TelemetryMiddleware(Middleware):
                 raise
             finally:
                 telemetry_data["duration_seconds"] = timer.elapsed_seconds()
-                telemetry.telemetry_instance.ping(
-                    "mcp-server-tool-call", telemetry_data
+                # Fire telemetry in a background thread so it never blocks
+                # tool responses, even if the network is unreachable.
+                asyncio.get_running_loop().run_in_executor(
+                    None, _send_telemetry, "mcp-server-tool-call", telemetry_data
                 )

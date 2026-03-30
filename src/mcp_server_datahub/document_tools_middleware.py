@@ -176,11 +176,11 @@ def filter_document_tools(tools: Sequence[T]) -> list[T]:
     try:
         has_documents = _query_documents_exist_cached()
     except Exception as e:
-        # Treat errors as "no documents" - most likely the environment doesn't support
-        # the Document entity type (e.g., "Unknown type 'Document'" GraphQL error)
+        # Most likely the environment doesn't support the Document entity type
+        # (e.g., "Unknown type 'Document'" GraphQL error). Filter out document tools
+        # since they won't work anyway.
         logger.info(
-            f"Failed to check if documents exist (treating as no documents), "
-            f"filtering out tools: {DOCUMENT_TOOL_NAMES}. Error: {e}"
+            f"Failed to check if documents exist, filtering out document tools: {e}"
         )
         has_documents = False
 

@@ -5,6 +5,7 @@ from enum import Enum
 from typing import List, Literal, Optional
 
 from datahub.sdk.main_client import DataHubClient
+from fastmcp.exceptions import ToolError
 
 from .. import graphql_helpers
 from ..version_requirements import min_version
@@ -64,7 +65,7 @@ def _validate_owner_urns(client: DataHubClient, owner_urns: List[str]) -> None:
         missing_urns = [urn for urn in owner_urns if urn not in found_urns]
 
         if missing_urns:
-            raise ValueError(
+            raise ToolError(
                 f"The following owner URNs do not exist in DataHub: {', '.join(missing_urns)}. "
                 f"Please use the search tool with entity_type filter to find existing users or groups, "
                 f"or create the owners first before assigning them."
@@ -77,14 +78,14 @@ def _validate_owner_urns(client: DataHubClient, owner_urns: List[str]) -> None:
             if entity and entity.get("type") not in ("CORP_USER", "CORP_GROUP")
         ]
         if invalid_type_entities:
-            raise ValueError(
+            raise ToolError(
                 f"The following URNs are not valid owner entities (must be CorpUser or CorpGroup): {', '.join(invalid_type_entities)}"
             )
 
+    except ToolError:
+        raise
     except Exception as e:
-        if isinstance(e, ValueError):
-            raise
-        raise ValueError(f"Failed to validate owner URNs: {str(e)}") from e
+        raise ToolError(f"Failed to validate owner URNs: {str(e)}") from e
 
 
 def _batch_modify_owners(
@@ -102,9 +103,9 @@ def _batch_modify_owners(
 
     # Validate inputs
     if not owner_urns:
-        raise ValueError("owner_urns cannot be empty")
+        raise ToolError("owner_urns cannot be empty")
     if not entity_urns:
-        raise ValueError("entity_urns cannot be empty")
+        raise ToolError("entity_urns cannot be empty")
 
     # Validate that all owner URNs exist and are valid types
     _validate_owner_urns(client, owner_urns)
@@ -189,14 +190,14 @@ def _batch_modify_owners(
                 "message": f"Successfully {success_verb} {len(owner_urns)} owner(s) {preposition} {len(entity_urns)} entit(ies)",
             }
         else:
-            raise RuntimeError(
+            raise ToolError(
                 f"Failed to {failure_verb} owners - operation returned false"
             )
 
+    except ToolError:
+        raise
     except Exception as e:
-        if isinstance(e, RuntimeError):
-            raise
-        raise RuntimeError(f"Error {failure_verb} owners: {str(e)}") from e
+        raise ToolError(f"Error {failure_verb} owners: {str(e)}") from e
 
 
 @min_version(cloud="0.3.16", oss="1.4.0")

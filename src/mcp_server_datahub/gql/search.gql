@@ -52,6 +52,11 @@ fragment SearchEntityInfo on Entity {
       name
     }
   }
+  ... on Application {
+    properties {
+      name
+    }
+  }
 }
 
 fragment FacetEntityInfo on Entity {

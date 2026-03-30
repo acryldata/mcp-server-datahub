@@ -1,165 +1,76 @@
 """Terms management tools for DataHub MCP server."""
 
 import logging
-from typing import List, Literal, Optional
+from typing import List, Optional
 
 from datahub.sdk.main_client import DataHubClient
 
-from .. import graphql_helpers
 from ..version_requirements import min_version
+from ._mutation_helpers import batch_modify, validate_urns
 
 logger = logging.getLogger(__name__)
 
+# --- Glossary-term-specific constants ---
 
-def _validate_glossary_term_urns(client: DataHubClient, term_urns: List[str]) -> None:
-    """
-    Validate that all glossary term URNs exist in DataHub.
-
-    Raises:
-        ValueError: If any term URN does not exist or is invalid
-    """
-
-    # Query to check if glossary terms exist
-    query = """
-        query getGlossaryTerms($urns: [String!]!) {
-            entities(urns: $urns) {
-                urn
-                type
-                ... on GlossaryTerm {
-                    name
-                }
+_VALIDATE_TERMS_QUERY = """
+    query getGlossaryTerms($urns: [String!]!) {
+        entities(urns: $urns) {
+            urn
+            type
+            ... on GlossaryTerm {
+                name
             }
         }
-    """
+    }
+"""
 
-    try:
-        result = graphql_helpers.execute_graphql(
-            client._graph,
-            query=query,
-            variables={"urns": term_urns},
-            operation_name="getGlossaryTerms",
-        )
+_ADD_TERMS_MUTATION = """
+    mutation batchAddTerms($input: BatchAddTermsInput!) {
+        batchAddTerms(input: $input)
+    }
+"""
 
-        entities = result.get("entities", [])
+_REMOVE_TERMS_MUTATION = """
+    mutation batchRemoveTerms($input: BatchRemoveTermsInput!) {
+        batchRemoveTerms(input: $input)
+    }
+"""
 
-        # Build a map of found URNs
-        found_urns = {entity["urn"] for entity in entities if entity is not None}
 
-        # Check for missing or invalid terms
-        missing_urns = [urn for urn in term_urns if urn not in found_urns]
-
-        if missing_urns:
-            raise ValueError(
-                f"The following glossary term URNs do not exist in DataHub: {', '.join(missing_urns)}. "
-                f"Please use the search tool with entity_type filter to find existing glossary terms, "
-                f"or create the terms first before assigning them."
-            )
-
-        # Verify all returned entities are actually GlossaryTerms
-        non_term_entities = [
-            entity["urn"]
-            for entity in entities
-            if entity and entity.get("type") != "GLOSSARY_TERM"
-        ]
-        if non_term_entities:
-            raise ValueError(
-                f"The following URNs are not glossary term entities: {', '.join(non_term_entities)}"
-            )
-
-    except Exception as e:
-        if isinstance(e, ValueError):
-            raise
-        raise ValueError(f"Failed to validate glossary term URNs: {str(e)}") from e
+def _validate_glossary_term_urns(client: DataHubClient, term_urns: List[str]) -> None:
+    """Validate that all glossary term URNs exist in DataHub."""
+    validate_urns(
+        client,
+        term_urns,
+        entity_label="glossary term",
+        expected_type="GLOSSARY_TERM",
+        query=_VALIDATE_TERMS_QUERY,
+        operation_name="getGlossaryTerms",
+    )
 
 
 def _batch_modify_glossary_terms(
     term_urns: List[str],
     entity_urns: List[str],
     column_paths: Optional[List[Optional[str]]],
-    operation: Literal["add", "remove"],
+    operation: str,
 ) -> dict:
-    """
-    Internal helper for batch glossary term operations (add/remove).
-
-    Validates inputs, constructs GraphQL mutation, and executes the operation.
-    """
-    client = graphql_helpers.get_datahub_client()
-
-    # Validate inputs
-    if not term_urns:
-        raise ValueError("term_urns cannot be empty")
-    if not entity_urns:
-        raise ValueError("entity_urns cannot be empty")
-
-    # Validate that all glossary term URNs exist
-    _validate_glossary_term_urns(client, term_urns)
-
-    # Handle column_paths - if not provided, create list of Nones
-    if column_paths is None:
-        column_paths = [None] * len(entity_urns)
-    elif len(column_paths) != len(entity_urns):
-        raise ValueError(
-            f"column_paths length ({len(column_paths)}) must match entity_urns length ({len(entity_urns)})"
-        )
-
-    # Build the resources list for GraphQL mutation
-    resources = []
-    for resource_urn, column_path in zip(entity_urns, column_paths, strict=True):
-        resource_input = {"resourceUrn": resource_urn}
-
-        # Add subresource fields if provided (for column-level glossary terms)
-        if column_path:
-            resource_input["subResource"] = column_path
-            resource_input["subResourceType"] = "DATASET_FIELD"
-
-        resources.append(resource_input)
-
-    # Determine mutation and operation name based on operation type
-    if operation == "add":
-        mutation = """
-            mutation batchAddTerms($input: BatchAddTermsInput!) {
-                batchAddTerms(input: $input)
-            }
-        """
-        operation_name = "batchAddTerms"
-        success_verb = "added"
-        failure_verb = "add"
-    else:  # remove
-        mutation = """
-            mutation batchRemoveTerms($input: BatchRemoveTermsInput!) {
-                batchRemoveTerms(input: $input)
-            }
-        """
-        operation_name = "batchRemoveTerms"
-        success_verb = "removed"
-        failure_verb = "remove"
-
-    variables = {"input": {"termUrns": term_urns, "resources": resources}}
-
-    try:
-        result = graphql_helpers.execute_graphql(
-            client._graph,
-            query=mutation,
-            variables=variables,
-            operation_name=operation_name,
-        )
-
-        success = result.get(operation_name, False)
-        if success:
-            preposition = "to" if operation == "add" else "from"
-            return {
-                "success": True,
-                "message": f"Successfully {success_verb} {len(term_urns)} glossary term(s) {preposition} {len(entity_urns)} entit(ies)",
-            }
-        else:
-            raise RuntimeError(
-                f"Failed to {failure_verb} glossary terms - operation returned false"
-            )
-
-    except Exception as e:
-        if isinstance(e, RuntimeError):
-            raise
-        raise RuntimeError(f"Error {failure_verb} glossary terms: {str(e)}") from e
+    """Internal helper for batch glossary term operations (add/remove)."""
+    return batch_modify(
+        item_urns=term_urns,
+        entity_urns=entity_urns,
+        column_paths=column_paths,
+        operation=operation,  # type: ignore[arg-type]
+        item_urns_key="termUrns",
+        entity_label="glossary term",
+        add_mutation=_ADD_TERMS_MUTATION,
+        add_operation_name="batchAddTerms",
+        add_input_type="BatchAddTermsInput",
+        remove_mutation=_REMOVE_TERMS_MUTATION,
+        remove_operation_name="batchRemoveTerms",
+        remove_input_type="BatchRemoveTermsInput",
+        validate_fn=_validate_glossary_term_urns,
+    )
 
 
 @min_version(cloud="0.3.16", oss="1.4.0")

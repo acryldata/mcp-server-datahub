@@ -1,165 +1,78 @@
 """Tag management tools for DataHub MCP server."""
 
 import logging
-from typing import List, Literal, Optional
+from typing import List, Optional
 
 from datahub.sdk.main_client import DataHubClient
 
-from .. import graphql_helpers
 from ..version_requirements import min_version
+from ._mutation_helpers import batch_modify, validate_urns
 
 logger = logging.getLogger(__name__)
 
+# --- Tag-specific constants ---
 
-def _validate_tag_urns(client: DataHubClient, tag_urns: List[str]) -> None:
-    """
-    Validate that all tag URNs exist in DataHub.
-
-    Raises:
-        ValueError: If any tag URN does not exist or is invalid
-    """
-    query = """
-        query getTags($urns: [String!]!) {
-            entities(urns: $urns) {
-                urn
-                type
-                ... on Tag {
-                    properties {
-                        name
-                    }
+_VALIDATE_TAGS_QUERY = """
+    query getTags($urns: [String!]!) {
+        entities(urns: $urns) {
+            urn
+            type
+            ... on Tag {
+                properties {
+                    name
                 }
             }
         }
-    """
+    }
+"""
 
-    try:
-        result = graphql_helpers.execute_graphql(
-            client._graph,
-            query=query,
-            variables={"urns": tag_urns},
-            operation_name="getTags",
-        )
+_ADD_TAGS_MUTATION = """
+    mutation batchAddTags($input: BatchAddTagsInput!) {
+        batchAddTags(input: $input)
+    }
+"""
 
-        entities = result.get("entities", [])
+_REMOVE_TAGS_MUTATION = """
+    mutation batchRemoveTags($input: BatchRemoveTagsInput!) {
+        batchRemoveTags(input: $input)
+    }
+"""
 
-        # Build a map of found URNs
-        found_urns = {entity["urn"] for entity in entities if entity is not None}
 
-        # Check for missing or invalid tags
-        missing_urns = [urn for urn in tag_urns if urn not in found_urns]
-
-        if missing_urns:
-            raise ValueError(
-                f"The following tag URNs do not exist in DataHub: {', '.join(missing_urns)}. "
-                f"Please use the search tool with entity_type filter to find existing tags, "
-                f"or create the tags first before assigning them."
-            )
-
-        # Verify all returned entities are actually Tags
-        non_tag_entities = [
-            entity["urn"]
-            for entity in entities
-            if entity and entity.get("type") != "TAG"
-        ]
-        if non_tag_entities:
-            raise ValueError(
-                f"The following URNs are not tag entities: {', '.join(non_tag_entities)}"
-            )
-
-    except Exception as e:
-        if isinstance(e, ValueError):
-            raise
-        raise ValueError(f"Failed to validate tag URNs: {str(e)}") from e
+def _validate_tag_urns(client: DataHubClient, tag_urns: List[str]) -> None:
+    """Validate that all tag URNs exist in DataHub."""
+    validate_urns(
+        client,
+        tag_urns,
+        entity_label="tag",
+        expected_type="TAG",
+        query=_VALIDATE_TAGS_QUERY,
+        operation_name="getTags",
+    )
 
 
 def _batch_modify_tags(
     tag_urns: List[str],
     entity_urns: List[str],
     column_paths: Optional[List[Optional[str]]],
-    operation: Literal["add", "remove"],
+    operation: str,
 ) -> dict:
-    """
-    Internal helper for batch tag operations (add/remove).
-
-    Validates inputs, constructs GraphQL mutation, and executes the operation.
-    """
-    client = graphql_helpers.get_datahub_client()
-
-    # Validate inputs
-    if not tag_urns:
-        raise ValueError("tag_urns cannot be empty")
-    if not entity_urns:
-        raise ValueError("entity_urns cannot be empty")
-
-    # Validate that all tag URNs exist
-    _validate_tag_urns(client, tag_urns)
-
-    # Handle column_paths - if not provided, create list of Nones
-    if column_paths is None:
-        column_paths = [None] * len(entity_urns)
-    elif len(column_paths) != len(entity_urns):
-        raise ValueError(
-            f"column_paths length ({len(column_paths)}) must match entity_urns length ({len(entity_urns)})"
-        )
-
-    # Build the resources list for GraphQL mutation
-    resources = []
-    for resource_urn, column_path in zip(entity_urns, column_paths, strict=True):
-        resource_input = {"resourceUrn": resource_urn}
-
-        # Add subresource fields if provided (for column-level tagging)
-        if column_path:
-            resource_input["subResource"] = column_path
-            resource_input["subResourceType"] = "DATASET_FIELD"
-
-        resources.append(resource_input)
-
-    # Determine mutation and operation name based on operation type
-    if operation == "add":
-        mutation = """
-            mutation batchAddTags($input: BatchAddTagsInput!) {
-                batchAddTags(input: $input)
-            }
-        """
-        operation_name = "batchAddTags"
-        success_verb = "added"
-        failure_verb = "add"
-    else:  # remove
-        mutation = """
-            mutation batchRemoveTags($input: BatchRemoveTagsInput!) {
-                batchRemoveTags(input: $input)
-            }
-        """
-        operation_name = "batchRemoveTags"
-        success_verb = "removed"
-        failure_verb = "remove"
-
-    variables = {"input": {"tagUrns": tag_urns, "resources": resources}}
-
-    try:
-        result = graphql_helpers.execute_graphql(
-            client._graph,
-            query=mutation,
-            variables=variables,
-            operation_name=operation_name,
-        )
-
-        success = result.get(operation_name, False)
-        if success:
-            preposition = "to" if operation == "add" else "from"
-            return {
-                "success": True,
-                "message": f"Successfully {success_verb} {len(tag_urns)} tag(s) {preposition} {len(entity_urns)} entit(ies)",
-            }
-        else:
-            raise RuntimeError(
-                f"Failed to {failure_verb} tags - operation returned false"
-            )
-
-    except Exception as e:
-        if isinstance(e, RuntimeError):
-            raise
-        raise RuntimeError(f"Error {failure_verb} tags: {str(e)}") from e
+    """Internal helper for batch tag operations (add/remove)."""
+    return batch_modify(
+        item_urns=tag_urns,
+        entity_urns=entity_urns,
+        column_paths=column_paths,
+        operation=operation,  # type: ignore[arg-type]
+        item_urns_key="tagUrns",
+        entity_label="tag",
+        add_mutation=_ADD_TAGS_MUTATION,
+        add_operation_name="batchAddTags",
+        add_input_type="BatchAddTagsInput",
+        remove_mutation=_REMOVE_TAGS_MUTATION,
+        remove_operation_name="batchRemoveTags",
+        remove_input_type="BatchRemoveTagsInput",
+        validate_fn=_validate_tag_urns,
+    )
 
 
 @min_version(cloud="0.3.16", oss="1.4.0")
