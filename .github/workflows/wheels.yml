@@ -1,16 +1,15 @@
-name: Wheels
+name: Release
 
 on:
-  release:
-    types: [published]
+  push:
+    tags:
+      - "v*"
 
 jobs:
-  build_and_publish:
+  release:
     runs-on: ubuntu-latest
-    environment: pypi
     permissions:
-      id-token: write
-      contents: read
+      contents: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -25,8 +24,10 @@ jobs:
           python-version: "3.10"
 
       - name: Build package
-        run: |
-          uv build
+        run: uv build
 
-      - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: dist/*
