@@ -136,7 +136,7 @@ def get_entities(urns: List[str] | str) -> List[dict] | dict:
 
 def list_schema_fields(
     urn: str,
-    keywords: Optional[List[str] ] = None,
+    keywords: Optional[List[str]] = None,
     limit: int = 100,
     offset: int = 0,
 ) -> dict:
