@@ -141,6 +141,7 @@ def _register_tool(
     *,
     description: Optional[str] = None,
     tags: Optional[set] = None,
+    annotations: Optional[dict] = None,
 ) -> None:
     """Register a tool on the MCP instance and capture its version requirement.
 
@@ -156,11 +157,15 @@ def _register_tool(
         fn: The tool function (sync).
         description: Tool description. Defaults to fn.__doc__.
         tags: Optional set of tag strings.
+        annotations: Optional MCP tool annotations dict (e.g. {"readOnlyHint": True}).
+            readOnlyHint=True signals to MCP clients (e.g. Cursor BugBot, VS Code Copilot)
+            that the tool does not modify state and is safe to call autonomously.
     """
     mcp_instance.tool(
         name=name,
         description=description or fn.__doc__,
         tags=tags,
+        annotations=annotations,
     )(async_background(fn))
 
     req = getattr(fn, "_version_requirement", None)
@@ -312,7 +317,7 @@ def register_user_tools(mcp_instance: FastMCP, is_oss: bool = False) -> None:
     if not enabled:
         return
 
-    _register_tool(mcp_instance, "get_me", get_me, tags={ToolType.USER.value})
+    _register_tool(mcp_instance, "get_me", get_me, tags={ToolType.USER.value}, annotations={"readOnlyHint": True})
 
 
 def register_search_tools(mcp_instance: FastMCP, is_oss: bool = False) -> None:
@@ -363,7 +368,7 @@ def register_search_tools(mcp_instance: FastMCP, is_oss: bool = False) -> None:
         # This allows the tool to be registered even if validation would fail,
         # but provides clear error messages when semantic search is actually attempted
         _register_tool(
-            mcp_instance, "search", enhanced_search, tags={ToolType.SEARCH.value}
+            mcp_instance, "search", enhanced_search, tags={ToolType.SEARCH.value}, annotations={"readOnlyHint": True}
         )
     else:
         # Register original search tool with deployment-specific description
@@ -373,34 +378,38 @@ def register_search_tools(mcp_instance: FastMCP, is_oss: bool = False) -> None:
             search,
             description=search_description,
             tags={ToolType.SEARCH.value},
+            annotations={"readOnlyHint": True},
         )
 
     _register_tool(
-        mcp_instance, "get_lineage", get_lineage, tags={ToolType.SEARCH.value}
+        mcp_instance, "get_lineage", get_lineage, tags={ToolType.SEARCH.value}, annotations={"readOnlyHint": True}
     )
     _register_tool(
         mcp_instance,
         "get_dataset_queries",
         get_dataset_queries,
         tags={ToolType.SEARCH.value},
+        annotations={"readOnlyHint": True},
     )
     _register_tool(
-        mcp_instance, "get_entities", get_entities, tags={ToolType.SEARCH.value}
+        mcp_instance, "get_entities", get_entities, tags={ToolType.SEARCH.value}, annotations={"readOnlyHint": True}
     )
     _register_tool(
         mcp_instance,
         "list_schema_fields",
         list_schema_fields,
         tags={ToolType.SEARCH.value},
+        annotations={"readOnlyHint": True},
     )
     _register_tool(
         mcp_instance,
         "get_lineage_paths_between",
         get_lineage_paths_between,
         tags={ToolType.SEARCH.value},
+        annotations={"readOnlyHint": True},
     )
-    _register_tool(mcp_instance, "search_documents", search_documents)
-    _register_tool(mcp_instance, "grep_documents", grep_documents)
+    _register_tool(mcp_instance, "search_documents", search_documents, annotations={"readOnlyHint": True})
+    _register_tool(mcp_instance, "grep_documents", grep_documents, annotations={"readOnlyHint": True})
 
 
 def register_data_quality_tools(mcp_instance: FastMCP, is_oss: bool = False) -> None:
@@ -426,6 +435,7 @@ def register_data_quality_tools(mcp_instance: FastMCP, is_oss: bool = False) -> 
         "get_dataset_assertions",
         get_dataset_assertions,
         tags={ToolType.SEARCH.value},
+        annotations={"readOnlyHint": True},
     )
 
 
