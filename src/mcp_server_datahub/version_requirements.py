@@ -109,6 +109,13 @@ def min_version(
     )
 
     def decorator(fn: Callable) -> Callable:
+        # NOTE: We intentionally mutate fn in place rather than wrapping with
+        # functools.wraps.  These decorators are stacked (e.g. @read_only over
+        # @min_version), and each sets a custom attribute (_version_requirement,
+        # _read_only_hint) that _register_tool reads at registration time.
+        # Wrapping would create a new function object, hiding attributes set by
+        # inner decorators and silently breaking version filtering or annotation
+        # propagation.
         fn._version_requirement = req  # type: ignore[attr-defined]
         return fn
 
@@ -131,6 +138,8 @@ def read_only(fn: Callable) -> Callable:
         def my_tool(...):
             ...
     """
+    # NOTE: Mutates fn in place — do NOT wrap with functools.wraps.
+    # See comment in min_version() for rationale.
     fn._read_only_hint = True  # type: ignore[attr-defined]
     return fn
 
