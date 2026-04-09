@@ -8,6 +8,7 @@ from loguru import logger
 
 from .. import graphql_helpers
 from ..search_filter_parser import FILTER_DOCS
+from ..version_requirements import read_only
 
 search_gql = (graphql_helpers.GQL_DIR / "search.gql").read_text()
 semantic_search_gql = (graphql_helpers.GQL_DIR / "semantic_search.gql").read_text()
@@ -95,6 +96,7 @@ def _search_implementation(
 
 # Define enhanced search tool when semantic search is enabled
 # TODO: Consider adding sorting support (sort_by, sort_order parameters) similar to search() tool if needed.
+@read_only
 def enhanced_search(
     query: str = "*",
     search_strategy: Optional[Literal["semantic", "keyword"]] = None,
@@ -182,6 +184,7 @@ enhanced_search.__doc__ = string.Template(enhanced_search.__doc__).substitute(
 )
 
 
+@read_only
 def search(
     query: str = "*",
     filter: Optional[str] = None,

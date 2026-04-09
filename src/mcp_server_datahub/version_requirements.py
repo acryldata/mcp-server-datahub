@@ -115,6 +115,26 @@ def min_version(
     return decorator
 
 
+def read_only(fn: Callable) -> Callable:
+    """Decorator to declare that a tool does not modify any state.
+
+    Signals to MCP clients (e.g. Cursor BugBot, VS Code Copilot) that the tool
+    is safe to call autonomously without risk of side effects. Corresponds to
+    the MCP protocol's ``readOnlyHint`` annotation.
+
+    During tool registration, ``_register_tool`` reads this attribute and
+    sets ``readOnlyHint=True`` in the tool's MCP annotations automatically.
+
+    Usage::
+
+        @read_only
+        def my_tool(...):
+            ...
+    """
+    fn._read_only_hint = True  # type: ignore[attr-defined]
+    return fn
+
+
 # Auto-populated during tool registration by _register_tool().
 # Maps tool name -> VersionRequirement. Tools not in this dict have no version restriction.
 TOOL_VERSION_REQUIREMENTS: dict[str, VersionRequirement] = {}

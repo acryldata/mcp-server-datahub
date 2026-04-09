@@ -4,7 +4,7 @@ import logging
 from typing import Any, Literal, Optional
 
 from .. import graphql_helpers
-from ..version_requirements import min_version
+from ..version_requirements import min_version, read_only
 
 logger = logging.getLogger(__name__)
 
@@ -341,6 +341,7 @@ def _extract_tags(assertion: dict[str, Any]) -> list[str]:
     return result
 
 
+@read_only
 @min_version(cloud="0.3.16")
 def get_dataset_assertions(
     urn: str,
