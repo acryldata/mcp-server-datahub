@@ -70,7 +70,10 @@ class TestRegisterToolAnnotations:
 
         mock_mcp = self._make_mock_mcp()
 
-        with patch("datahub_integrations.mcp.mcp_server.async_background", side_effect=lambda fn: fn):
+        with patch(
+            "datahub_integrations.mcp.mcp_server.async_background",
+            side_effect=lambda fn: fn,
+        ):
             _register_tool(mock_mcp, "my_tool", my_tool)
 
         mock_mcp.tool.assert_called_once()
@@ -83,7 +86,10 @@ class TestRegisterToolAnnotations:
 
         mock_mcp = self._make_mock_mcp()
 
-        with patch("datahub_integrations.mcp.mcp_server.async_background", side_effect=lambda fn: fn):
+        with patch(
+            "datahub_integrations.mcp.mcp_server.async_background",
+            side_effect=lambda fn: fn,
+        ):
             _register_tool(mock_mcp, "my_tool", my_tool)
 
         mock_mcp.tool.assert_called_once()
