@@ -14,6 +14,13 @@ dependencies = [
     "pydantic>=2.0,<3",
     "json-repair",
     "google-re2",
+    # Transitive pin: fastmcp -> pydocket -> fakeredis. pydocket (as of 0.18.2)
+    # declares `fakeredis[lua]>=2.32.1` with no upper bound, and fakeredis 2.35.0
+    # (released 2026-04-09) removed the `FakeConnection` export from
+    # `fakeredis.aioredis` that pydocket imports at startup. Fresh `uvx` installs
+    # therefore resolve to a broken combination. Remove this pin once pydocket
+    # publishes a release that constrains or adapts to fakeredis>=2.35.
+    "fakeredis<2.35",
 ]
 license = "Apache-2.0"
 
