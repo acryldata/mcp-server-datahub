@@ -7,6 +7,7 @@ from datahub.ingestion.graph.client import DataHubGraph
 from datahub.sdk.main_client import DataHubClient
 from datahub.sdk.search_client import compile_filters
 from datahub.sdk.search_filters import Filter, FilterDsl
+from fastmcp.exceptions import ToolError
 from loguru import logger
 from pydantic import BaseModel
 
@@ -454,7 +455,7 @@ def _find_upstream_lineage_path(
     search_results = lineage.get("upstreams", {}).get("searchResults", [])
 
     if not search_results:
-        raise ItemNotFoundError(
+        raise ToolError(
             f"No lineage found from {source_urn}"
             + (f".{source_column}" if source_column else "")
         )
@@ -467,7 +468,7 @@ def _find_upstream_lineage_path(
     )
 
     if not target_result:
-        raise ItemNotFoundError(
+        raise ToolError(
             f"No lineage path found from {source_urn}"
             + (f".{source_column}" if source_column else "")
             + f" to {target_urn}"
@@ -658,7 +659,7 @@ def get_lineage_paths_between(
 
     # Validate: if either column is specified, must be column-level lineage
     if (source_column is None) != (target_column is None):
-        raise ValueError(
+        raise ToolError(
             "Both source_column and target_column must be provided for column-level lineage, "
             "or both must be None for dataset-level lineage"
         )
@@ -710,9 +711,9 @@ def get_lineage_paths_between(
                     "Direction was automatically discovered. Specify direction='downstream' or 'upstream' explicitly for better performance."
                 )
                 return result
-            except ItemNotFoundError:
+            except (ItemNotFoundError, ToolError):
                 # Not found in either direction
-                raise ItemNotFoundError(
+                raise ToolError(
                     f"No lineage path found between {source_urn}"
                     + (f".{source_column}" if source_column else "")
                     + f" and {target_urn}"

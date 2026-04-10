@@ -4,6 +4,7 @@ import logging
 from typing import List
 
 from datahub.sdk.main_client import DataHubClient
+from fastmcp.exceptions import ToolError
 
 from .. import graphql_helpers
 from ..version_requirements import min_version
@@ -43,21 +44,21 @@ def _validate_domain_urn(client: DataHubClient, domain_urn: str) -> None:
         entity = result.get("entity")
 
         if entity is None:
-            raise ValueError(
+            raise ToolError(
                 f"Domain URN does not exist in DataHub: {domain_urn}. "
                 f"Please use the search tool with entity_type filter to find existing domains, "
                 f"or create the domain first before assigning it."
             )
 
         if entity.get("type") != "DOMAIN":
-            raise ValueError(
+            raise ToolError(
                 f"The URN is not a domain entity: {domain_urn} (type: {entity.get('type')})"
             )
 
+    except ToolError:
+        raise
     except Exception as e:
-        if isinstance(e, ValueError):
-            raise
-        raise ValueError(f"Failed to validate domain URN: {str(e)}") from e
+        raise ToolError(f"Failed to validate domain URN: {str(e)}") from e
 
 
 @min_version(cloud="0.3.16", oss="1.4.0")
@@ -114,9 +115,9 @@ def set_domains(
     client = graphql_helpers.get_datahub_client()
 
     if not domain_urn:
-        raise ValueError("domain_urn cannot be empty")
+        raise ToolError("domain_urn cannot be empty")
     if not entity_urns:
-        raise ValueError("entity_urns cannot be empty")
+        raise ToolError("entity_urns cannot be empty")
 
     _validate_domain_urn(client, domain_urn)
 
@@ -146,12 +147,12 @@ def set_domains(
                 "message": f"Successfully set domain for {len(entity_urns)} entit(ies)",
             }
         else:
-            raise RuntimeError("Failed to set domain - operation returned false")
+            raise ToolError("Failed to set domain - operation returned false")
 
+    except ToolError:
+        raise
     except Exception as e:
-        if isinstance(e, RuntimeError):
-            raise
-        raise RuntimeError(f"Error setting domain: {str(e)}") from e
+        raise ToolError(f"Error setting domain: {str(e)}") from e
 
 
 @min_version(cloud="0.3.16", oss="1.4.0")
@@ -200,7 +201,7 @@ def remove_domains(
     client = graphql_helpers.get_datahub_client()
 
     if not entity_urns:
-        raise ValueError("entity_urns cannot be empty")
+        raise ToolError("entity_urns cannot be empty")
 
     resources = []
     for resource_urn in entity_urns:
@@ -228,9 +229,9 @@ def remove_domains(
                 "message": f"Successfully removed domain from {len(entity_urns)} entit(ies)",
             }
         else:
-            raise RuntimeError("Failed to remove domain - operation returned false")
+            raise ToolError("Failed to remove domain - operation returned false")
 
+    except ToolError:
+        raise
     except Exception as e:
-        if isinstance(e, RuntimeError):
-            raise
-        raise RuntimeError(f"Error removing domain: {str(e)}") from e
+        raise ToolError(f"Error removing domain: {str(e)}") from e

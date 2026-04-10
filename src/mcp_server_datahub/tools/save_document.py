@@ -22,6 +22,8 @@ from datahub.cli.env_utils import get_boolean_env_variable
 from datahub.metadata import schema_classes as models
 from datahub.sdk import Document
 
+from fastmcp.exceptions import ToolError
+
 from .. import graphql_helpers
 from ..version_requirements import min_version
 
@@ -625,7 +627,7 @@ def save_document(
 
     except Exception as e:
         logger.error(f"Failed to save document: {e}")
-        raise RuntimeError(f"Error saving document: {str(e)}") from e
+        raise ToolError(f"Error saving document: {str(e)}") from e
 
 
 def is_save_document_enabled() -> bool:

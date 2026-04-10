@@ -3,6 +3,8 @@
 import logging
 from typing import Any, Literal, Optional
 
+from fastmcp.exceptions import ToolError
+
 from .. import graphql_helpers
 from ..version_requirements import min_version
 
@@ -451,7 +453,7 @@ def get_dataset_assertions(
         return response
 
     except Exception as e:
-        raise RuntimeError(f"Error fetching assertions for dataset {urn}: {e}") from e
+        raise ToolError(f"Error fetching assertions for dataset {urn}: {e}") from e
 
 
 def _empty_response(start: int = 0) -> dict[str, Any]:

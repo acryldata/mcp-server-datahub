@@ -3,10 +3,14 @@
 import string
 from typing import Any, Dict, Literal, Optional
 
+from datahub.sdk.main_client import DataHubClient
 from datahub.sdk.search_client import compile_filters
+from fastmcp import Context
 from loguru import logger
+from uncalled_for import Depends
 
 from .. import graphql_helpers
+from ..dependencies import get_client_dep
 from ..search_filter_parser import FILTER_DOCS
 
 search_gql = (graphql_helpers.GQL_DIR / "search.gql").read_text()
@@ -22,9 +26,11 @@ def _search_implementation(
     sort_by: Optional[str] = None,
     sort_order: Optional[Literal["asc", "desc"]] = "desc",
     offset: int = 0,
+    client: Optional[DataHubClient] = None,
 ) -> dict:
     """Core search implementation that can use semantic, keyword, or ersatz_semantic search."""
-    client = graphql_helpers.get_datahub_client()
+    if client is None:
+        client = graphql_helpers.get_datahub_client()
 
     # Cap num_results at 50 to prevent excessive requests
     num_results = min(num_results, 50)
@@ -101,6 +107,8 @@ def enhanced_search(
     filter: Optional[str] = None,
     num_results: int = 10,
     offset: int = 0,
+    client: DataHubClient = Depends(get_client_dep),
+    ctx: Optional[Context] = None,
 ) -> dict:
     """Enhanced search across DataHub entities with semantic and keyword capabilities.
     Results are ordered by relevance and importance - examine top results first.
@@ -152,7 +160,8 @@ def enhanced_search(
        -> Examine tags/glossaryTerms facets to see what metadata exists
     2. Filtered search: search(query="*", filter="tag = urn:li:tag:pii", num_results=30)
        -> Get entities with specific tag using URN from step 1
-    3. Get details: Use get_entities() on specific results
+    3. Get details: Use get_entities(urns, include=["properties"]) for lightweight follow-ups.
+       Only request additional aspect groups (ownership, tags, schema, …) when actually needed.
 
     $FILTER_DOCS
 
@@ -171,8 +180,10 @@ def enhanced_search(
     high-usage entities appear first. For "most important tables", search by
     importance tags/terms or use the top-ranked results from a broad search.
     """
+    if ctx is not None:
+        ctx.info(f"Enhanced search: query={query!r}, strategy={search_strategy}")
     return _search_implementation(
-        query, filter, num_results, search_strategy, offset=offset
+        query, filter, num_results, search_strategy, offset=offset, client=client
     )
 
 
@@ -189,6 +200,8 @@ def search(
     sort_by: Optional[str] = None,
     sort_order: Optional[Literal["asc", "desc"]] = "desc",
     offset: int = 0,
+    client: DataHubClient = Depends(get_client_dep),
+    ctx: Optional[Context] = None,
 ) -> dict:
     """Search across DataHub entities using structured full-text search.
     Results are ordered by relevance and importance - examine top results first.
@@ -228,7 +241,8 @@ def search(
        -> Examine tags/glossaryTerms facets to see what metadata exists
     2. Filtered search: search(query="*", filter="tag = urn:li:tag:pii", num_results=30)
        -> Get entities with specific tag using URN from step 1
-    3. Get details: Use get_entities() on specific results
+    3. Get details: Use get_entities(urns, include=["properties"]) for lightweight follow-ups.
+       Only request additional aspect groups (ownership, tags, schema, …) when actually needed.
 
     $FILTER_DOCS
 
@@ -246,6 +260,8 @@ def search(
     Note: If sort_by is not provided, search results use default ranking by relevance and
     importance. When using sort_by, results are strictly ordered by that field.
     """
+    if ctx is not None:
+        ctx.info(f"Searching DataHub: query={query!r}, filter={filter!r}")
     return _search_implementation(
-        query, filter, num_results, "keyword", sort_by, sort_order, offset
+        query, filter, num_results, "keyword", sort_by, sort_order, offset, client
     )

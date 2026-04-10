@@ -3,6 +3,8 @@
 import logging
 from typing import Any
 
+from fastmcp.exceptions import ToolError
+
 from .. import graphql_helpers
 from ..version_requirements import min_version
 
@@ -91,9 +93,11 @@ def get_me() -> dict[str, Any]:
                 "message": "Successfully retrieved authenticated user information",
             }
         else:
-            raise RuntimeError("No authenticated user found")
+            raise ToolError(
+                "No authenticated user found. Check that a valid token is configured."
+            )
 
+    except ToolError:
+        raise
     except Exception as e:
-        if isinstance(e, RuntimeError):
-            raise
-        raise RuntimeError(f"Error retrieving user information: {str(e)}") from e
+        raise ToolError(f"Error retrieving user information: {str(e)}") from e
