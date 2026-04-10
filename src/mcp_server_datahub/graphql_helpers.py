@@ -35,6 +35,7 @@ from loguru import logger
 
 from ._token_estimator import TokenCountEstimator
 from .search_filter_parser import parse_filter_string
+from .sub_entity_urls import SubEntityResolver
 from .tool_context import ToolContext
 
 GQL_DIR = pathlib.Path(__file__).parent / "gql"
@@ -518,16 +519,30 @@ def execute_graphql(
 
 
 def inject_urls_for_urns(
-    graph: DataHubGraph, response: Any, json_paths: List[str]
+    graph: DataHubGraph,
+    response: Any,
+    json_paths: List[str],
 ) -> None:
     if not _is_datahub_cloud(graph):
         return
 
+    # _is_datahub_cloud already confirmed this attribute exists.
+    frontend_base_url: str = graph.frontend_base_url
+    # SubEntityResolver is lightweight (two attribute assignments, no allocations);
+    # the actual cache lives at module level in sub_entity_urls.
+    resolver = SubEntityResolver(graph)
+
     for path in json_paths:
         for item in jmespath.search(path, response) if path else [response]:
             if isinstance(item, dict) and item.get("urn"):
+                urn = item["urn"]
+                url = resolver.url_for_urn(frontend_base_url, urn)
                 # Update item in place with url, ensuring that urn and url are first.
-                new_item = {"urn": item["urn"], "url": graph.url_for(item["urn"])}
+                # Omit url entirely when resolution fails (e.g. sub-entity with no parent)
+                # so downstream consumers don't see url: null.
+                new_item: dict = {"urn": urn}
+                if url is not None:
+                    new_item["url"] = url
                 new_item.update({k: v for k, v in item.items() if k != "urn"})
                 item.clear()
                 item.update(new_item)

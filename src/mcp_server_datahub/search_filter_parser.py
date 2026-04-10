@@ -115,6 +115,16 @@ FILTER SYNTAX (SQL-like WHERE clause):
     full URN format (urn:li:...). Search with entity_type = domain first to find
     valid domain URNs, then use the exact URN from the results.
 
+    STRUCTURED PROPERTY FILTERS:
+    Use structuredProperties.<qualifiedName> as the field name. The qualifiedName
+    is the ID portion of the structured property URN (urn:li:structuredProperty:<qualifiedName>).
+      structuredProperties.io.acryl.privacy.retentionTime = 30
+      structuredProperties.31b94813-7667-4ae8-b93a-a72cc5e0c75b IN (Published, Certified)
+      structuredProperties.my.custom.property IS NOT NULL
+    Values are CASE-SENSITIVE. Some structured properties have fixed allowed values
+    (e.g. "Published", "Certified"). Use get_entities on the structured property URN
+    to check definition.allowedValues and match the exact casing.
+
     Values containing special characters (spaces, =, parentheses) must be quoted:
       tag = "urn:li:tag:my tag"
       customProperties = "key=value"\
@@ -384,7 +394,7 @@ class _Parser:
     def _parse_condition(self) -> Filter:
         """condition := field op value | field IN (...) | field IS [NOT] NULL"""
         field_token = self._expect(_TokenType.STRING)
-        field = field_token.value
+        field = _normalize_sp_field(field_token.value)
 
         if self._peek().type == _TokenType.EQ:
             self._advance()  # consume =
@@ -436,6 +446,24 @@ class _Parser:
 # Filter construction helpers
 # ---------------------------------------------------------------------------
 
+_SP_FIELD_WITH_URN_PREFIX = "structuredProperties.urn:li:structuredProperty:"
+
+
+def _normalize_sp_field(field: str) -> str:
+    """Extract qualifiedName when a structured property URN is used instead.
+
+    The LLM knows to use ``structuredProperties.<qualifiedName>`` but may
+    confuse the qualifiedName with the full URN, producing e.g.::
+
+        structuredProperties.urn:li:structuredProperty:io.acryl.foo = bar
+
+    This strips the URN wrapper, yielding ``structuredProperties.io.acryl.foo``.
+    """
+    if field.startswith(_SP_FIELD_WITH_URN_PREFIX):
+        return f"structuredProperties.{field[len(_SP_FIELD_WITH_URN_PREFIX) :]}"
+    return field
+
+
 # Map of user-facing field names (case-insensitive) to canonical names.
 # Used by _make_filter to dispatch to typed Filter classes (e.g. _PlatformFilter).
 # Unrecognized fields fall through to _CustomCondition with the raw field name.
@@ -453,6 +481,21 @@ _FIELD_MAP = {
     "tag": "tag",
     "glossary_term": "glossary_term",
     "status": "status",
+    # Boolean filter fields
+    "deprecated": "deprecated",
+    "hasactiveincidents": "hasActiveIncidents",
+    "has_active_incidents": "hasActiveIncidents",
+    "hasfailingassertions": "hasFailingAssertions",
+    "has_failing_assertions": "hasFailingAssertions",
+    # DataHub-native field name aliases so that LLMs familiar with the
+    # internal model still route through typed filter classes instead of
+    # falling through to the raw custom-filter passthrough.
+    "_entitytype": "entity_type",
+    "typenames": "entity_subtype",
+    "domains": "domain",
+    "owners": "owner",
+    "tags": "tag",
+    "glossaryterms": "glossary_term",
 }
 
 
@@ -470,6 +513,9 @@ _BACKEND_FIELD_MAP = {
     "owner": "owners",
     "tag": "tags",
     "glossary_term": "glossaryTerms",
+    "deprecated": "deprecated",
+    "hasActiveIncidents": "hasActiveIncidents",
+    "hasFailingAssertions": "hasFailingAssertions",
 }
 
 
@@ -506,6 +552,23 @@ def _make_exists_filter(field: str, negated: bool) -> Filter:
         return F.not_(exists_filter)
 
 
+_BOOLEAN_FIELDS = {"deprecated", "hasActiveIncidents", "hasFailingAssertions"}
+
+
+def _normalize_boolean(value: str, field: str) -> str:
+    """Validate and normalize a boolean filter value to lowercase."""
+    lower = value.lower()
+    if lower not in ("true", "false"):
+        raise ValueError(
+            f"Invalid value {value!r} for boolean field {field!r}: expected 'true' or 'false'"
+        )
+    return lower
+
+
+def _make_boolean_filter(field: str, value: str) -> Filter:
+    return F.custom_filter(field, "EQUAL", [_normalize_boolean(value, field)])
+
+
 def _make_filter(field: str, values: Union[List[str], Sequence[str]]) -> Filter:
     """Create a typed Filter from a field name and values."""
     normalized = _FIELD_MAP.get(field.lower())
@@ -535,6 +598,10 @@ def _make_filter(field: str, values: Union[List[str], Sequence[str]]) -> Filter:
         if len(values) != 1:
             raise ValueError("Status filter must have exactly one value")
         return F.soft_deleted(RemovedStatusFilter(values[0]))
+    elif normalized in _BOOLEAN_FIELDS:
+        if len(values) != 1:
+            raise ValueError(f"{normalized} filter must have exactly one value")
+        return _make_boolean_filter(normalized, values[0])
     else:
         return F.custom_filter(field, "EQUAL", list(values))
 

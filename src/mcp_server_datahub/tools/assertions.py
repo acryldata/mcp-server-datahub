@@ -4,6 +4,7 @@ import logging
 from typing import Any, Literal, Optional
 
 from .. import graphql_helpers
+from ..sub_entity_urls import SUB_ENTITY_CONFIGS, make_sub_entity_url
 from ..version_requirements import min_version, read_only
 
 logger = logging.getLogger(__name__)
@@ -428,6 +429,18 @@ def get_dataset_assertions(
 
         summaries = [graphql_helpers.clean_gql_response(s) for s in summaries]
         graphql_helpers.truncate_descriptions(summaries)
+
+        try:
+            assertion_config = SUB_ENTITY_CONFIGS["assertion"]
+            frontend_base_url: str = client._graph.frontend_base_url
+            for summary in summaries:
+                assertion_urn = summary.get("urn")
+                if assertion_urn:
+                    summary["url"] = make_sub_entity_url(
+                        frontend_base_url, assertion_urn, urn, assertion_config
+                    )
+        except Exception:
+            logger.warning("Could not inject assertion URLs", exc_info=True)
         selected = list(
             graphql_helpers.select_results_within_budget(
                 results=iter(summaries),
