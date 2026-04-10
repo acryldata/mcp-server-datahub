@@ -91,7 +91,7 @@ jobs:
           DATAHUB_GMS_URL: ${{ secrets.LONGTAIL_GMS_URL }}
           DATAHUB_GMS_TOKEN: ${{ secrets.LONGTAIL_GMS_TOKEN }}
         run: |
-          uv run pytest tests/test_mcp_integration.py -v
+          uv run pytest tests/test_mcp_integration.py -v --timeout=120 --log-cli-level=DEBUG -x
 
       - name: Run integration tests (OSS)
         if: matrix.test_env == 'oss'
@@ -99,7 +99,7 @@ jobs:
           DATAHUB_GMS_URL: "http://localhost:8080"
           DATAHUB_GMS_TOKEN: ""
         run: |
-          uv run pytest tests/test_mcp_integration.py -v
+          uv run pytest tests/test_mcp_integration.py -v --timeout=120 --log-cli-level=DEBUG -x
 
       # Cleanup
       - name: Cleanup DataHub (OSS only)
