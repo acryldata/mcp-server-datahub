@@ -8,6 +8,7 @@ from datahub.sdk.search_filters import FilterDsl
 from datahub.utilities.ordered_set import OrderedSet
 
 from .. import graphql_helpers
+from ..version_requirements import read_only
 
 queries_gql = (graphql_helpers.GQL_DIR / "queries.gql").read_text()
 
@@ -24,6 +25,7 @@ def _deduplicate_subjects(subjects: list[dict]) -> list[str]:
     return list(updated_subjects)
 
 
+@read_only
 def get_dataset_queries(
     urn: str,
     column: Optional[str] = None,

@@ -11,6 +11,7 @@ from loguru import logger
 from pydantic import BaseModel
 
 from .. import graphql_helpers
+from ..version_requirements import read_only
 
 entity_details_fragment_gql = (
     graphql_helpers.GQL_DIR / "entity_details.gql"
@@ -213,6 +214,7 @@ def _extract_lineage_columns_from_paths(search_results: List[dict]) -> List[dict
 
 # TODO: Consider adding sorting support (sort_by, sort_order parameters) similar to search() tool.
 # GraphQL SearchAcrossLineageInput supports sortInput parameter.
+@read_only
 def get_lineage(
     urn: str,
     column: Optional[str] = None,
@@ -593,6 +595,7 @@ def _find_lineage_path(
         )
 
 
+@read_only
 def get_lineage_paths_between(
     source_urn: str,
     target_urn: str,

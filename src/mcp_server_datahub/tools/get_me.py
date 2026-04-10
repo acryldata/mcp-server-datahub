@@ -4,11 +4,12 @@ import logging
 from typing import Any
 
 from .. import graphql_helpers
-from ..version_requirements import min_version
+from ..version_requirements import min_version, read_only
 
 logger = logging.getLogger(__name__)
 
 
+@read_only
 @min_version(cloud="0.3.16", oss="1.4.0")
 def get_me() -> dict[str, Any]:
     """Get information about the currently authenticated user.

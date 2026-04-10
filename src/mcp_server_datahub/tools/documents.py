@@ -8,7 +8,7 @@ from datahub.utilities.perf_timer import PerfTimer
 from loguru import logger
 
 from .. import graphql_helpers
-from ..version_requirements import min_version
+from ..version_requirements import min_version, read_only
 
 # Load GraphQL queries at module level (no circular dependency here)
 document_search_gql = (
@@ -265,6 +265,7 @@ def _hybrid_search_documents(
     return graphql_helpers.clean_gql_response(merged)
 
 
+@read_only
 @min_version(cloud="0.3.16", oss="1.4.0")
 def search_documents(
     query: str = "*",
@@ -477,6 +478,7 @@ def _search_documents_impl(
     return graphql_helpers.clean_gql_response(response)
 
 
+@read_only
 @min_version(cloud="0.3.16", oss="1.4.0")
 def grep_documents(
     urns: List[str],

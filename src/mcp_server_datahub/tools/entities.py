@@ -8,6 +8,7 @@ from json_repair import repair_json
 from loguru import logger
 
 from .. import graphql_helpers
+from ..version_requirements import read_only
 
 entity_details_fragment_gql = (
     graphql_helpers.GQL_DIR / "entity_details.gql"
@@ -16,6 +17,7 @@ query_entity_gql = (graphql_helpers.GQL_DIR / "query_entity.gql").read_text()
 related_documents_gql = (graphql_helpers.GQL_DIR / "related_documents.gql").read_text()
 
 
+@read_only
 def get_entities(urns: List[str] | str) -> List[dict] | dict:
     """Get detailed information about one or more entities by their DataHub URNs.
 
@@ -134,6 +136,7 @@ def get_entities(urns: List[str] | str) -> List[dict] | dict:
     return results[0] if return_single else results
 
 
+@read_only
 def list_schema_fields(
     urn: str,
     keywords: Optional[List[str]] = None,

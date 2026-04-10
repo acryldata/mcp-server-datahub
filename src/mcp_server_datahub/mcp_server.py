@@ -149,6 +149,8 @@ def _register_tool(
     2. Registers it on the MCP instance
     3. Reads the _version_requirement attribute (set by @min_version decorator)
        and populates TOOL_VERSION_REQUIREMENTS
+    4. Reads the _read_only_hint attribute (set by @read_only decorator)
+       and sets readOnlyHint=True in the tool's MCP annotations
 
     Args:
         mcp_instance: The FastMCP instance to register on.
@@ -157,10 +159,15 @@ def _register_tool(
         description: Tool description. Defaults to fn.__doc__.
         tags: Optional set of tag strings.
     """
+    annotations: Optional[dict] = None
+    if getattr(fn, "_read_only_hint", False):
+        annotations = {"readOnlyHint": True}
+
     mcp_instance.tool(
         name=name,
         description=description or fn.__doc__,
         tags=tags,
+        annotations=annotations,
     )(async_background(fn))
 
     req = getattr(fn, "_version_requirement", None)
