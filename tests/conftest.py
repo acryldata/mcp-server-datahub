@@ -81,6 +81,30 @@ if using_oss:
     mcp_module.view_preference = view_preference  # type: ignore[attr-defined]
     sys.modules["datahub_integrations.mcp.view_preference"] = view_preference
 
+    # Import and expose fastmcp_helpers
+    from mcp_server_datahub import fastmcp_helpers
+
+    mcp_module.fastmcp_helpers = fastmcp_helpers  # type: ignore[attr-defined]
+    sys.modules["datahub_integrations.mcp.fastmcp_helpers"] = fastmcp_helpers
+
+    # Import and expose sub_entity_urls
+    from mcp_server_datahub import sub_entity_urls
+
+    mcp_module.sub_entity_urls = sub_entity_urls  # type: ignore[attr-defined]
+    sys.modules["datahub_integrations.mcp.sub_entity_urls"] = sub_entity_urls
+
+    # Import and expose view_helpers
+    from mcp_server_datahub import view_helpers
+
+    mcp_module.view_helpers = view_helpers  # type: ignore[attr-defined]
+    sys.modules["datahub_integrations.mcp.view_helpers"] = view_helpers
+
+    # Import and expose _token_estimator
+    from mcp_server_datahub import _token_estimator
+
+    mcp_module._token_estimator = _token_estimator  # type: ignore[attr-defined]
+    sys.modules["datahub_integrations.mcp._token_estimator"] = _token_estimator
+
     # Create datahub_integrations.mcp.tools submodule
     tools_module = types.ModuleType("datahub_integrations.mcp.tools")
     sys.modules["datahub_integrations.mcp.tools"] = tools_module

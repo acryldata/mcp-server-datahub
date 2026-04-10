@@ -12,12 +12,19 @@ from datahub_integrations.mcp.mcp_server import (
     with_datahub_client,
 )
 from datahub_integrations.mcp.tool_context import ToolContext
+from datahub_integrations.mcp.view_helpers import (
+    _user_view_cache,
+    fetch_user_default_view,
+)
 from datahub_integrations.mcp.view_preference import (
     CustomView,
     NoView,
     UseDefaultView,
     ViewPreference,
 )
+
+_PATCH_USER = "datahub_integrations.mcp.view_preference.fetch_user_default_view"
+_PATCH_GLOBAL = "datahub_integrations.mcp.view_preference.fetch_global_default_view"
 
 
 @pytest.fixture
@@ -40,20 +47,46 @@ class TestViewPreference:
         urn = "urn:li:dataHubView:my-view"
         assert CustomView(urn=urn).get_view(mock_graph) == urn
 
-    @patch("datahub_integrations.mcp.mcp_server.fetch_global_default_view")
-    def test_use_default_view_delegates(
-        self, mock_fetch: MagicMock, mock_graph: MagicMock
+    @patch(_PATCH_GLOBAL)
+    @patch(_PATCH_USER)
+    def test_use_default_view_prefers_user_view(
+        self,
+        mock_user: MagicMock,
+        mock_global: MagicMock,
+        mock_graph: MagicMock,
     ) -> None:
-        mock_fetch.return_value = "urn:li:dataHubView:global-default"
+        mock_user.return_value = "urn:li:dataHubView:user-default"
+        mock_global.return_value = "urn:li:dataHubView:global-default"
+        result = UseDefaultView().get_view(mock_graph)
+        assert result == "urn:li:dataHubView:user-default"
+        mock_user.assert_called_once_with(mock_graph)
+        mock_global.assert_not_called()
+
+    @patch(_PATCH_GLOBAL)
+    @patch(_PATCH_USER)
+    def test_use_default_view_falls_back_to_global(
+        self,
+        mock_user: MagicMock,
+        mock_global: MagicMock,
+        mock_graph: MagicMock,
+    ) -> None:
+        mock_user.return_value = None
+        mock_global.return_value = "urn:li:dataHubView:global-default"
         result = UseDefaultView().get_view(mock_graph)
         assert result == "urn:li:dataHubView:global-default"
-        mock_fetch.assert_called_once_with(mock_graph)
+        mock_user.assert_called_once_with(mock_graph)
+        mock_global.assert_called_once_with(mock_graph)
 
-    @patch("datahub_integrations.mcp.mcp_server.fetch_global_default_view")
-    def test_use_default_view_returns_none_when_no_default(
-        self, mock_fetch: MagicMock, mock_graph: MagicMock
+    @patch(_PATCH_GLOBAL)
+    @patch(_PATCH_USER)
+    def test_use_default_view_returns_none_when_no_defaults(
+        self,
+        mock_user: MagicMock,
+        mock_global: MagicMock,
+        mock_graph: MagicMock,
     ) -> None:
-        mock_fetch.return_value = None
+        mock_user.return_value = None
+        mock_global.return_value = None
         assert UseDefaultView().get_view(mock_graph) is None
 
     def test_custom_view_is_frozen(self) -> None:
@@ -65,6 +98,87 @@ class TestViewPreference:
         view = NoView()
         with pytest.raises(AttributeError):
             view.foo = "bar"  # type: ignore[attr-defined]
+
+
+def _me_response(view_urn: str) -> dict:
+    """Build the nested ``me`` GraphQL response for a given default view URN."""
+    return {
+        "me": {"corpUser": {"settings": {"views": {"defaultView": {"urn": view_urn}}}}}
+    }
+
+
+class TestFetchUserDefaultView:
+    @pytest.fixture(autouse=True)
+    def _clear_cache(self) -> None:
+        _user_view_cache.clear()
+
+    @patch("datahub_integrations.mcp.view_helpers.graphql_helpers")
+    def test_returns_user_default_view_urn(
+        self, mock_gql: MagicMock, mock_graph: MagicMock
+    ) -> None:
+        mock_gql.execute_graphql.return_value = _me_response(
+            "urn:li:dataHubView:user-view"
+        )
+        assert fetch_user_default_view(mock_graph) == "urn:li:dataHubView:user-view"
+
+    @patch("datahub_integrations.mcp.view_helpers.graphql_helpers")
+    def test_returns_none_when_no_settings(
+        self, mock_gql: MagicMock, mock_graph: MagicMock
+    ) -> None:
+        mock_gql.execute_graphql.return_value = {"me": {"corpUser": {"settings": None}}}
+        assert fetch_user_default_view(mock_graph) is None
+
+    @patch("datahub_integrations.mcp.view_helpers.graphql_helpers")
+    def test_returns_none_when_no_default_view(
+        self, mock_gql: MagicMock, mock_graph: MagicMock
+    ) -> None:
+        mock_gql.execute_graphql.return_value = {
+            "me": {"corpUser": {"settings": {"views": {"defaultView": None}}}}
+        }
+        assert fetch_user_default_view(mock_graph) is None
+
+    @patch("datahub_integrations.mcp.view_helpers.graphql_helpers")
+    def test_returns_none_when_me_is_empty(
+        self, mock_gql: MagicMock, mock_graph: MagicMock
+    ) -> None:
+        mock_gql.execute_graphql.return_value = {"me": None}
+        assert fetch_user_default_view(mock_graph) is None
+
+    @patch("datahub_integrations.mcp.view_helpers.graphql_helpers")
+    def test_returns_none_on_graphql_error(
+        self, mock_gql: MagicMock, mock_graph: MagicMock
+    ) -> None:
+        mock_gql.execute_graphql.side_effect = RuntimeError("unauthorized")
+        assert fetch_user_default_view(mock_graph) is None
+
+    @patch("datahub_integrations.mcp.view_helpers.DISABLE_DEFAULT_VIEW", True)
+    def test_returns_none_when_feature_disabled(self, mock_graph: MagicMock) -> None:
+        assert fetch_user_default_view(mock_graph) is None
+
+    @patch("datahub_integrations.mcp.view_helpers.graphql_helpers")
+    def test_caches_result_per_graph_instance(
+        self, mock_gql: MagicMock, mock_graph: MagicMock
+    ) -> None:
+        mock_gql.execute_graphql.return_value = _me_response(
+            "urn:li:dataHubView:cached"
+        )
+        assert fetch_user_default_view(mock_graph) == "urn:li:dataHubView:cached"
+        assert fetch_user_default_view(mock_graph) == "urn:li:dataHubView:cached"
+        mock_gql.execute_graphql.assert_called_once()
+
+    @patch("datahub_integrations.mcp.view_helpers.graphql_helpers")
+    def test_separate_cache_per_graph(self, mock_gql: MagicMock) -> None:
+        graph_a = MagicMock(spec=DataHubGraph)
+        graph_b = MagicMock(spec=DataHubGraph)
+
+        mock_gql.execute_graphql.side_effect = [
+            _me_response("urn:li:dataHubView:user-a"),
+            _me_response("urn:li:dataHubView:user-b"),
+        ]
+
+        assert fetch_user_default_view(graph_a) == "urn:li:dataHubView:user-a"
+        assert fetch_user_default_view(graph_b) == "urn:li:dataHubView:user-b"
+        assert mock_gql.execute_graphql.call_count == 2
 
 
 class TestToolContext:

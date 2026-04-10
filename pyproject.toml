@@ -9,7 +9,7 @@ dependencies = [
     "asyncer>=0.0.8",
     "cachetools>=5.0.0",
     "fakeredis!=2.35.0",
-    "fastmcp>=2.14.5,<3",
+    "fastmcp>=3.2.0,<4",
     "jmespath~=1.0.1",
     "loguru",
     "pydantic>=2.0,<3",
