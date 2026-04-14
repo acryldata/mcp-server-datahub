@@ -539,15 +539,14 @@ async def check_add_remove_terms(
 async def check_add_remove_owners(
     c: Client, report: SmokeCheckReport, urns: DiscoveredURNs
 ) -> None:
-    # The batchAddOwners GraphQL mutation requires ownershipTypeUrn.
-    # Use the DataHub built-in system type for technical owners.
+    # Use the OwnershipType enum value (not a URN).
     await call_tool(
         c,
         "add_owners",
         {
             "owner_urns": [urns.owner_urn],
             "entity_urns": [urns.dataset_urn],
-            "ownership_type_urn": "urn:li:ownershipType:__system__technical_owner",
+            "ownership_type": "__system__technical_owner",
         },
     )
     report.record("add_owners", True, f"Added owner {urns.owner_urn}")

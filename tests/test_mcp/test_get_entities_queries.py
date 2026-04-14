@@ -15,6 +15,8 @@ from datahub_integrations.mcp.mcp_server import get_entities, with_datahub_clien
 def mock_client():
     """Create a mock DataHub client for testing."""
     graph = MagicMock(spec=DataHubGraph)
+    graph._gms_server = "http://localhost:8080"
+    graph.frontend_base_url = "http://localhost:9002"
     client = MagicMock(spec=DataHubClient)
     client._graph = graph
     return client

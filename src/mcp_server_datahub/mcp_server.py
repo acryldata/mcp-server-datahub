@@ -22,17 +22,14 @@ from typing import (
 )
 
 import asyncer
-import cachetools
 from datahub.cli.env_utils import get_boolean_env_variable
-from datahub.ingestion.graph.client import DataHubGraph
 from fastmcp import FastMCP
-from fastmcp.tools.tool import Tool as FastMCPTool
+from fastmcp.tools import Tool as FastMCPTool
 from loguru import logger
 
-from .search_filter_parser import FILTER_DOCS
+from .fastmcp_helpers import list_mcp_tools_sync
 
 # IMPORTANT: Use relative imports to maintain compatibility across repositories
-from . import graphql_helpers
 from .graphql_helpers import (  # noqa: F401 (re-exported for backward compat)
     DESCRIPTION_LENGTH_HARD_LIMIT,
     DOCUMENT_CONTENT_CHAR_LIMIT,
@@ -66,6 +63,7 @@ from .graphql_helpers import (  # noqa: F401 (re-exported for backward compat)
     truncate_with_ellipsis,
     with_datahub_client,
 )
+from .search_filter_parser import FILTER_DOCS
 from .tools.assertions import get_dataset_assertions
 from .tools.dataset_queries import get_dataset_queries
 from .tools.descriptions import update_description
@@ -100,6 +98,13 @@ from .tools.terms import (
     remove_glossary_terms,
 )
 from .version_requirements import TOOL_VERSION_REQUIREMENTS
+from .view_helpers import (  # noqa: F401 (re-exported for backward compat)
+    DISABLE_DEFAULT_VIEW,
+    VIEW_CACHE_TTL_SECONDS,
+    _user_view_cache,
+    fetch_global_default_view,
+    fetch_user_default_view,
+)
 
 _P = ParamSpec("_P")
 _R = TypeVar("_R")
@@ -192,49 +197,6 @@ def _is_semantic_search_enabled() -> bool:
         availability is validated when the DataHub client is used.
     """
     return get_boolean_env_variable("SEMANTIC_SEARCH_ENABLED", default=False)
-
-
-# Global View Configuration
-DISABLE_DEFAULT_VIEW = get_boolean_env_variable(
-    "DATAHUB_MCP_DISABLE_DEFAULT_VIEW", default=False
-)
-VIEW_CACHE_TTL_SECONDS = 300  # 5 minutes hardcoded
-
-# Log configuration on startup
-if not DISABLE_DEFAULT_VIEW:
-    logger.info("Default view application ENABLED (cache TTL: 5 minutes)")
-else:
-    logger.info("Default view application DISABLED")
-
-
-@cachetools.cached(cache=cachetools.TTLCache(maxsize=1, ttl=VIEW_CACHE_TTL_SECONDS))
-def fetch_global_default_view(graph: DataHubGraph) -> Optional[str]:
-    """
-    Fetch the organization's default global view URN unless disabled.
-    Cached for VIEW_CACHE_TTL_SECONDS seconds.
-    Returns None if disabled or if no default view is configured.
-    """
-    # Return None immediately if feature is disabled
-    if DISABLE_DEFAULT_VIEW:
-        return None
-
-    query = """
-    query getGlobalViewsSettings {
-        globalViewsSettings {
-            defaultView
-        }
-    }
-    """
-
-    result = graphql_helpers.execute_graphql(graph, query=query)
-    settings = result.get("globalViewsSettings")
-    if settings:
-        view_urn = settings.get("defaultView")
-        if view_urn:
-            logger.debug(f"Fetched global default view: {view_urn}")
-            return view_urn
-    logger.debug("No global default view configured")
-    return None
 
 
 # Track if tools have been registered to prevent duplicate registration
@@ -489,7 +451,7 @@ def get_valid_tools_from_mcp(
             filter_fn=lambda tool: bool((tool.tags or set()) & {"search", "user"})
         )
     """
-    tools = list(mcp._tool_manager._tools.values())
+    tools = list_mcp_tools_sync(mcp)
     if filter_fn:
         return [tool for tool in tools if filter_fn(tool)]
     return tools

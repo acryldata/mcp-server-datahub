@@ -1,7 +1,6 @@
 from unittest.mock import Mock, patch
 
 import pytest
-from datahub.ingestion.graph.links import make_url_for_urn
 
 from datahub_integrations.mcp import graphql_helpers
 from datahub_integrations.mcp.mcp_server import (
@@ -18,9 +17,8 @@ from datahub_integrations.mcp.mcp_server import (
 
 def test_inject_urls_for_urns() -> None:
     mock_graph = Mock()
-    mock_graph.url_for.side_effect = lambda urn: make_url_for_urn(
-        "https://xyz.com", urn
-    )
+    mock_graph._gms_server = "https://xyz.com/api/gms"
+    mock_graph.frontend_base_url = "https://xyz.com"
 
     with patch(
         "datahub_integrations.mcp.graphql_helpers._is_datahub_cloud", return_value=True
@@ -64,7 +62,36 @@ def test_inject_urls_for_urns() -> None:
         }
 
         assert response == expected_response
-        assert mock_graph.url_for.call_count == 2
+
+
+def test_inject_urls_for_urns_assertion_gets_double_urn_url() -> None:
+    """Assertion URNs should get double-URN URLs pointing to the parent dataset's Quality tab."""
+    mock_graph = Mock()
+    mock_graph._gms_server = "https://xyz.com/api/gms"
+    mock_graph.frontend_base_url = "https://xyz.com"
+    mock_graph.execute_graphql.return_value = {
+        "assertion": {
+            "info": {
+                "entityUrn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,db.schema.table,PROD)"
+            }
+        }
+    }
+
+    with patch(
+        "datahub_integrations.mcp.graphql_helpers._is_datahub_cloud",
+        return_value=True,
+    ):
+        response = {
+            "urn": "urn:li:assertion:abc123",
+            "type": "FRESHNESS",
+        }
+
+        inject_urls_for_urns(mock_graph, response, [""])
+
+        url = response.get("url", "")
+        assert "/dataset/" in url
+        assert "Quality/List" in url
+        assert "assertion_urn=" in url
 
 
 def test_maybe_convert_to_schema_field_urn_with_column() -> None:

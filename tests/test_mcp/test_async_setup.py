@@ -1,9 +1,10 @@
+import asyncio
 import inspect
 import time
 
 import anyio
-import fastmcp.tools.tool
 import pytest
+from fastmcp.tools.function_tool import FunctionTool
 
 from datahub_integrations.mcp.mcp_server import async_background, mcp
 
@@ -29,6 +30,11 @@ async def test_async_background() -> None:
 
 def test_all_tools_are_async() -> None:
     # If any tools are sync, the tool execution will block the main event loop.
-    for tool in mcp._tool_manager._tools.values():
-        assert isinstance(tool, fastmcp.tools.tool.FunctionTool)
-        assert inspect.iscoroutinefunction(tool.fn)
+
+    async def _check_tools() -> None:
+        tools = await mcp.list_tools(run_middleware=False)
+        for tool in tools:
+            assert isinstance(tool, FunctionTool)
+            assert inspect.iscoroutinefunction(tool.fn)
+
+    asyncio.run(_check_tools())
