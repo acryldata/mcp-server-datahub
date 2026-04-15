@@ -14,6 +14,9 @@ Usage:
     # Against a running HTTP/SSE server:
     uv run python scripts/smoke_check.py --url http://localhost:8000/mcp
 
+    # Against a running HTTP server with Bearer token auth:
+    uv run python scripts/smoke_check.py --url http://localhost:8000/mcp --token mytoken
+
     # Via stdio subprocess (launches server as child process):
     uv run python scripts/smoke_check.py --stdio-cmd "uv run mcp-server-datahub"
 
@@ -660,6 +663,7 @@ async def run_smoke_check(
     test_urn: Optional[str] = None,
     url: Optional[str] = None,
     stdio_cmd: Optional[str] = None,
+    token: Optional[str] = None,
 ) -> SmokeCheckReport:
     """Run smoke checks against an MCP server.
 
@@ -677,12 +681,29 @@ async def run_smoke_check(
     transport_target: Any  # str (URL), StdioTransport, or FastMCP instance
     if url:
         # Remote HTTP/SSE — server is already running and configured
-        transport_target = url
+        if token:
+            from fastmcp.client.transports import StreamableHttpTransport
+
+            transport_target = StreamableHttpTransport(
+                url, headers={"Authorization": f"Bearer {token}"}
+            )
+        else:
+            transport_target = url
         mode_label = f"HTTP/SSE → {url}"
     elif stdio_cmd:
-        # Stdio subprocess — launch server as child process
+        # Stdio subprocess — launch server as child process.
+        # StdioTransport uses mcp's get_default_environment() which only
+        # passes a minimal env (HOME, PATH, etc.), so DATAHUB_GMS_URL and
+        # DATAHUB_GMS_TOKEN would be stripped.  Pass them explicitly.
         parts = shlex.split(stdio_cmd)
-        transport_target = StdioTransport(command=parts[0], args=parts[1:])
+        _datahub_env = {
+            k: v
+            for k in ("DATAHUB_GMS_URL", "DATAHUB_GMS_TOKEN")
+            if (v := os.environ.get(k))
+        }
+        transport_target = StdioTransport(
+            command=parts[0], args=parts[1:], env=_datahub_env or None
+        )
         mode_label = f"stdio → {stdio_cmd}"
     else:
         # In-process (original behaviour)
@@ -751,6 +772,9 @@ async def run_smoke_check(
 
             # 1b. Verify core tools are present — these should never be
             # missing regardless of mode or middleware filtering.
+            # Note: search_documents and grep_documents are intentionally
+            # excluded — DocumentToolsMiddleware hides them when the instance
+            # has no Document entities, so their absence is expected and valid.
             core_tools = {
                 "search",
                 "get_entities",
@@ -758,8 +782,6 @@ async def run_smoke_check(
                 "get_dataset_queries",
                 "list_schema_fields",
                 "get_lineage_paths_between",
-                "search_documents",
-                "grep_documents",
             }
             missing_core = core_tools - available
             if missing_core:
@@ -921,6 +943,11 @@ def _parse_pypi_args() -> Optional[tuple[Optional[str], list[str]]]:
     default=None,
     help='Launch server as stdio subprocess (e.g. "uv run mcp-server-datahub")',
 )
+@click.option(
+    "--token",
+    default=None,
+    help="Bearer token to send as Authorization header (only used with --url)",
+)
 def main(
     mutations: bool,
     user: bool,
@@ -928,6 +955,7 @@ def main(
     urn: Optional[str],
     url: Optional[str],
     stdio_cmd: Optional[str],
+    token: Optional[str],
 ) -> None:
     """Smoke check all MCP server tools against a live DataHub instance."""
     if test_all:
@@ -941,6 +969,7 @@ def main(
             test_urn=urn,
             url=url,
             stdio_cmd=stdio_cmd,
+            token=token,
         )
     )
     report.print_report()
