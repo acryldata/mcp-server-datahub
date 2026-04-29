@@ -635,8 +635,12 @@ class TestGetEntitiesERModelRelationship:
             "type": "ER_MODEL_RELATIONSHIP",
             "properties": {
                 "name": "orders_to_customers",
-                "source": {"urn": "urn:li:dataset:(urn:li:dataPlatform:mssql,Orders,PROD)"},
-                "destination": {"urn": "urn:li:dataset:(urn:li:dataPlatform:mssql,Customers,PROD)"},
+                "source": {
+                    "urn": "urn:li:dataset:(urn:li:dataPlatform:mssql,Orders,PROD)"
+                },
+                "destination": {
+                    "urn": "urn:li:dataset:(urn:li:dataPlatform:mssql,Customers,PROD)"
+                },
                 "relationshipFieldMappings": [
                     {"sourceField": "customer_id", "destinationField": "id"}
                 ],
@@ -665,7 +669,13 @@ class TestGetEntitiesERModelRelationship:
         assert result["urn"] == urn
         props = result["properties"]
         assert props["name"] == "orders_to_customers"
-        assert props["source"]["urn"] == "urn:li:dataset:(urn:li:dataPlatform:mssql,Orders,PROD)"
-        assert props["destination"]["urn"] == "urn:li:dataset:(urn:li:dataPlatform:mssql,Customers,PROD)"
+        assert (
+            props["source"]["urn"]
+            == "urn:li:dataset:(urn:li:dataPlatform:mssql,Orders,PROD)"
+        )
+        assert (
+            props["destination"]["urn"]
+            == "urn:li:dataset:(urn:li:dataPlatform:mssql,Customers,PROD)"
+        )
         assert props["relationshipFieldMappings"][0]["sourceField"] == "customer_id"
         assert props["cardinality"] == "MANY_TO_ONE"
