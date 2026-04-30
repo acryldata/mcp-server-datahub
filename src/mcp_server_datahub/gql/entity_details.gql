@@ -715,6 +715,10 @@ fragment entityPreview on Entity {
             name
             description
             project
+            customProperties {
+                key
+                value
+            }
         }
         ownership {
             ...ownershipFields
@@ -760,6 +764,10 @@ fragment entityPreview on Entity {
         properties {
             name
             description
+            customProperties {
+                key
+                value
+            }
         }
         tags {
             ...globalTagsFields
