@@ -1,3 +1,5 @@
+import importlib
+import os
 from unittest.mock import Mock, patch
 
 import pytest
@@ -531,6 +533,11 @@ def test_truncate_query_short() -> None:
 
 
 def test_truncate_descriptions() -> None:
+    """Test that truncate_descriptions sanitizes and truncates at ALL nesting levels.
+
+    Previously, recursive calls omitted max_length so nested descriptions reverted to
+    the default limit.  After the bug fix every level respects the caller's max_length.
+    """
     result = {
         "downstreams": {
             "searchResults": [
@@ -558,22 +565,29 @@ def test_truncate_descriptions() -> None:
 
     truncate_descriptions(result, 50)
 
+    # After the recursive-propagation fix, max_length=50 is honoured at every
+    # nesting depth.  truncate_with_ellipsis(text, 50) keeps the first 47 chars
+    # and appends "..." (3 chars) giving exactly 50 chars for long strings.
     assert result == {
         "downstreams": {
             "searchResults": [
                 {
                     "entity": {
-                        "description": "Description with image and more content that exceeds the limit",
+                        # Markdown image stripped → "…image…"; truncated at 50
+                        "description": "Description with image and more content that ex...",
                         "properties": {
-                            "description": "Description with image  and more content that exceeds the limit"
+                            # HTML tag stripped → double-space; truncated at 50
+                            "description": "Description with image  and more content that e..."
                         },
                         "fields": [
                             {
                                 "fieldPath": "description",
-                                "description": "Description with image  and more content that exceeds the limit",
+                                # Same as properties.description above
+                                "description": "Description with image  and more content that e...",
                             },
                             {
                                 "fieldPath": "description",
+                                # 18 chars — under the limit, unchanged
                                 "description": "Simple description",
                             },
                         ],
@@ -582,6 +596,22 @@ def test_truncate_descriptions() -> None:
             ]
         }
     }
+
+
+def test_description_length_limit_default() -> None:
+    """DESCRIPTION_LENGTH_HARD_LIMIT should default to 5000 (raised from hardcoded 1000)."""
+    assert graphql_helpers.DESCRIPTION_LENGTH_HARD_LIMIT == 5000
+
+
+def test_description_length_limit_env_var() -> None:
+    """DESCRIPTION_LENGTH_LIMIT env var should override the default at import time."""
+    with patch.dict(os.environ, {"DESCRIPTION_LENGTH_LIMIT": "2500"}):
+        importlib.reload(graphql_helpers)
+        assert graphql_helpers.DESCRIPTION_LENGTH_HARD_LIMIT == 2500
+
+    # Restore module to its default state (env var no longer set)
+    importlib.reload(graphql_helpers)
+    assert graphql_helpers.DESCRIPTION_LENGTH_HARD_LIMIT == 5000
 
 
 def test_get_lineage_normalizes_null_string() -> None:

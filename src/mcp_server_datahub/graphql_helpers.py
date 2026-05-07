@@ -41,7 +41,7 @@ from .tool_context import ToolContext
 GQL_DIR = pathlib.Path(__file__).parent / "gql"
 
 T = TypeVar("T")
-DESCRIPTION_LENGTH_HARD_LIMIT = 1000
+DESCRIPTION_LENGTH_HARD_LIMIT = int(os.getenv("DESCRIPTION_LENGTH_LIMIT", "5000"))
 QUERY_LENGTH_HARD_LIMIT = 5000
 DOCUMENT_CONTENT_CHAR_LIMIT = 8000
 
@@ -209,10 +209,10 @@ def truncate_descriptions(
             if key == "description" and isinstance(value, str):
                 data[key] = sanitize_and_truncate_description(value, max_length)
             elif isinstance(value, (dict, list)):
-                truncate_descriptions(value)
+                truncate_descriptions(value, max_length)
     elif isinstance(data, list):
         for item in data:
-            truncate_descriptions(item)
+            truncate_descriptions(item, max_length)
 
 
 def truncate_query(query: str) -> str:
@@ -264,7 +264,10 @@ def set_datahub_client(
     tool_context: ToolContext | None = None,
 ) -> None:
     _mcp_context.set(
-        MCPContext(client=client, tool_context=tool_context or ToolContext())
+        MCPContext(
+            client=client,
+            tool_context=tool_context or ToolContext(),
+        )
     )
 
 
@@ -273,7 +276,10 @@ def with_datahub_client(
     client: DataHubClient,
     tool_context: ToolContext | None = None,
 ) -> Iterator[None]:
-    ctx = MCPContext(client=client, tool_context=tool_context or ToolContext())
+    ctx = MCPContext(
+        client=client,
+        tool_context=tool_context or ToolContext(),
+    )
     token = _mcp_context.set(ctx)
     try:
         yield

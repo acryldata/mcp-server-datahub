@@ -416,8 +416,15 @@ def _search_documents_impl(
     filter: Optional[str] = None,
     num_results: int = 10,
     offset: int = 0,
+    max_num_results: int = 50,
 ) -> dict:
-    """Internal implementation for document search with keyword or semantic strategy."""
+    """Internal implementation for document search with keyword or semantic strategy.
+
+    ``max_num_results`` caps ``num_results`` before the request is issued. The
+    public :func:`search_documents` tool passes the default (50) to honor its
+    advertised per-page limit, while internal callers (e.g. hybrid search and
+    rerank-aware overrides) raise it to widen the candidate pool.
+    """
     from datahub.sdk.search_client import compile_filters
 
     from ..search_filter_parser import parse_filter_string
@@ -425,8 +432,7 @@ def _search_documents_impl(
 
     client = graphql_helpers.get_datahub_client()
 
-    # Cap num_results at 50
-    num_results = min(num_results, 50)
+    num_results = min(num_results, max_num_results)
 
     # Parse SQL-like filter string and compile to orFilters
     parsed_filter = parse_filter_string(filter.strip()) if filter else None
