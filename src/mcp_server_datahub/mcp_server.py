@@ -119,6 +119,15 @@ class ToolType(Enum):
     DEFAULT = "default"  # Fallback tag
 
 
+DATA_QUALITY_TOOLS = [
+    (
+        "get_dataset_assertions",
+        get_dataset_assertions,
+        {ToolType.SEARCH.value},
+    ),
+]
+
+
 # See https://github.com/jlowin/fastmcp/issues/864#issuecomment-3103678258
 # for why we need to wrap sync functions with asyncify.
 def async_background(fn: Callable[_P, _R]) -> Callable[_P, Awaitable[_R]]:
@@ -390,12 +399,8 @@ def register_data_quality_tools(mcp_instance: FastMCP, is_oss: bool = False) -> 
     if not enabled:
         return
 
-    _register_tool(
-        mcp_instance,
-        "get_dataset_assertions",
-        get_dataset_assertions,
-        tags={ToolType.SEARCH.value},
-    )
+    for name, fn, tags in DATA_QUALITY_TOOLS:
+        _register_tool(mcp_instance, name, fn, tags=tags)
 
 
 def register_all_tools(is_oss: bool = False) -> None:
