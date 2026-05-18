@@ -174,3 +174,50 @@ os.environ["DATAHUB_TELEMETRY_ENABLED"] = "false"
 @pytest.fixture(scope="module")
 def anyio_backend() -> str:
     return "asyncio"
+
+
+# ---------------------------------------------------------------------------
+# Auth flow integration test fixtures
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="session")
+def auth_token() -> str:
+    """Return a valid authentication token for integration tests.
+
+    Set via ``MCP_TEST_AUTH_TOKEN`` environment variable.  The token must be
+    accepted by the DataHub GMS instance pointed to by ``DATAHUB_GMS_URL``.
+    """
+    token = os.environ.get("MCP_TEST_AUTH_TOKEN")
+    if not token:
+        pytest.skip("MCP_TEST_AUTH_TOKEN not set")
+    return token
+
+
+@pytest.fixture(scope="session")
+def mcp_server_url() -> str:
+    """Return the MCP server URL for integration tests.
+
+    Set via ``MCP_SERVER_URL`` environment variable.  Defaults to
+    ``http://localhost:8000/mcp``.
+    """
+    return os.environ.get("MCP_SERVER_URL", "http://localhost:8000/mcp")
+
+
+@pytest.fixture(scope="session")
+def test_tokens(auth_token: str) -> dict[str, str]:
+    """Return a dictionary of test tokens for multi-client tests.
+
+    Populate via environment variables:
+    - ``MCP_TEST_AUTH_TOKEN`` — a valid token (required)
+    - ``MCP_TEST_AUTH_TOKEN_2`` — a second valid token (optional, defaults to
+      the same as ``MCP_TEST_AUTH_TOKEN``)
+
+    Always includes a ``bad`` entry with an invalid token.
+    """
+    token_2 = os.environ.get("MCP_TEST_AUTH_TOKEN_2", auth_token)
+    return {
+        "good": auth_token,
+        "good_2": token_2,
+        "bad": "badToken",
+    }

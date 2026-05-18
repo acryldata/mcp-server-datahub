@@ -15,6 +15,7 @@ dependencies = [
     "pydantic>=2.0,<3",
     "json-repair",
     "google-re2",
+    "httpx>=0.24.0",
 ]
 license = "Apache-2.0"
 
