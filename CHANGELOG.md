@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Fixed
+### Added
 
 - **Per-entity-type description truncation**: Building on the configurable `DESCRIPTION_LENGTH_LIMIT` env var (global default 5000), per-entity-type overrides (e.g. higher limits for glossary terms) can be set via `DESCRIPTION_LENGTH_OVERRIDES` (JSON). The resolved limit is propagated to nested descriptions in `truncate_descriptions()`.
 
