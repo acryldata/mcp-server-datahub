@@ -650,7 +650,7 @@ async def test_list_schema_fields_single_keyword(mcp_client: Client) -> None:
     """Test list_schema_fields with single keyword filter."""
     try:
         result = await mcp_client.call_tool(
-            "list_schema_fields", {"urn": _test_urn, "keywords": "id"}
+            "list_schema_fields", {"urn": _test_urn, "keywords": ["id"]}
         )
     except Exception as e:
         if "not found" in str(e).lower():

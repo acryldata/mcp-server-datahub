@@ -8,6 +8,7 @@ from json_repair import repair_json
 from loguru import logger
 
 from .. import graphql_helpers
+from ..version_requirements import read_only
 
 entity_details_fragment_gql = (
     graphql_helpers.GQL_DIR / "entity_details.gql"
@@ -16,6 +17,7 @@ query_entity_gql = (graphql_helpers.GQL_DIR / "query_entity.gql").read_text()
 related_documents_gql = (graphql_helpers.GQL_DIR / "related_documents.gql").read_text()
 
 
+@read_only
 def get_entities(urns: List[str] | str) -> List[dict] | dict:
     """Get detailed information about one or more entities by their DataHub URNs.
 
@@ -134,9 +136,10 @@ def get_entities(urns: List[str] | str) -> List[dict] | dict:
     return results[0] if return_single else results
 
 
+@read_only
 def list_schema_fields(
     urn: str,
-    keywords: Optional[List[str] | str] = None,
+    keywords: Optional[List[str]] = None,
     limit: int = 100,
     offset: int = 0,
 ) -> dict:
@@ -147,9 +150,9 @@ def list_schema_fields(
 
     Args:
         urn: Dataset URN
-        keywords: Optional keywords to filter schema fields (OR matching).
-                 - Single string: Treated as one keyword (NOT split on whitespace). Use for field names or exact phrases.
-                 - List of strings: Multiple keywords, matches any (OR logic).
+        keywords: Optional list of keywords to filter schema fields (OR matching).
+                 - Single keyword: Treated as one keyword (NOT split on whitespace). Use for field names or exact phrases.
+                 - Multiple keywords: Multiple keywords, matches any (OR logic).
                  - None or empty list: Returns all fields in priority order (same as get_entities).
                  Matches against fieldPath, description, label, tags, and glossary terms.
                  Matching fields are returned first, sorted by match count.
@@ -167,8 +170,8 @@ def list_schema_fields(
         - offset: The offset used
 
     Examples:
-        # Single keyword (string) - search for exact field name or phrase
-        list_schema_fields(urn="urn:li:dataset:(...)", keywords="user_email")
+        # Single keyword (list) - search for exact field name or phrase
+        list_schema_fields(urn="urn:li:dataset:(...)", keywords=["user_email"])
         # Returns fields matching "user_email" (like user_email_address, primary_user_email)
 
         # Multiple keywords (list) - OR matching

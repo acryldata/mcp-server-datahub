@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **Configurable description truncation**: The hardcoded 1000-char description limit is now configurable via `DESCRIPTION_LENGTH_LIMIT` env var. Per-entity-type overrides (e.g. higher limits for glossary terms) can be set via `DESCRIPTION_LENGTH_OVERRIDES` (JSON). Also fixes recursive `max_length` propagation in `truncate_descriptions()`.
+- **Per-entity-type description truncation**: Building on the configurable `DESCRIPTION_LENGTH_LIMIT` env var (global default 5000), per-entity-type overrides (e.g. higher limits for glossary terms) can be set via `DESCRIPTION_LENGTH_OVERRIDES` (JSON). The resolved limit is propagated to nested descriptions in `truncate_descriptions()`.
 
 ## [0.5.3] - 2026-03-09
 

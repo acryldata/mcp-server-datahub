@@ -6,7 +6,7 @@ from datahub.telemetry import telemetry
 from datahub.utilities.perf_timer import PerfTimer
 from fastmcp.server.dependencies import get_http_headers
 from fastmcp.server.middleware import CallNext, Middleware, MiddlewareContext
-from fastmcp.tools.tool import ToolResult
+from fastmcp.tools import ToolResult
 
 from mcp_server_datahub._version import __version__
 

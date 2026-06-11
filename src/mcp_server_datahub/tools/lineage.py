@@ -1,5 +1,6 @@
 """Lineage tools for DataHub MCP server."""
 
+import string
 from typing import Any, Dict, List, Literal, Optional
 
 from datahub.errors import ItemNotFoundError
@@ -11,6 +12,8 @@ from loguru import logger
 from pydantic import BaseModel
 
 from .. import graphql_helpers
+from ..search_filter_parser import FILTER_DOCS
+from ..version_requirements import read_only
 
 entity_details_fragment_gql = (
     graphql_helpers.GQL_DIR / "entity_details.gql"
@@ -213,6 +216,7 @@ def _extract_lineage_columns_from_paths(search_results: List[dict]) -> List[dict
 
 # TODO: Consider adding sorting support (sort_by, sort_order parameters) similar to search() tool.
 # GraphQL SearchAcrossLineageInput supports sortInput parameter.
+@read_only
 def get_lineage(
     urn: str,
     column: Optional[str] = None,
@@ -228,7 +232,8 @@ def get_lineage(
     Set upstream to True for upstream lineage, False for downstream lineage.
     Set `column: null` to get lineage for entire dataset or for entity type other than dataset.
     Setting max_hops to 3 is equivalent to unlimited hops.
-    Usage and format of filter is same as that in search tool (SQL-like WHERE clause syntax).
+
+    $FILTER_DOCS
 
     PAGINATION:
     Use offset to paginate through large lineage graphs:
@@ -360,6 +365,12 @@ def get_lineage(
         }
 
     return lineage
+
+
+assert get_lineage.__doc__ is not None
+get_lineage.__doc__ = string.Template(get_lineage.__doc__).substitute(
+    FILTER_DOCS=FILTER_DOCS
+)
 
 
 def _find_result_with_target_urn(
@@ -593,6 +604,7 @@ def _find_lineage_path(
         )
 
 
+@read_only
 def get_lineage_paths_between(
     source_urn: str,
     target_urn: str,

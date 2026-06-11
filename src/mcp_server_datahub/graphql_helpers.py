@@ -36,12 +36,13 @@ from loguru import logger
 
 from ._token_estimator import TokenCountEstimator
 from .search_filter_parser import parse_filter_string
+from .sub_entity_urls import SubEntityResolver
 from .tool_context import ToolContext
 
 GQL_DIR = pathlib.Path(__file__).parent / "gql"
 
 T = TypeVar("T")
-DESCRIPTION_LENGTH_LIMIT = int(os.getenv("DESCRIPTION_LENGTH_LIMIT", 1000))
+DESCRIPTION_LENGTH_HARD_LIMIT = int(os.getenv("DESCRIPTION_LENGTH_LIMIT", "5000"))
 QUERY_LENGTH_HARD_LIMIT = 5000
 DOCUMENT_CONTENT_CHAR_LIMIT = 8000
 
@@ -59,13 +60,13 @@ except (json.JSONDecodeError, ValueError):
 
 def _get_description_limit(
     urn: str | None,
-    fallback: int = DESCRIPTION_LENGTH_LIMIT,
+    fallback: int = DESCRIPTION_LENGTH_HARD_LIMIT,
 ) -> int:
     """Return the description length limit for the given entity URN.
 
     Extracts the entity type from the URN (e.g. ``glossaryTerm`` from
     ``urn:li:glossaryTerm:...``) and looks it up in DESCRIPTION_LENGTH_OVERRIDES.
-    Falls back to *fallback* (default ``DESCRIPTION_LENGTH_LIMIT``) for
+    Falls back to *fallback* (default ``DESCRIPTION_LENGTH_HARD_LIMIT``) for
     unknown or missing URNs.
     """
     if isinstance(urn, str) and urn.startswith("urn:li:"):
@@ -228,7 +229,7 @@ def sanitize_and_truncate_description(text: str, max_length: int) -> str:
 
 
 def truncate_descriptions(
-    data: dict | list, max_length: int = DESCRIPTION_LENGTH_LIMIT
+    data: dict | list, max_length: int = DESCRIPTION_LENGTH_HARD_LIMIT
 ) -> None:
     """Recursively truncate ``description`` values in a nested dict/list in place.
 
@@ -297,7 +298,10 @@ def set_datahub_client(
     tool_context: ToolContext | None = None,
 ) -> None:
     _mcp_context.set(
-        MCPContext(client=client, tool_context=tool_context or ToolContext())
+        MCPContext(
+            client=client,
+            tool_context=tool_context or ToolContext(),
+        )
     )
 
 
@@ -306,7 +310,10 @@ def with_datahub_client(
     client: DataHubClient,
     tool_context: ToolContext | None = None,
 ) -> Iterator[None]:
-    ctx = MCPContext(client=client, tool_context=tool_context or ToolContext())
+    ctx = MCPContext(
+        client=client,
+        tool_context=tool_context or ToolContext(),
+    )
     token = _mcp_context.set(ctx)
     try:
         yield
@@ -552,16 +559,30 @@ def execute_graphql(
 
 
 def inject_urls_for_urns(
-    graph: DataHubGraph, response: Any, json_paths: List[str]
+    graph: DataHubGraph,
+    response: Any,
+    json_paths: List[str],
 ) -> None:
     if not _is_datahub_cloud(graph):
         return
 
+    # _is_datahub_cloud already confirmed this attribute exists.
+    frontend_base_url: str = graph.frontend_base_url
+    # SubEntityResolver is lightweight (two attribute assignments, no allocations);
+    # the actual cache lives at module level in sub_entity_urls.
+    resolver = SubEntityResolver(graph)
+
     for path in json_paths:
         for item in jmespath.search(path, response) if path else [response]:
             if isinstance(item, dict) and item.get("urn"):
+                urn = item["urn"]
+                url = resolver.url_for_urn(frontend_base_url, urn)
                 # Update item in place with url, ensuring that urn and url are first.
-                new_item = {"urn": item["urn"], "url": graph.url_for(item["urn"])}
+                # Omit url entirely when resolution fails (e.g. sub-entity with no parent)
+                # so downstream consumers don't see url: null.
+                new_item: dict = {"urn": urn}
+                if url is not None:
+                    new_item["url"] = url
                 new_item.update({k: v for k, v in item.items() if k != "urn"})
                 item.clear()
                 item.update(new_item)

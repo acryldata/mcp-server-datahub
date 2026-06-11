@@ -8,7 +8,7 @@ from datahub.utilities.perf_timer import PerfTimer
 from loguru import logger
 
 from .. import graphql_helpers
-from ..version_requirements import min_version
+from ..version_requirements import min_version, read_only
 
 # Load GraphQL queries at module level (no circular dependency here)
 document_search_gql = (
@@ -265,6 +265,7 @@ def _hybrid_search_documents(
     return graphql_helpers.clean_gql_response(merged)
 
 
+@read_only
 @min_version(cloud="0.3.16", oss="1.4.0")
 def search_documents(
     query: str = "*",
@@ -415,8 +416,15 @@ def _search_documents_impl(
     filter: Optional[str] = None,
     num_results: int = 10,
     offset: int = 0,
+    max_num_results: int = 50,
 ) -> dict:
-    """Internal implementation for document search with keyword or semantic strategy."""
+    """Internal implementation for document search with keyword or semantic strategy.
+
+    ``max_num_results`` caps ``num_results`` before the request is issued. The
+    public :func:`search_documents` tool passes the default (50) to honor its
+    advertised per-page limit, while internal callers (e.g. hybrid search and
+    rerank-aware overrides) raise it to widen the candidate pool.
+    """
     from datahub.sdk.search_client import compile_filters
 
     from ..search_filter_parser import parse_filter_string
@@ -424,8 +432,7 @@ def _search_documents_impl(
 
     client = graphql_helpers.get_datahub_client()
 
-    # Cap num_results at 50
-    num_results = min(num_results, 50)
+    num_results = min(num_results, max_num_results)
 
     # Parse SQL-like filter string and compile to orFilters
     parsed_filter = parse_filter_string(filter.strip()) if filter else None
@@ -477,6 +484,7 @@ def _search_documents_impl(
     return graphql_helpers.clean_gql_response(response)
 
 
+@read_only
 @min_version(cloud="0.3.16", oss="1.4.0")
 def grep_documents(
     urns: List[str],

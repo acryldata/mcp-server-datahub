@@ -2,7 +2,7 @@
 
 import logging
 from enum import Enum
-from typing import List, Literal, Optional
+from typing import List, Literal, Optional, Union
 
 from datahub.sdk.main_client import DataHubClient
 
@@ -10,6 +10,8 @@ from .. import graphql_helpers
 from ..version_requirements import min_version
 
 logger = logging.getLogger(__name__)
+
+OWNERSHIP_TYPE_URN_PREFIX = "urn:li:ownershipType:"
 
 
 class OwnershipType(str, Enum):
@@ -21,7 +23,105 @@ class OwnershipType(str, Enum):
 
     def to_urn(self) -> str:
         """Convert the ownership type to its URN form."""
-        return f"urn:li:ownershipType:{self.value}"
+        return f"{OWNERSHIP_TYPE_URN_PREFIX}{self.value}"
+
+
+OwnershipTypeInput = Union[OwnershipType, str]
+
+
+def _resolve_ownership_type_urn(
+    client: DataHubClient, ownership_type: OwnershipTypeInput
+) -> str:
+    """Convert an OwnershipType enum or custom ownership-type name to a validated URN.
+
+    Built-in OwnershipType enums are trusted and returned directly. Custom inputs are
+    resolved by name (case-insensitive) via `listOwnershipTypes` — this matches what a
+    user sees in the UI, rather than requiring them to know the underlying URN.
+    """
+    if isinstance(ownership_type, OwnershipType):
+        return ownership_type.to_urn()
+
+    if not isinstance(ownership_type, str) or not ownership_type.strip():
+        raise ValueError(
+            "ownership_type must be an OwnershipType or a non-empty string"
+        )
+
+    candidate = ownership_type.strip()
+
+    # Fast-path: built-in passed as a string, either by enum name
+    # ("TECHNICAL_OWNER") or enum value ("__system__technical_owner").
+    # Avoids a GraphQL round-trip and makes the previously-accidental
+    # enum-value-as-string case intentional.
+    if candidate in OwnershipType.__members__:
+        return OwnershipType[candidate].to_urn()
+    if candidate in OwnershipType._value2member_map_:
+        return OwnershipType(candidate).to_urn()
+
+    # Fast-path: caller already passed a fully-qualified ownership type URN
+    # (e.g. "urn:li:ownershipType:__system__technical_owner" or a custom URN).
+    # Trust it as-is rather than treating it as a name to look up.
+    if candidate.startswith(OWNERSHIP_TYPE_URN_PREFIX):
+        return candidate
+
+    # We look up by name rather than by URN because the URN is an opaque internal
+    # identifier (often a generated id like `urn:li:ownershipType:abc-123`) that
+    # users/LLMs don't know. The name is what's shown in the UI and what callers
+    # would naturally reference, so we resolve name -> URN via listOwnershipTypes.
+    query = """
+        query listOwnershipTypes($input: ListOwnershipTypesInput!) {
+            listOwnershipTypes(input: $input) {
+                ownershipTypes {
+                    urn
+                    info {
+                        name
+                    }
+                }
+            }
+        }
+    """
+
+    try:
+        result = graphql_helpers.execute_graphql(
+            client._graph,
+            query=query,
+            variables={"input": {"start": 0, "count": 1000, "query": candidate}},
+            operation_name="listOwnershipTypes",
+        )
+    except Exception as e:
+        raise ValueError(
+            f"Failed to look up ownership type '{ownership_type}': {str(e)}"
+        ) from e
+
+    ownership_types = (result.get("listOwnershipTypes") or {}).get(
+        "ownershipTypes"
+    ) or []
+
+    # listOwnershipTypes returns partial/prefix matches — filter for an exact name
+    # match (case-insensitive) since name is the user-facing identifier.
+    matches = [
+        ot
+        for ot in ownership_types
+        if ((ot.get("info") or {}).get("name") or "").strip().lower()
+        == candidate.lower()
+    ]
+
+    if not matches:
+        raise ValueError(
+            f"Ownership type with name '{ownership_type}' was not found in DataHub. "
+            f"Use one of the built-in OwnershipType values or create the custom ownership type first."
+        )
+    if len(matches) > 1:
+        found_urns = ", ".join(m.get("urn", "<unknown>") for m in matches)
+        raise ValueError(
+            f"Ownership type name '{ownership_type}' is ambiguous — matched multiple entries: {found_urns}."
+        )
+
+    urn = matches[0].get("urn")
+    if not urn:
+        raise ValueError(
+            f"Ownership type '{ownership_type}' was found but is missing a URN."
+        )
+    return urn
 
 
 def _validate_owner_urns(client: DataHubClient, owner_urns: List[str]) -> None:
@@ -90,7 +190,7 @@ def _validate_owner_urns(client: DataHubClient, owner_urns: List[str]) -> None:
 def _batch_modify_owners(
     owner_urns: List[str],
     entity_urns: List[str],
-    ownership_type: Optional[OwnershipType],
+    ownership_type: Optional[OwnershipTypeInput],
     operation: Literal["add", "remove"],
 ) -> dict:
     """
@@ -115,8 +215,12 @@ def _batch_modify_owners(
         resource_input = {"resourceUrn": resource_urn}
         resources.append(resource_input)
 
-    # Convert ownership type to URN if provided
-    ownership_type_urn = ownership_type.to_urn() if ownership_type else None
+    # Resolve & validate ownership type (built-in enum or custom URN/id)
+    ownership_type_urn = (
+        _resolve_ownership_type_urn(client, ownership_type)
+        if ownership_type is not None
+        else None
+    )
 
     # Determine mutation and operation name based on operation type
     if operation == "add":
@@ -203,7 +307,7 @@ def _batch_modify_owners(
 def add_owners(
     owner_urns: List[str],
     entity_urns: List[str],
-    ownership_type: OwnershipType,
+    ownership_type: OwnershipTypeInput,
 ) -> dict:
     """Add one or more owners to multiple DataHub entities.
 
@@ -217,10 +321,14 @@ def add_owners(
         owner_urns: List of owner URNs to add (must be CorpUser or CorpGroup URNs).
                    Examples: ["urn:li:corpuser:john.doe", "urn:li:corpGroup:data-engineering"]
         entity_urns: List of entity URNs to assign ownership to (e.g., dataset URNs, dashboard URNs)
-        ownership_type: The type of ownership to assign. Must be one of:
-                       - OwnershipType.TECHNICAL_OWNER: Involved in production, maintenance, or distribution
-                       - OwnershipType.BUSINESS_OWNER: Principle stakeholders or domain experts
-                       - OwnershipType.DATA_STEWARD: Involved in governance
+        ownership_type: The type of ownership to assign. Accepts either:
+                       - A built-in OwnershipType enum value:
+                         - TECHNICAL_OWNER: Involved in production, maintenance, or distribution
+                         - BUSINESS_OWNER: Principle stakeholders or domain experts
+                         - DATA_STEWARD: Involved in governance
+                       - A custom ownership type, passed by its user-facing name
+                         (e.g. "Producer"). Custom types are looked up by name
+                         (case-insensitive) via GraphQL and must already exist.
 
     Returns:
         Dictionary with:
@@ -235,7 +343,7 @@ def add_owners(
                 "urn:li:dataset:(urn:li:dataPlatform:snowflake,db.schema.users,PROD)",
                 "urn:li:dataset:(urn:li:dataPlatform:snowflake,db.schema.customers,PROD)"
             ],
-            ownership_type=OwnershipType.TECHNICAL_OWNER
+            ownership_type=TECHNICAL_OWNER
         )
 
         # Add business owner
@@ -245,7 +353,7 @@ def add_owners(
                 "urn:li:dataset:(urn:li:dataPlatform:snowflake,db.schema.users,PROD)",
                 "urn:li:dataset:(urn:li:dataPlatform:snowflake,db.schema.customers,PROD)"
             ],
-            ownership_type=OwnershipType.BUSINESS_OWNER
+            ownership_type=BUSINESS_OWNER
         )
 
         # Add data steward to multiple entities
@@ -256,7 +364,7 @@ def add_owners(
                 "urn:li:dataset:(urn:li:dataPlatform:snowflake,db.schema.transactions,PROD)",
                 "urn:li:dashboard:(urn:li:dataPlatform:looker,sales_dashboard,PROD)"
             ],
-            ownership_type=OwnershipType.DATA_STEWARD
+            ownership_type=DATA_STEWARD
         )
     """
     return _batch_modify_owners(owner_urns, entity_urns, ownership_type, "add")
@@ -266,7 +374,7 @@ def add_owners(
 def remove_owners(
     owner_urns: List[str],
     entity_urns: List[str],
-    ownership_type: Optional[OwnershipType] = None,
+    ownership_type: Optional[OwnershipTypeInput] = None,
 ) -> dict:
     """Remove one or more owners from multiple DataHub entities.
 
@@ -282,10 +390,10 @@ def remove_owners(
         entity_urns: List of entity URNs to remove ownership from (e.g., dataset URNs, dashboard URNs)
         ownership_type: Optional ownership type to specify which type of ownership to remove.
                        If not provided, will remove ownership regardless of type.
-                       Can be one of:
-                       - OwnershipType.TECHNICAL_OWNER
-                       - OwnershipType.BUSINESS_OWNER
-                       - OwnershipType.DATA_STEWARD
+                       Accepts either a built-in OwnershipType enum value
+                       (TECHNICAL_OWNER, BUSINESS_OWNER, DATA_STEWARD) or a custom ownership
+                       type by its user-facing name (e.g. "Producer"). Custom types are looked
+                       up by name (case-insensitive) and must already exist in DataHub.
 
     Returns:
         Dictionary with:
@@ -309,7 +417,7 @@ def remove_owners(
                 "urn:li:dataset:(urn:li:dataPlatform:snowflake,db.schema.users,PROD)",
                 "urn:li:dataset:(urn:li:dataPlatform:snowflake,db.schema.customers,PROD)"
             ],
-            ownership_type=OwnershipType.TECHNICAL_OWNER
+            ownership_type=TECHNICAL_OWNER
         )
 
         # Remove temporary owner from multiple entities

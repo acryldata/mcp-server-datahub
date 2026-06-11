@@ -4,12 +4,15 @@ from typing import Optional
 
 from datahub.ingestion.graph.client import DataHubGraph
 
+from .view_helpers import fetch_global_default_view, fetch_user_default_view
+
 
 class ViewPreference(ABC):
     """Determines which DataHub view to apply when searching.
 
     Implementations encapsulate the three possible states:
-    - UseDefaultView: use the organization's configured default global view
+    - UseDefaultView: resolve the user's personal default view, falling back
+      to the organization's global default view
     - NoView: no view filtering at all
     - CustomView: use a specific view by URN
     """
@@ -22,12 +25,10 @@ class ViewPreference(ABC):
 
 @dataclass(frozen=True)
 class UseDefaultView(ViewPreference):
-    """Use the organization's default global view (current behavior)."""
+    """Resolve the default view: user personal default first, then org global default."""
 
     def get_view(self, graph: DataHubGraph) -> Optional[str]:
-        from .mcp_server import fetch_global_default_view
-
-        return fetch_global_default_view(graph)
+        return fetch_user_default_view(graph) or fetch_global_default_view(graph)
 
 
 @dataclass(frozen=True)

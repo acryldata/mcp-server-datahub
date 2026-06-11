@@ -109,10 +109,39 @@ def min_version(
     )
 
     def decorator(fn: Callable) -> Callable:
+        # NOTE: We intentionally mutate fn in place rather than wrapping with
+        # functools.wraps.  These decorators are stacked (e.g. @read_only over
+        # @min_version), and each sets a custom attribute (_version_requirement,
+        # _read_only_hint) that _register_tool reads at registration time.
+        # Wrapping would create a new function object, hiding attributes set by
+        # inner decorators and silently breaking version filtering or annotation
+        # propagation.
         fn._version_requirement = req  # type: ignore[attr-defined]
         return fn
 
     return decorator
+
+
+def read_only(fn: Callable) -> Callable:
+    """Decorator to declare that a tool does not modify any state.
+
+    Signals to MCP clients (e.g. Cursor BugBot, VS Code Copilot) that the tool
+    is safe to call autonomously without risk of side effects. Corresponds to
+    the MCP protocol's ``readOnlyHint`` annotation.
+
+    During tool registration, ``_register_tool`` reads this attribute and
+    sets ``readOnlyHint=True`` in the tool's MCP annotations automatically.
+
+    Usage::
+
+        @read_only
+        def my_tool(...):
+            ...
+    """
+    # NOTE: Mutates fn in place — do NOT wrap with functools.wraps.
+    # See comment in min_version() for rationale.
+    fn._read_only_hint = True  # type: ignore[attr-defined]
+    return fn
 
 
 # Auto-populated during tool registration by _register_tool().
