@@ -517,6 +517,367 @@ def test_remove_owners_mutation_returns_false(mock_datahub_client):
             remove_owners(owner_urns=owner_urns, entity_urns=entity_urns)
 
 
+# ===== Tests for custom ownership types =====
+
+
+def test_add_owners_with_custom_ownership_type_by_name(mock_datahub_client):
+    owner_urns = ["urn:li:corpuser:john.doe"]
+    entity_urns = ["urn:li:dataset:test"]
+    custom_urn = "urn:li:ownershipType:abc-123"
+
+    mock_datahub_client._graph.execute_graphql.side_effect = [
+        # _validate_owner_urns
+        {
+            "entities": [
+                {"urn": owner_urns[0], "type": "CORP_USER", "username": "john.doe"}
+            ]
+        },
+        # _resolve_ownership_type_urn — listOwnershipTypes by name
+        {
+            "listOwnershipTypes": {
+                "ownershipTypes": [
+                    {"urn": custom_urn, "info": {"name": "Producer"}},
+                ]
+            }
+        },
+        # mutation
+        {"batchAddOwners": True},
+    ]
+
+    with patch(
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
+        return_value=mock_datahub_client,
+    ):
+        result = add_owners(
+            owner_urns=owner_urns,
+            entity_urns=entity_urns,
+            ownership_type="Producer",
+        )
+
+    assert result["success"] is True
+    assert mock_datahub_client._graph.execute_graphql.call_count == 3
+
+    lookup_call = mock_datahub_client._graph.execute_graphql.call_args_list[1]
+    assert lookup_call.kwargs["operation_name"] == "listOwnershipTypes"
+    assert lookup_call.kwargs["variables"]["input"]["query"] == "Producer"
+
+    mutation_call = mock_datahub_client._graph.execute_graphql.call_args_list[2]
+    variables = mutation_call.kwargs["variables"]
+    assert variables["input"]["owners"][0]["ownershipTypeUrn"] == custom_urn
+    assert variables["input"]["ownershipTypeUrn"] == custom_urn
+
+
+def test_add_owners_with_custom_ownership_type_case_insensitive(mock_datahub_client):
+    owner_urns = ["urn:li:corpuser:john.doe"]
+    entity_urns = ["urn:li:dataset:test"]
+    expected_urn = "urn:li:ownershipType:abc-123"
+
+    mock_datahub_client._graph.execute_graphql.side_effect = [
+        {
+            "entities": [
+                {"urn": owner_urns[0], "type": "CORP_USER", "username": "john.doe"}
+            ]
+        },
+        # Server returns extra non-matching entries (listOwnershipTypes does
+        # prefix/partial matching) — we must filter down to the exact name.
+        {
+            "listOwnershipTypes": {
+                "ownershipTypes": [
+                    {
+                        "urn": "urn:li:ownershipType:producer-lead",
+                        "info": {"name": "Producer Lead"},
+                    },
+                    {"urn": expected_urn, "info": {"name": "Producer"}},
+                ]
+            }
+        },
+        {"batchAddOwners": True},
+    ]
+
+    with patch(
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
+        return_value=mock_datahub_client,
+    ):
+        result = add_owners(
+            owner_urns=owner_urns,
+            entity_urns=entity_urns,
+            ownership_type="producer",
+        )
+
+    assert result["success"] is True
+    mutation_call = mock_datahub_client._graph.execute_graphql.call_args_list[2]
+    assert (
+        mutation_call.kwargs["variables"]["input"]["ownershipTypeUrn"] == expected_urn
+    )
+
+
+def test_add_owners_with_nonexistent_custom_ownership_type(mock_datahub_client):
+    owner_urns = ["urn:li:corpuser:john.doe"]
+    entity_urns = ["urn:li:dataset:test"]
+
+    mock_datahub_client._graph.execute_graphql.side_effect = [
+        {
+            "entities": [
+                {"urn": owner_urns[0], "type": "CORP_USER", "username": "john.doe"}
+            ]
+        },
+        # No matches
+        {"listOwnershipTypes": {"ownershipTypes": []}},
+    ]
+
+    with patch(
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
+        return_value=mock_datahub_client,
+    ):
+        with pytest.raises(ValueError, match=r"was not found in DataHub"):
+            add_owners(
+                owner_urns=owner_urns,
+                entity_urns=entity_urns,
+                ownership_type="does-not-exist",
+            )
+
+
+def test_add_owners_with_partial_name_match_only_is_not_found(mock_datahub_client):
+    # listOwnershipTypes may return prefix/partial matches — if no exact name match,
+    # treat as not-found rather than silently picking one.
+    owner_urns = ["urn:li:corpuser:john.doe"]
+    entity_urns = ["urn:li:dataset:test"]
+
+    mock_datahub_client._graph.execute_graphql.side_effect = [
+        {
+            "entities": [
+                {"urn": owner_urns[0], "type": "CORP_USER", "username": "john.doe"}
+            ]
+        },
+        {
+            "listOwnershipTypes": {
+                "ownershipTypes": [
+                    {
+                        "urn": "urn:li:ownershipType:producer-lead",
+                        "info": {"name": "Producer Lead"},
+                    },
+                ]
+            }
+        },
+    ]
+
+    with patch(
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
+        return_value=mock_datahub_client,
+    ):
+        with pytest.raises(ValueError, match=r"was not found in DataHub"):
+            add_owners(
+                owner_urns=owner_urns,
+                entity_urns=entity_urns,
+                ownership_type="Producer",
+            )
+
+
+def test_add_owners_with_ambiguous_custom_ownership_type(mock_datahub_client):
+    owner_urns = ["urn:li:corpuser:john.doe"]
+    entity_urns = ["urn:li:dataset:test"]
+
+    mock_datahub_client._graph.execute_graphql.side_effect = [
+        {
+            "entities": [
+                {"urn": owner_urns[0], "type": "CORP_USER", "username": "john.doe"}
+            ]
+        },
+        {
+            "listOwnershipTypes": {
+                "ownershipTypes": [
+                    {
+                        "urn": "urn:li:ownershipType:producer-a",
+                        "info": {"name": "Producer"},
+                    },
+                    {
+                        "urn": "urn:li:ownershipType:producer-b",
+                        "info": {"name": "producer"},
+                    },
+                ]
+            }
+        },
+    ]
+
+    with patch(
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
+        return_value=mock_datahub_client,
+    ):
+        with pytest.raises(ValueError, match=r"ambiguous"):
+            add_owners(
+                owner_urns=owner_urns,
+                entity_urns=entity_urns,
+                ownership_type="Producer",
+            )
+
+
+def test_add_owners_with_empty_custom_ownership_type(mock_datahub_client):
+    mock_datahub_client._graph.execute_graphql.return_value = {
+        "entities": [
+            {
+                "urn": "urn:li:corpuser:john.doe",
+                "type": "CORP_USER",
+                "username": "john.doe",
+            }
+        ]
+    }
+
+    with patch(
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
+        return_value=mock_datahub_client,
+    ):
+        with pytest.raises(ValueError, match="non-empty string"):
+            add_owners(
+                owner_urns=["urn:li:corpuser:john.doe"],
+                entity_urns=["urn:li:dataset:test"],
+                ownership_type="   ",
+            )
+
+
+def test_remove_owners_with_custom_ownership_type(mock_datahub_client):
+    owner_urns = ["urn:li:corpuser:john.doe"]
+    entity_urns = ["urn:li:dataset:test"]
+    custom_urn = "urn:li:ownershipType:abc-123"
+
+    mock_datahub_client._graph.execute_graphql.side_effect = [
+        {
+            "entities": [
+                {"urn": owner_urns[0], "type": "CORP_USER", "username": "john.doe"}
+            ]
+        },
+        {
+            "listOwnershipTypes": {
+                "ownershipTypes": [
+                    {"urn": custom_urn, "info": {"name": "Producer"}},
+                ]
+            }
+        },
+        {"batchRemoveOwners": True},
+    ]
+
+    with patch(
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
+        return_value=mock_datahub_client,
+    ):
+        result = remove_owners(
+            owner_urns=owner_urns,
+            entity_urns=entity_urns,
+            ownership_type="Producer",
+        )
+
+    assert result["success"] is True
+    mutation_call = mock_datahub_client._graph.execute_graphql.call_args_list[2]
+    assert mutation_call.kwargs["variables"]["input"]["ownershipTypeUrn"] == custom_urn
+
+
+def test_add_owners_with_builtin_enum_name_string(mock_datahub_client):
+    # "TECHNICAL_OWNER" (enum name) should resolve via fast-path without a
+    # GraphQL lookup for the ownership type.
+    owner_urns = ["urn:li:corpuser:john.doe"]
+    entity_urns = ["urn:li:dataset:test"]
+    expected_urn = "urn:li:ownershipType:__system__technical_owner"
+
+    mock_datahub_client._graph.execute_graphql.side_effect = [
+        {
+            "entities": [
+                {"urn": owner_urns[0], "type": "CORP_USER", "username": "john.doe"}
+            ]
+        },
+        {"batchAddOwners": True},
+    ]
+
+    with patch(
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
+        return_value=mock_datahub_client,
+    ):
+        result = add_owners(
+            owner_urns=owner_urns,
+            entity_urns=entity_urns,
+            ownership_type="TECHNICAL_OWNER",
+        )
+
+    assert result["success"] is True
+    # Only 2 calls: owner validation + mutation. No ownership type lookup.
+    assert mock_datahub_client._graph.execute_graphql.call_count == 2
+    mutation_call = mock_datahub_client._graph.execute_graphql.call_args_list[1]
+    assert (
+        mutation_call.kwargs["variables"]["input"]["ownershipTypeUrn"] == expected_urn
+    )
+
+
+def test_add_owners_with_builtin_enum_value_string(mock_datahub_client):
+    # The enum value string ("__system__technical_owner") should also fast-path
+    # without requiring a GraphQL lookup.
+    owner_urns = ["urn:li:corpuser:john.doe"]
+    entity_urns = ["urn:li:dataset:test"]
+    expected_urn = "urn:li:ownershipType:__system__technical_owner"
+
+    mock_datahub_client._graph.execute_graphql.side_effect = [
+        {
+            "entities": [
+                {"urn": owner_urns[0], "type": "CORP_USER", "username": "john.doe"}
+            ]
+        },
+        {"batchAddOwners": True},
+    ]
+
+    with patch(
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
+        return_value=mock_datahub_client,
+    ):
+        result = add_owners(
+            owner_urns=owner_urns,
+            entity_urns=entity_urns,
+            ownership_type="__system__technical_owner",
+        )
+
+    assert result["success"] is True
+    assert mock_datahub_client._graph.execute_graphql.call_count == 2
+    mutation_call = mock_datahub_client._graph.execute_graphql.call_args_list[1]
+    assert (
+        mutation_call.kwargs["variables"]["input"]["ownershipTypeUrn"] == expected_urn
+    )
+
+
+def test_add_owners_with_builtin_full_urn_string(mock_datahub_client):
+    # Passing the full ownership type URN (e.g. "urn:li:ownershipType:__system__technical_owner")
+    # should fast-path to the built-in enum without a GraphQL lookup.
+    owner_urns = ["urn:li:corpuser:john.doe"]
+    entity_urns = ["urn:li:dataset:test"]
+    expected_urn = "urn:li:ownershipType:__system__technical_owner"
+
+    mock_datahub_client._graph.execute_graphql.side_effect = [
+        {
+            "entities": [
+                {"urn": owner_urns[0], "type": "CORP_USER", "username": "john.doe"}
+            ]
+        },
+        {"batchAddOwners": True},
+    ]
+
+    with patch(
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
+        return_value=mock_datahub_client,
+    ):
+        result = add_owners(
+            owner_urns=owner_urns,
+            entity_urns=entity_urns,
+            ownership_type="urn:li:ownershipType:__system__technical_owner",
+        )
+
+    assert result["success"] is True
+    # Only 2 calls: owner validation + mutation. No ownership type lookup.
+    assert mock_datahub_client._graph.execute_graphql.call_count == 2
+    mutation_call = mock_datahub_client._graph.execute_graphql.call_args_list[1]
+    assert (
+        mutation_call.kwargs["variables"]["input"]["ownershipTypeUrn"] == expected_urn
+    )
+    assert (
+        mutation_call.kwargs["variables"]["input"]["owners"][0]["ownershipTypeUrn"]
+        == expected_urn
+    )
+
+
 def test_remove_owners_graphql_exception(mock_datahub_client):
     """Test handling of GraphQL execution exception."""
     owner_urns = ["urn:li:corpuser:test"]

@@ -157,8 +157,9 @@ def filter_document_tools(tools: Sequence[T]) -> list[T]:
         Returns all tools unchanged if documents exist or on error.
 
     Example:
+        >>> from datahub_integrations.mcp.fastmcp_helpers import list_mcp_tools_sync
         >>> from .document_tools_middleware import filter_document_tools
-        >>> filtered = filter_document_tools(mcp._tool_manager._tools.values())
+        >>> filtered = filter_document_tools(list_mcp_tools_sync(mcp))
     """
     # Check if document tools are disabled via environment variable
     if _are_document_tools_disabled():

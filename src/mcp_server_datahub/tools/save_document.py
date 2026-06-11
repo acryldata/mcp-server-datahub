@@ -16,10 +16,14 @@ import os
 import re
 import uuid
 from datetime import datetime
-from typing import Dict, List, Literal, Optional, Tuple
+from typing import TYPE_CHECKING, Dict, List, Literal, Optional, Tuple
+
+if TYPE_CHECKING:
+    from datahub.sdk.main_client import DataHubClient
 
 from datahub.cli.env_utils import get_boolean_env_variable
 from datahub.metadata import schema_classes as models
+from datahub.metadata.urns import CorpUserUrn
 from datahub.sdk import Document
 
 from .. import graphql_helpers
@@ -333,6 +337,43 @@ def _ensure_parent_hierarchy(user_info: Optional[Dict]) -> Tuple[str, Optional[s
 
     # No user info available, use root
     return root_urn, None
+
+
+def create_user_scoped_document(
+    tools_client: "DataHubClient",
+    doc_id: str,
+    title: str,
+    content: str,
+    subtype: str,
+    user_urn: str,
+    agent_urn: str = "urn:li:corpuser:datahub-ai",
+) -> None:
+    """Create or update a private user-scoped document.
+
+    Used by MemorySynthesizer for automatic memory storage.
+    Sets showInGlobalContext=False, owner=user_urn, actor=agent_urn.
+    """
+    doc = Document.create_document(
+        id=doc_id,
+        title=title,
+        text=content,
+        subtype=subtype,
+        owners=[CorpUserUrn.from_string(user_urn)],
+        show_in_global_context=False,
+    )
+    # Explicitly emit DocumentSettings so showInGlobalContext=False is persisted.
+    # Uses the AI agent URN as the actor rather than the human user, since this
+    # document is written automatically by the agent, not by user action.
+    settings_audit = models.AuditStampClass(
+        time=int(datetime.now().timestamp() * 1000),
+        actor=agent_urn,
+    )
+    document_settings = models.DocumentSettingsClass(
+        showInGlobalContext=False,
+        lastModified=settings_audit,
+    )
+    doc._set_aspect(document_settings)
+    tools_client.entities.upsert(doc)
 
 
 @min_version(cloud="0.3.16", oss="1.4.0")
