@@ -5,6 +5,12 @@ All notable changes to mcp-server-datahub will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Per-entity-type description truncation**: Building on the configurable `DESCRIPTION_LENGTH_LIMIT` env var (global default 5000), per-entity-type overrides (e.g. higher limits for glossary terms) can be set via `DESCRIPTION_LENGTH_OVERRIDES` (JSON). The resolved limit is propagated to nested descriptions in `truncate_descriptions()`.
+
 ## [0.5.3] - 2026-03-09
 
 ### Highlights — New SQL-like Filter Syntax

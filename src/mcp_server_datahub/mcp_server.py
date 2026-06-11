@@ -32,6 +32,8 @@ from .fastmcp_helpers import list_mcp_tools_sync
 # IMPORTANT: Use relative imports to maintain compatibility across repositories
 from .graphql_helpers import (  # noqa: F401 (re-exported for backward compat)
     DESCRIPTION_LENGTH_HARD_LIMIT,
+    DESCRIPTION_LENGTH_OVERRIDES,
+    _get_description_limit,
     DOCUMENT_CONTENT_CHAR_LIMIT,
     ENTITY_SCHEMA_TOKEN_BUDGET,
     QUERY_LENGTH_HARD_LIMIT,

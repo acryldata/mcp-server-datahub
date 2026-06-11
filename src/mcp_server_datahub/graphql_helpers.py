@@ -10,6 +10,7 @@ Provides the common infrastructure that all MCP tools depend on:
 import contextlib
 import contextvars
 import html
+import json
 import os
 import pathlib
 import re
@@ -44,6 +45,36 @@ T = TypeVar("T")
 DESCRIPTION_LENGTH_HARD_LIMIT = int(os.getenv("DESCRIPTION_LENGTH_LIMIT", "5000"))
 QUERY_LENGTH_HARD_LIMIT = 5000
 DOCUMENT_CONTENT_CHAR_LIMIT = 8000
+
+_overrides_raw = os.getenv("DESCRIPTION_LENGTH_OVERRIDES", "")
+try:
+    DESCRIPTION_LENGTH_OVERRIDES: dict[str, int] = (
+        {k: int(v) for k, v in json.loads(_overrides_raw).items()}
+        if _overrides_raw
+        else {}
+    )
+except (json.JSONDecodeError, ValueError):
+    logger.warning(f"Invalid DESCRIPTION_LENGTH_OVERRIDES={_overrides_raw!r}, ignoring")
+    DESCRIPTION_LENGTH_OVERRIDES = {}
+
+
+def _get_description_limit(
+    urn: str | None,
+    fallback: int = DESCRIPTION_LENGTH_HARD_LIMIT,
+) -> int:
+    """Return the description length limit for the given entity URN.
+
+    Extracts the entity type from the URN (e.g. ``glossaryTerm`` from
+    ``urn:li:glossaryTerm:...``) and looks it up in DESCRIPTION_LENGTH_OVERRIDES.
+    Falls back to *fallback* (default ``DESCRIPTION_LENGTH_HARD_LIMIT``) for
+    unknown or missing URNs.
+    """
+    if isinstance(urn, str) and urn.startswith("urn:li:"):
+        parts = urn.split(":", 3)
+        if len(parts) >= 3 and parts[2] in DESCRIPTION_LENGTH_OVERRIDES:
+            return DESCRIPTION_LENGTH_OVERRIDES[parts[2]]
+    return fallback
+
 
 # Maximum token count for tool responses to prevent context window issues
 # As per telemetry tool result length goes upto
@@ -200,16 +231,19 @@ def sanitize_and_truncate_description(text: str, max_length: int) -> str:
 def truncate_descriptions(
     data: dict | list, max_length: int = DESCRIPTION_LENGTH_HARD_LIMIT
 ) -> None:
+    """Recursively truncate ``description`` values in a nested dict/list in place.
+
+    When a dict contains a ``urn`` key, the effective limit is resolved via
+    :func:`_get_description_limit` so that entity types like glossary terms
+    can have a higher threshold than the global default.
     """
-    Recursively truncates values of keys named 'description' in a dictionary in place.
-    """
-    # TODO: path-aware truncate, for different length limits per entity type
     if isinstance(data, dict):
+        effective_limit = _get_description_limit(data.get("urn"), max_length)
         for key, value in data.items():
             if key == "description" and isinstance(value, str):
-                data[key] = sanitize_and_truncate_description(value, max_length)
+                data[key] = sanitize_and_truncate_description(value, effective_limit)
             elif isinstance(value, (dict, list)):
-                truncate_descriptions(value, max_length)
+                truncate_descriptions(value, effective_limit)
     elif isinstance(data, list):
         for item in data:
             truncate_descriptions(item, max_length)

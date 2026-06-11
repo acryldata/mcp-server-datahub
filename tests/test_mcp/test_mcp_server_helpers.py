@@ -7,6 +7,7 @@ import pytest
 from datahub_integrations.mcp import graphql_helpers
 from datahub_integrations.mcp.mcp_server import (
     _clean_schema_fields,
+    _get_description_limit,
     _sort_fields_by_priority,
     clean_get_entities_response,
     clean_gql_response,
@@ -596,6 +597,238 @@ def test_truncate_descriptions() -> None:
             ]
         }
     }
+
+
+class TestGetDescriptionLimit:
+    """Tests for _get_description_limit helper."""
+
+    def test_urn_with_override_returns_override(self) -> None:
+        with patch.dict(
+            graphql_helpers.DESCRIPTION_LENGTH_OVERRIDES, {"glossaryTerm": 5000}
+        ):
+            limit = _get_description_limit("urn:li:glossaryTerm:SomeTerm")
+            assert limit == 5000
+
+    def test_urn_without_override_returns_fallback(self) -> None:
+        limit = _get_description_limit(
+            "urn:li:dataset:(urn:li:dataPlatform:snowflake,db.schema.table,PROD)"
+        )
+        assert limit == graphql_helpers.DESCRIPTION_LENGTH_HARD_LIMIT
+
+    def test_none_urn_returns_fallback(self) -> None:
+        assert (
+            _get_description_limit(None)
+            == graphql_helpers.DESCRIPTION_LENGTH_HARD_LIMIT
+        )
+
+    def test_empty_string_returns_fallback(self) -> None:
+        assert (
+            _get_description_limit("") == graphql_helpers.DESCRIPTION_LENGTH_HARD_LIMIT
+        )
+
+    def test_malformed_urn_returns_fallback(self) -> None:
+        assert (
+            _get_description_limit("not-a-urn")
+            == graphql_helpers.DESCRIPTION_LENGTH_HARD_LIMIT
+        )
+
+    def test_custom_fallback_used_when_no_override(self) -> None:
+        assert _get_description_limit(None, fallback=42) == 42
+        assert (
+            _get_description_limit(
+                "urn:li:dataset:(urn:li:dataPlatform:hive,db.table,PROD)", fallback=42
+            )
+            == 42
+        )
+
+    def test_override_takes_precedence_over_fallback(self) -> None:
+        with patch.dict(
+            graphql_helpers.DESCRIPTION_LENGTH_OVERRIDES, {"glossaryTerm": 5000}
+        ):
+            limit = _get_description_limit("urn:li:glossaryTerm:Foo", fallback=42)
+            assert limit == 5000
+
+
+class TestTruncateDescriptionsEntityAware:
+    """Tests for URN-aware truncate_descriptions behavior.
+
+    Sizes are derived from ``DESCRIPTION_LENGTH_HARD_LIMIT`` so the tests stay
+    valid regardless of the global default. Overrides are set strictly above the
+    default and descriptions straddle the limits to prove the override applies.
+    """
+
+    def test_override_entity_gets_higher_limit(self) -> None:
+        default = graphql_helpers.DESCRIPTION_LENGTH_HARD_LIMIT
+        override = default * 2
+        # Longer than the global default but under the override.
+        long_desc = "x" * (default + 1000)
+        result = {
+            "urn": "urn:li:glossaryTerm:MyTerm",
+            "description": long_desc,
+        }
+        with patch.dict(
+            graphql_helpers.DESCRIPTION_LENGTH_OVERRIDES, {"glossaryTerm": override}
+        ):
+            truncate_descriptions(result)
+        # Survives intact: the override raised the limit above the default.
+        assert len(result["description"]) == default + 1000
+
+    def test_non_override_entity_truncated_at_default(self) -> None:
+        default = graphql_helpers.DESCRIPTION_LENGTH_HARD_LIMIT
+        long_desc = "x" * (default + 1000)
+        result = {
+            "urn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,db.schema.table,PROD)",
+            "description": long_desc,
+        }
+        truncate_descriptions(result)
+        assert len(result["description"]) == default
+
+    def test_nested_override_entity_in_lineage(self) -> None:
+        default = graphql_helpers.DESCRIPTION_LENGTH_HARD_LIMIT
+        override = default * 2
+        long_desc = "x" * (default + 1000)
+        lineage = {
+            "downstreams": {
+                "searchResults": [
+                    {
+                        "entity": {
+                            "urn": "urn:li:glossaryTerm:SomeTerm",
+                            "description": long_desc,
+                        }
+                    }
+                ]
+            }
+        }
+        with patch.dict(
+            graphql_helpers.DESCRIPTION_LENGTH_OVERRIDES, {"glossaryTerm": override}
+        ):
+            truncate_descriptions(lineage)
+        entity = lineage["downstreams"]["searchResults"][0]["entity"]
+        assert len(entity["description"]) == default + 1000
+
+    def test_mixed_entities_different_limits(self) -> None:
+        default = graphql_helpers.DESCRIPTION_LENGTH_HARD_LIMIT
+        override = default * 2
+        entities = [
+            {
+                "urn": "urn:li:glossaryTerm:Foo",
+                "description": "g" * (default + 1000),
+            },
+            {
+                "urn": "urn:li:dataset:(urn:li:dataPlatform:hive,db.t,PROD)",
+                "description": "d" * (default + 1000),
+            },
+        ]
+        with patch.dict(
+            graphql_helpers.DESCRIPTION_LENGTH_OVERRIDES, {"glossaryTerm": override}
+        ):
+            truncate_descriptions(entities)
+        # Glossary term keeps its longer description; dataset is cut to the default.
+        assert len(entities[0]["description"]) == default + 1000
+        assert len(entities[1]["description"]) == default
+
+    def test_no_urn_uses_global_default(self) -> None:
+        default = graphql_helpers.DESCRIPTION_LENGTH_HARD_LIMIT
+        result = {"description": "x" * (default + 1000)}
+        truncate_descriptions(result)
+        assert len(result["description"]) == default
+
+    def test_explicit_max_length_still_works(self) -> None:
+        result = {"description": "x" * 100}
+        truncate_descriptions(result, max_length=50)
+        assert len(result["description"]) == 50
+
+    def test_override_at_boundary(self) -> None:
+        default = graphql_helpers.DESCRIPTION_LENGTH_HARD_LIMIT
+        override = default + 2000
+        result = {
+            "urn": "urn:li:domain:SomeDomain",
+            "description": "x" * (override + 500),
+        }
+        with patch.dict(
+            graphql_helpers.DESCRIPTION_LENGTH_OVERRIDES, {"domain": override}
+        ):
+            truncate_descriptions(result)
+        assert len(result["description"]) == override
+        assert result["description"].endswith("...")
+
+    def test_override_propagates_to_nested_properties(self) -> None:
+        """Description inside a child dict (e.g. properties) inherits the parent's resolved limit."""
+        default = graphql_helpers.DESCRIPTION_LENGTH_HARD_LIMIT
+        override_limit = default * 5
+        desc_length = default * 3
+        long_desc = "x" * desc_length
+        result = {
+            "urn": "urn:li:glossaryTerm:SomeTerm",
+            "properties": {
+                "name": "SomeTerm",
+                "description": long_desc,
+            },
+        }
+        with patch.dict(
+            graphql_helpers.DESCRIPTION_LENGTH_OVERRIDES,
+            {"glossaryTerm": override_limit},
+        ):
+            truncate_descriptions(result)
+        assert len(result["properties"]["description"]) == desc_length
+
+    def test_no_overrides_all_use_global_default(self) -> None:
+        """Without any overrides, all entity types use the global limit."""
+        default = graphql_helpers.DESCRIPTION_LENGTH_HARD_LIMIT
+        entities = [
+            {"urn": "urn:li:glossaryTerm:A", "description": "x" * (default + 1000)},
+            {
+                "urn": "urn:li:dataset:(urn:li:dataPlatform:hive,db.t,PROD)",
+                "description": "x" * (default + 1000),
+            },
+            {"urn": "urn:li:domain:D", "description": "x" * (default + 1000)},
+        ]
+        truncate_descriptions(entities)
+        for entity in entities:
+            assert len(entity["description"]) == default
+
+
+class TestDescriptionLimitEnvOverrides:
+    """Tests for environment variable configuration of description limits."""
+
+    def test_global_limit_env_override(self) -> None:
+        with patch.dict("os.environ", {"DESCRIPTION_LENGTH_LIMIT": "2000"}):
+            import importlib
+
+            importlib.reload(graphql_helpers)
+            assert graphql_helpers.DESCRIPTION_LENGTH_HARD_LIMIT == 2000
+            importlib.reload(graphql_helpers)
+
+    def test_overrides_env_valid_json(self) -> None:
+        with patch.dict(
+            "os.environ",
+            {"DESCRIPTION_LENGTH_OVERRIDES": '{"glossaryTerm": 5000, "domain": 3000}'},
+        ):
+            import importlib
+
+            importlib.reload(graphql_helpers)
+            assert graphql_helpers.DESCRIPTION_LENGTH_OVERRIDES["glossaryTerm"] == 5000
+            assert graphql_helpers.DESCRIPTION_LENGTH_OVERRIDES["domain"] == 3000
+            assert "dataset" not in graphql_helpers.DESCRIPTION_LENGTH_OVERRIDES
+            importlib.reload(graphql_helpers)
+
+    def test_overrides_env_invalid_json_gives_empty(self) -> None:
+        with patch.dict(
+            "os.environ",
+            {"DESCRIPTION_LENGTH_OVERRIDES": "not-json"},
+        ):
+            import importlib
+
+            importlib.reload(graphql_helpers)
+            assert graphql_helpers.DESCRIPTION_LENGTH_OVERRIDES == {}
+            importlib.reload(graphql_helpers)
+
+    def test_no_env_vars_gives_empty_overrides(self) -> None:
+        import importlib
+
+        importlib.reload(graphql_helpers)
+        assert graphql_helpers.DESCRIPTION_LENGTH_OVERRIDES == {}
+        assert graphql_helpers.DESCRIPTION_LENGTH_HARD_LIMIT == 5000
 
 
 def test_description_length_limit_default() -> None:
