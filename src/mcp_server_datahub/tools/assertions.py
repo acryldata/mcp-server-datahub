@@ -42,10 +42,10 @@ query SearchDatasetAssertions(
                     info {
                         type
                         description
-                        note
-                        externalUrl
-                        entityUrn
-                        source { type }
+                        note  #[NEWER_GMS]
+                        externalUrl  #[NEWER_GMS]
+                        entityUrn  #[NEWER_GMS]
+                        source { type }  #[NEWER_GMS]
                         datasetAssertion {
                             datasetUrn
                             scope
@@ -60,88 +60,88 @@ query SearchDatasetAssertions(
                             nativeType
                             logic
                         }
-                        freshnessAssertion {
-                            entityUrn
-                            type
-                            schedule {
-                                type
-                                cron { cron timezone }
-                                fixedInterval { unit multiple }
-                            }
-                            filter { type sql }
-                        }
-                        volumeAssertion {
-                            entityUrn
-                            type
-                            filter { type sql }
-                            rowCountTotal {
-                                operator
-                                parameters {
-                                    value { value type }
-                                    minValue { value type }
-                                    maxValue { value type }
-                                }
-                            }
-                            rowCountChange {
-                                type
-                                operator
-                                parameters {
-                                    value { value type }
-                                    minValue { value type }
-                                    maxValue { value type }
-                                }
-                            }
-                        }
-                        sqlAssertion {
-                            type
-                            entityUrn
-                            statement
-                            changeType
-                            operator
-                            parameters {
-                                value { value type }
-                                minValue { value type }
-                                maxValue { value type }
-                            }
-                        }
-                        fieldAssertion {
-                            type
-                            entityUrn
-                            filter { type sql }
-                            fieldValuesAssertion {
-                                field { path type nativeType }
-                                transform { type }
-                                operator
-                                parameters {
-                                    value { value type }
-                                    minValue { value type }
-                                    maxValue { value type }
-                                }
-                                failThreshold { type value }
-                                excludeNulls
-                            }
-                            fieldMetricAssertion {
-                                field { path type nativeType }
-                                metric
-                                operator
-                                parameters {
-                                    value { value type }
-                                    minValue { value type }
-                                    maxValue { value type }
-                                }
-                            }
-                        }
-                        schemaAssertion {
-                            entityUrn
-                            compatibility
-                            fields { path type nativeType }
-                        }
-                        customAssertion {
-                            type
-                            entityUrn
-                            field { urn path }
-                            logic
-                        }
+                        freshnessAssertion {  #[NEWER_GMS]
+                            entityUrn  #[NEWER_GMS]
+                            type  #[NEWER_GMS]
+                            schedule {  #[NEWER_GMS]
+                                type  #[NEWER_GMS]
+                                cron { cron timezone }  #[NEWER_GMS]
+                                fixedInterval { unit multiple }  #[NEWER_GMS]
+                            }  #[NEWER_GMS]
+                            filter { type sql }  #[NEWER_GMS]
+                        }  #[NEWER_GMS]
+                        volumeAssertion {  #[NEWER_GMS]
+                            entityUrn  #[NEWER_GMS]
+                            type  #[NEWER_GMS]
+                            filter { type sql }  #[NEWER_GMS]
+                            rowCountTotal {  #[NEWER_GMS]
+                                operator  #[NEWER_GMS]
+                                parameters {  #[NEWER_GMS]
+                                    value { value type }  #[NEWER_GMS]
+                                    minValue { value type }  #[NEWER_GMS]
+                                    maxValue { value type }  #[NEWER_GMS]
+                                }  #[NEWER_GMS]
+                            }  #[NEWER_GMS]
+                            rowCountChange {  #[NEWER_GMS]
+                                type  #[NEWER_GMS]
+                                operator  #[NEWER_GMS]
+                                parameters {  #[NEWER_GMS]
+                                    value { value type }  #[NEWER_GMS]
+                                    minValue { value type }  #[NEWER_GMS]
+                                    maxValue { value type }  #[NEWER_GMS]
+                                }  #[NEWER_GMS]
+                            }  #[NEWER_GMS]
+                        }  #[NEWER_GMS]
+                        sqlAssertion {  #[NEWER_GMS]
+                            type  #[NEWER_GMS]
+                            entityUrn  #[NEWER_GMS]
+                            statement  #[NEWER_GMS]
+                            changeType  #[NEWER_GMS]
+                            operator  #[NEWER_GMS]
+                            parameters {  #[NEWER_GMS]
+                                value { value type }  #[NEWER_GMS]
+                                minValue { value type }  #[NEWER_GMS]
+                                maxValue { value type }  #[NEWER_GMS]
+                            }  #[NEWER_GMS]
+                        }  #[NEWER_GMS]
+                        fieldAssertion {  #[NEWER_GMS]
+                            type  #[NEWER_GMS]
+                            entityUrn  #[NEWER_GMS]
+                            filter { type sql }  #[NEWER_GMS]
+                            fieldValuesAssertion {  #[NEWER_GMS]
+                                field { path type nativeType }  #[NEWER_GMS]
+                                transform { type }  #[NEWER_GMS]
+                                operator  #[NEWER_GMS]
+                                parameters {  #[NEWER_GMS]
+                                    value { value type }  #[NEWER_GMS]
+                                    minValue { value type }  #[NEWER_GMS]
+                                    maxValue { value type }  #[NEWER_GMS]
+                                }  #[NEWER_GMS]
+                                failThreshold { type value }  #[NEWER_GMS]
+                                excludeNulls  #[NEWER_GMS]
+                            }  #[NEWER_GMS]
+                            fieldMetricAssertion {  #[NEWER_GMS]
+                                field { path type nativeType }  #[NEWER_GMS]
+                                metric  #[NEWER_GMS]
+                                operator  #[NEWER_GMS]
+                                parameters {  #[NEWER_GMS]
+                                    value { value type }  #[NEWER_GMS]
+                                    minValue { value type }  #[NEWER_GMS]
+                                    maxValue { value type }  #[NEWER_GMS]
+                                }  #[NEWER_GMS]
+                            }  #[NEWER_GMS]
+                        }  #[NEWER_GMS]
+                        schemaAssertion {  #[NEWER_GMS]
+                            entityUrn  #[NEWER_GMS]
+                            compatibility  #[NEWER_GMS]
+                            fields { path type nativeType }  #[NEWER_GMS]
+                        }  #[NEWER_GMS]
+                        customAssertion {  #[NEWER_GMS]
+                            type  #[NEWER_GMS]
+                            entityUrn  #[NEWER_GMS]
+                            field { urn path }  #[NEWER_GMS]
+                            logic  #[NEWER_GMS]
+                        }  #[NEWER_GMS]
                     }
                     runEvents(status: COMPLETE, limit: $runEventsLimit) {
                         total
@@ -158,21 +158,21 @@ query SearchDatasetAssertions(
                                 actualAggValue
                                 externalUrl
                                 nativeResults { key value }
-                                error {
-                                    type
-                                    displayMessage
-                                }
+                                error {  #[NEWER_GMS]
+                                    type  #[NEWER_GMS]
+                                    displayMessage  #[NEWER_GMS]
+                                }  #[NEWER_GMS]
                             }
                         }
                     }
-                    tags {
-                        tags {
-                            tag {
-                                urn
-                                properties { name }
-                            }
-                        }
-                    }
+                    tags {  #[NEWER_GMS]
+                        tags {  #[NEWER_GMS]
+                            tag {  #[NEWER_GMS]
+                                urn  #[NEWER_GMS]
+                                properties { name }  #[NEWER_GMS]
+                            }  #[NEWER_GMS]
+                        }  #[NEWER_GMS]
+                    }  #[NEWER_GMS]
                 }
             }
         }
