@@ -99,7 +99,7 @@ query semanticSearch(
       aggregations {
         value
         count
-        displayName
+        displayName  #[NEWER_GMS]
         entity {
           ...FacetEntityInfo
         }
