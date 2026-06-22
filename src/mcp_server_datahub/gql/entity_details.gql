@@ -163,10 +163,10 @@ fragment parentNodesFields on ParentNodesResult {
             name
             __typename
         }
-        displayProperties {
-            ...displayPropertiesFields
-            __typename
-        }
+        displayProperties {                                         #[NEWER_GMS]
+            ...displayPropertiesFields                              #[NEWER_GMS]
+            __typename                                              #[NEWER_GMS]
+        }                                                           #[NEWER_GMS]
         __typename
     }
     __typename
@@ -212,15 +212,15 @@ fragment glossaryTerms on GlossaryTerms {
     }
     __typename
 }
-fragment displayPropertiesFields on DisplayProperties {
-    icon {
-        name
-        style
-        iconLibrary
-        __typename
-    }
-    __typename
-}
+fragment displayPropertiesFields on DisplayProperties {  #[NEWER_GMS]
+    icon {                                               #[NEWER_GMS]
+        name                                             #[NEWER_GMS]
+        style                                            #[NEWER_GMS]
+        iconLibrary                                      #[NEWER_GMS]
+        __typename                                       #[NEWER_GMS]
+    }                                                    #[NEWER_GMS]
+    __typename                                           #[NEWER_GMS]
+}                                                        #[NEWER_GMS]
 
 fragment entityDomain on DomainAssociation {
     domain {
@@ -235,10 +235,10 @@ fragment entityDomain on DomainAssociation {
             __typename
         }
         ...domainEntitiesFields
-        displayProperties {
-            ...displayPropertiesFields
-            __typename
-        }
+        displayProperties {                             #[NEWER_GMS]
+            ...displayPropertiesFields                  #[NEWER_GMS]
+            __typename                                  #[NEWER_GMS]
+        }                                               #[NEWER_GMS]
         __typename
     }
     __typename
@@ -283,12 +283,12 @@ fragment deprecationFields on Deprecation {
     deprecated
     note
     decommissionTime
-    actorEntity {
-        urn
-        type
-        ...entityDisplayNameFields
-        __typename
-    }
+    actorEntity {                    #[NEWER_GMS]
+        urn                          #[NEWER_GMS]
+        type                         #[NEWER_GMS]
+        ...entityDisplayNameFields   #[NEWER_GMS]
+        __typename                   #[NEWER_GMS]
+    }                                #[NEWER_GMS]
     __typename
 }
 
@@ -489,10 +489,10 @@ fragment parentDomainsFields on ParentDomainsResult {
         urn
         type
         ... on Domain {
-            displayProperties {
-                ...displayPropertiesFields
-                __typename
-            }
+            displayProperties {                             #[NEWER_GMS]
+                ...displayPropertiesFields                  #[NEWER_GMS]
+                __typename                                  #[NEWER_GMS]
+            }                                               #[NEWER_GMS]
             properties {
                 name
                 description
@@ -513,7 +513,7 @@ fragment entityPreview on Entity {
             ...platformFields
         }
         editableProperties {
-            name
+            name  #[NEWER_GMS]
             description
         }
         properties {
@@ -949,9 +949,9 @@ fragment entityPreview on Entity {
         parentDomains {
             ...parentDomainsFields
         }
-        displayProperties {
-            ...displayPropertiesFields
-        }
+        displayProperties {                             #[NEWER_GMS]
+            ...displayPropertiesFields                  #[NEWER_GMS]
+        }                                               #[NEWER_GMS]
         ...domainEntitiesFields
     }
     ... on DataProduct {
@@ -1039,13 +1039,13 @@ fragment entityPreview on Entity {
         deprecation {
             ...deprecationFields
         }
-        browsePathV2 {
-            path {
-                entity {
-                    ...entityDisplayNameFields
-                }
-            }
-        }
+        browsePathV2 {                         #[NEWER_GMS]
+            path {                             #[NEWER_GMS]
+                entity {                       #[NEWER_GMS]
+                    ...entityDisplayNameFields #[NEWER_GMS]
+                }                             #[NEWER_GMS]
+            }                                  #[NEWER_GMS]
+        }                                      #[NEWER_GMS]
     }
     ... on Assertion {
         urn
@@ -1053,10 +1053,10 @@ fragment entityPreview on Entity {
         info {
             type
             description
-            lastUpdated {
-                time
-                actor
-            }
+            lastUpdated {  #[NEWER_GMS]
+                time  #[NEWER_GMS]
+                actor  #[NEWER_GMS]
+            }  #[NEWER_GMS]
             datasetAssertion {
                 datasetUrn
                 scope
@@ -1087,126 +1087,126 @@ fragment entityPreview on Entity {
                 }
                 logic
             }
-            fieldAssertion {
-                type
-                entityUrn
-                fieldValuesAssertion {
-                    field {
-                        path
-                        type
-                        nativeType
-                    }
-                    operator
-                    parameters {
-                        value {
-                            value
-                            type
-                        }
-                        minValue {
-                            value
-                            type
-                        }
-                        maxValue {
-                            value
-                            type
-                        }
-                    }
-                    failThreshold {
-                        type
-                        value
-                    }
-                    excludeNulls
-                }
-                fieldMetricAssertion {
-                    field {
-                        path
-                        type
-                        nativeType
-                    }
-                    metric
-                    operator
-                    parameters {
-                        value {
-                            value
-                            type
-                        }
-                        minValue {
-                            value
-                            type
-                        }
-                        maxValue {
-                            value
-                            type
-                        }
-                    }
-                }
-            }
-            volumeAssertion {
-                type
-                entityUrn
-                rowCountTotal {
-                    operator
-                    parameters {
-                        value {
-                            value
-                            type
-                        }
-                        minValue {
-                            value
-                            type
-                        }
-                        maxValue {
-                            value
-                            type
-                        }
-                    }
-                }
-                rowCountChange {
-                    type
-                    operator
-                    parameters {
-                        value {
-                            value
-                            type
-                        }
-                        minValue {
-                            value
-                            type
-                        }
-                        maxValue {
-                            value
-                            type
-                        }
-                    }
-                }
-            }
-            sqlAssertion {
-                type
-                entityUrn
-                statement
-                operator
-                parameters {
-                    value {
-                        value
-                        type
-                    }
-                    minValue {
-                        value
-                        type
-                    }
-                    maxValue {
-                        value
-                        type
-                    }
-                }
-            }
-            source {
-                type
-                created {
-                    time
-                    actor
-                }
-            }
+            fieldAssertion {  #[NEWER_GMS]
+                type  #[NEWER_GMS]
+                entityUrn  #[NEWER_GMS]
+                fieldValuesAssertion {  #[NEWER_GMS]
+                    field {  #[NEWER_GMS]
+                        path  #[NEWER_GMS]
+                        type  #[NEWER_GMS]
+                        nativeType  #[NEWER_GMS]
+                    }  #[NEWER_GMS]
+                    operator  #[NEWER_GMS]
+                    parameters {  #[NEWER_GMS]
+                        value {  #[NEWER_GMS]
+                            value  #[NEWER_GMS]
+                            type  #[NEWER_GMS]
+                        }  #[NEWER_GMS]
+                        minValue {  #[NEWER_GMS]
+                            value  #[NEWER_GMS]
+                            type  #[NEWER_GMS]
+                        }  #[NEWER_GMS]
+                        maxValue {  #[NEWER_GMS]
+                            value  #[NEWER_GMS]
+                            type  #[NEWER_GMS]
+                        }  #[NEWER_GMS]
+                    }  #[NEWER_GMS]
+                    failThreshold {  #[NEWER_GMS]
+                        type  #[NEWER_GMS]
+                        value  #[NEWER_GMS]
+                    }  #[NEWER_GMS]
+                    excludeNulls  #[NEWER_GMS]
+                }  #[NEWER_GMS]
+                fieldMetricAssertion {  #[NEWER_GMS]
+                    field {  #[NEWER_GMS]
+                        path  #[NEWER_GMS]
+                        type  #[NEWER_GMS]
+                        nativeType  #[NEWER_GMS]
+                    }  #[NEWER_GMS]
+                    metric  #[NEWER_GMS]
+                    operator  #[NEWER_GMS]
+                    parameters {  #[NEWER_GMS]
+                        value {  #[NEWER_GMS]
+                            value  #[NEWER_GMS]
+                            type  #[NEWER_GMS]
+                        }  #[NEWER_GMS]
+                        minValue {  #[NEWER_GMS]
+                            value  #[NEWER_GMS]
+                            type  #[NEWER_GMS]
+                        }  #[NEWER_GMS]
+                        maxValue {  #[NEWER_GMS]
+                            value  #[NEWER_GMS]
+                            type  #[NEWER_GMS]
+                        }  #[NEWER_GMS]
+                    }  #[NEWER_GMS]
+                }  #[NEWER_GMS]
+            }  #[NEWER_GMS]
+            volumeAssertion {  #[NEWER_GMS]
+                type  #[NEWER_GMS]
+                entityUrn  #[NEWER_GMS]
+                rowCountTotal {  #[NEWER_GMS]
+                    operator  #[NEWER_GMS]
+                    parameters {  #[NEWER_GMS]
+                        value {  #[NEWER_GMS]
+                            value  #[NEWER_GMS]
+                            type  #[NEWER_GMS]
+                        }  #[NEWER_GMS]
+                        minValue {  #[NEWER_GMS]
+                            value  #[NEWER_GMS]
+                            type  #[NEWER_GMS]
+                        }  #[NEWER_GMS]
+                        maxValue {  #[NEWER_GMS]
+                            value  #[NEWER_GMS]
+                            type  #[NEWER_GMS]
+                        }  #[NEWER_GMS]
+                    }  #[NEWER_GMS]
+                }  #[NEWER_GMS]
+                rowCountChange {  #[NEWER_GMS]
+                    type  #[NEWER_GMS]
+                    operator  #[NEWER_GMS]
+                    parameters {  #[NEWER_GMS]
+                        value {  #[NEWER_GMS]
+                            value  #[NEWER_GMS]
+                            type  #[NEWER_GMS]
+                        }  #[NEWER_GMS]
+                        minValue {  #[NEWER_GMS]
+                            value  #[NEWER_GMS]
+                            type  #[NEWER_GMS]
+                        }  #[NEWER_GMS]
+                        maxValue {  #[NEWER_GMS]
+                            value  #[NEWER_GMS]
+                            type  #[NEWER_GMS]
+                        }  #[NEWER_GMS]
+                    }  #[NEWER_GMS]
+                }  #[NEWER_GMS]
+            }  #[NEWER_GMS]
+            sqlAssertion {  #[NEWER_GMS]
+                type  #[NEWER_GMS]
+                entityUrn  #[NEWER_GMS]
+                statement  #[NEWER_GMS]
+                operator  #[NEWER_GMS]
+                parameters {  #[NEWER_GMS]
+                    value {  #[NEWER_GMS]
+                        value  #[NEWER_GMS]
+                        type  #[NEWER_GMS]
+                    }  #[NEWER_GMS]
+                    minValue {  #[NEWER_GMS]
+                        value  #[NEWER_GMS]
+                        type  #[NEWER_GMS]
+                    }  #[NEWER_GMS]
+                    maxValue {  #[NEWER_GMS]
+                        value  #[NEWER_GMS]
+                        type  #[NEWER_GMS]
+                    }  #[NEWER_GMS]
+                }  #[NEWER_GMS]
+            }  #[NEWER_GMS]
+            source {  #[NEWER_GMS]
+                type  #[NEWER_GMS]
+                created {  #[NEWER_GMS]
+                    time  #[NEWER_GMS]
+                    actor  #[NEWER_GMS]
+                }  #[NEWER_GMS]
+            }  #[NEWER_GMS]
         }
         platform {
             urn
@@ -1242,7 +1242,7 @@ fragment entityPreview on Entity {
         title
         description
         priority
-        startedAt
+        startedAt  #[NEWER_GMS]
         created {
             time
             actor
@@ -1256,34 +1256,34 @@ fragment entityPreview on Entity {
                 actor                                           #[CLOUD] #[NEWER_GMS]
             }                                                   #[CLOUD] #[NEWER_GMS]
         }                                                       #[CLOUD] #[NEWER_GMS]
-        assignees {
-            ... on CorpUser {
-                urn
-                username
-                properties {
-                    active
-                    displayName
-                    email
-                    title
-                }
-                editableProperties {
-                    displayName
-                    title
-                }
-            }
-            ... on CorpGroup {
-                urn
-                name
-                properties {
-                    displayName
-                    email
-                }
-                info {
-                    displayName
-                    email
-                }
-            }
-        }
+        assignees {  #[NEWER_GMS]
+            ... on CorpUser {  #[NEWER_GMS]
+                urn  #[NEWER_GMS]
+                username  #[NEWER_GMS]
+                properties {  #[NEWER_GMS]
+                    active  #[NEWER_GMS]
+                    displayName  #[NEWER_GMS]
+                    email  #[NEWER_GMS]
+                    title  #[NEWER_GMS]
+                }  #[NEWER_GMS]
+                editableProperties {  #[NEWER_GMS]
+                    displayName  #[NEWER_GMS]
+                    title  #[NEWER_GMS]
+                }  #[NEWER_GMS]
+            }  #[NEWER_GMS]
+            ... on CorpGroup {  #[NEWER_GMS]
+                urn  #[NEWER_GMS]
+                name  #[NEWER_GMS]
+                properties {  #[NEWER_GMS]
+                    displayName  #[NEWER_GMS]
+                    email  #[NEWER_GMS]
+                }  #[NEWER_GMS]
+                info {  #[NEWER_GMS]
+                    displayName  #[NEWER_GMS]
+                    email  #[NEWER_GMS]
+                }  #[NEWER_GMS]
+            }  #[NEWER_GMS]
+        }  #[NEWER_GMS]
         entity {
             urn
             type
@@ -1331,18 +1331,18 @@ fragment entityPreview on Entity {
                 }
             }
         }
-        tags {
-            tags {
-                tag {
-                    urn
-                    name
-                    properties {
-                        name
-                        description
-                    }
-                }
-            }
-        }
+        tags {  #[NEWER_GMS]
+            tags {  #[NEWER_GMS]
+                tag {  #[NEWER_GMS]
+                    urn  #[NEWER_GMS]
+                    name  #[NEWER_GMS]
+                    properties {  #[NEWER_GMS]
+                        name  #[NEWER_GMS]
+                        description  #[NEWER_GMS]
+                    }  #[NEWER_GMS]
+                }  #[NEWER_GMS]
+            }  #[NEWER_GMS]
+        }  #[NEWER_GMS]
     }
     ... on Document {                                           #[NEWER_GMS]
         urn                                                     #[NEWER_GMS]
@@ -1406,10 +1406,10 @@ fragment entityPreview on Entity {
     }                                                           #[NEWER_GMS]
 }
 
-fragment documentationFields on Documentation {
-    documentations {
-        documentation
-        attribution {
+fragment documentationFields on Documentation {  #[NEWER_GMS]
+    documentations {                             #[NEWER_GMS]
+        documentation                            #[NEWER_GMS]
+        attribution {                            #[NEWER_GMS]
             # time
             # actor {
             #   urn
@@ -1420,40 +1420,40 @@ fragment documentationFields on Documentation {
             #   urn
             #   type
             # }
-            sourceDetail {
-                key
-                value
-            }
-        }
-    }
-}
+            sourceDetail {                       #[NEWER_GMS]
+                key                              #[NEWER_GMS]
+                value                            #[NEWER_GMS]
+            }                                    #[NEWER_GMS]
+        }                                        #[NEWER_GMS]
+    }                                            #[NEWER_GMS]
+}                                                #[NEWER_GMS]
 
-fragment businessAttribute on BusinessAttributeAssociation {
-    businessAttribute {
-        urn
-        type
-        ownership {
-            ...ownershipFields
-        }
-        properties {
-            name
-            description
-            businessAttributeDataType: type
-            lastModified {
-                time
-            }
-            created {
-                time
-            }
-            tags {
-                ...globalTagsFields
-            }
-            glossaryTerms {
-                ...glossaryTerms
-            }
-        }
-    }
-}
+fragment businessAttribute on BusinessAttributeAssociation {  #[NEWER_GMS]
+    businessAttribute {                                        #[NEWER_GMS]
+        urn                                                    #[NEWER_GMS]
+        type                                                   #[NEWER_GMS]
+        ownership {                                            #[NEWER_GMS]
+            ...ownershipFields                                 #[NEWER_GMS]
+        }                                                      #[NEWER_GMS]
+        properties {                                           #[NEWER_GMS]
+            name                                               #[NEWER_GMS]
+            description                                        #[NEWER_GMS]
+            businessAttributeDataType: type                    #[NEWER_GMS]
+            lastModified {                                     #[NEWER_GMS]
+                time                                           #[NEWER_GMS]
+            }                                                  #[NEWER_GMS]
+            created {                                          #[NEWER_GMS]
+                time                                           #[NEWER_GMS]
+            }                                                  #[NEWER_GMS]
+            tags {                                             #[NEWER_GMS]
+                ...globalTagsFields                            #[NEWER_GMS]
+            }                                                  #[NEWER_GMS]
+            glossaryTerms {                                    #[NEWER_GMS]
+                ...glossaryTerms                               #[NEWER_GMS]
+            }                                                  #[NEWER_GMS]
+        }                                                      #[NEWER_GMS]
+    }                                                          #[NEWER_GMS]
+}                                                              #[NEWER_GMS]
 
 fragment structuredPropertyFields on StructuredPropertyEntity {
     urn
@@ -1472,7 +1472,7 @@ fragment structuredPropertyDetailsFields on StructuredPropertyEntity {
         qualifiedName
         description
         cardinality
-        immutable
+        immutable  #[NEWER_GMS]
         valueType {
             urn
             info {
@@ -1504,34 +1504,34 @@ fragment structuredPropertyDetailsFields on StructuredPropertyEntity {
             }
             description
         }
-        created {
-            time
-            actor {
-                urn
-                editableProperties {
-                    displayName
-                }
-                ...entityDisplayNameFields
-            }
-        }
-        lastModified {
-            time
-            actor {
-                urn
-                editableProperties {
-                    displayName
-                }
-                ...entityDisplayNameFields
-            }
-        }
+        created {  #[NEWER_GMS]
+            time  #[NEWER_GMS]
+            actor {  #[NEWER_GMS]
+                urn  #[NEWER_GMS]
+                editableProperties {  #[NEWER_GMS]
+                    displayName  #[NEWER_GMS]
+                }  #[NEWER_GMS]
+                ...entityDisplayNameFields  #[NEWER_GMS]
+            }  #[NEWER_GMS]
+        }  #[NEWER_GMS]
+        lastModified {  #[NEWER_GMS]
+            time  #[NEWER_GMS]
+            actor {  #[NEWER_GMS]
+                urn  #[NEWER_GMS]
+                editableProperties {  #[NEWER_GMS]
+                    displayName  #[NEWER_GMS]
+                }  #[NEWER_GMS]
+                ...entityDisplayNameFields  #[NEWER_GMS]
+            }  #[NEWER_GMS]
+        }  #[NEWER_GMS]
     }
-    settings {
-        isHidden
-        showInSearchFilters
-        showAsAssetBadge
-        showInAssetSummary
-        showInColumnsTable
-    }
+    settings {  #[NEWER_GMS]
+        isHidden  #[NEWER_GMS]
+        showInSearchFilters  #[NEWER_GMS]
+        showAsAssetBadge  #[NEWER_GMS]
+        showInAssetSummary  #[NEWER_GMS]
+        showInColumnsTable  #[NEWER_GMS]
+    }  #[NEWER_GMS]
 }
 
 fragment structuredPropertiesFields on StructuredPropertiesEntry {
@@ -1558,22 +1558,22 @@ fragment entitySchemaFieldEntityFields on SchemaFieldEntity {
     # urn
     # fieldPath
     # type
-    deprecation {
-        ...deprecationFields
-    }
+    deprecation {  #[NEWER_GMS]
+        ...deprecationFields  #[NEWER_GMS]
+    }  #[NEWER_GMS]
     structuredProperties {
         properties {
             ...structuredPropertiesFields
         }
     }
-    businessAttributes {
-        businessAttribute {
-            ...businessAttribute
-        }
-    }
-    documentation {
-        ...documentationFields
-    }
+    businessAttributes {  #[NEWER_GMS]
+        businessAttribute {  #[NEWER_GMS]
+            ...businessAttribute  #[NEWER_GMS]
+        }  #[NEWER_GMS]
+    }  #[NEWER_GMS]
+    documentation {  #[NEWER_GMS]
+        ...documentationFields  #[NEWER_GMS]
+    }  #[NEWER_GMS]
 }
 
 fragment entitySchemaFieldFields on SchemaField {
