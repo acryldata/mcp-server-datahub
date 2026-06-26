@@ -14,6 +14,7 @@ from typing_extensions import Literal
 
 from mcp_server_datahub._telemetry import TelemetryMiddleware
 from mcp_server_datahub._version import __version__
+from mcp_server_datahub.auth import DATAHUB_MCP_AUTH_TOKENS_ENV_VAR, build_auth_provider
 from mcp_server_datahub.document_tools_middleware import DocumentToolsMiddleware
 from mcp_server_datahub.mcp_server import mcp, register_all_tools, with_datahub_client
 from mcp_server_datahub.version_requirements import VersionFilterMiddleware
@@ -77,6 +78,13 @@ def create_app() -> FastMCP:
         datahub_component=f"mcp-server-datahub/{__version__}",
     )
 
+    # Configure authentication if tokens are provided.  Auth is applied at
+    # the HTTP layer (FastMCP installs AuthenticationMiddleware when mcp.auth
+    # is set), so it has no effect on stdio transport.
+    auth = build_auth_provider()
+    if auth is not None:
+        mcp.auth = auth
+
     # _DataHubClientMiddleware must be first so the client ContextVar is
     # available to all subsequent middlewares and tool handlers.  This is
     # especially important for HTTP transport where each request runs in a
@@ -113,6 +121,14 @@ def main(transport: Literal["stdio", "sse", "http"], debug: bool) -> None:
         mcp.add_middleware(LoggingMiddleware(include_payloads=True))
 
     create_app()
+
+    if transport in ("http", "sse") and mcp.auth is None:
+        logging.warning(
+            "DataHub MCP server is running with HTTP transport but no authentication "
+            "is configured. Set the %s environment variable to a comma-separated list "
+            "of bearer tokens to secure the server.",
+            DATAHUB_MCP_AUTH_TOKENS_ENV_VAR,
+        )
 
     if transport == "http":
         mcp.run(transport=transport, show_banner=False, stateless_http=True)

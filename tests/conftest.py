@@ -105,6 +105,12 @@ if using_oss:
     mcp_module._token_estimator = _token_estimator  # type: ignore[attr-defined]
     sys.modules["datahub_integrations.mcp._token_estimator"] = _token_estimator
 
+    # Import and expose auth
+    from mcp_server_datahub import auth
+
+    mcp_module.auth = auth  # type: ignore[attr-defined]
+    sys.modules["datahub_integrations.mcp.auth"] = auth
+
     # Create datahub_integrations.mcp.tools submodule
     tools_module = types.ModuleType("datahub_integrations.mcp.tools")
     sys.modules["datahub_integrations.mcp.tools"] = tools_module
