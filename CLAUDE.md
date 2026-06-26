@@ -63,10 +63,21 @@ uv run fastmcp dev src/mcp_server_datahub/__main__.py --with-editable .
 
 ## Authentication
 
+### DataHub backend
+
 Server requires DataHub authentication via:
 
 - Environment variables: `DATAHUB_GMS_URL`, `DATAHUB_GMS_TOKEN`
 - Or `~/.datahubenv` configuration file
+
+### MCP server (client-facing)
+
+When running over HTTP/SSE transport, protect the server with bearer-token auth:
+
+- Set `DATAHUB_MCP_AUTH_TOKENS` to a comma-separated list of valid tokens
+- Tokens are verified by `StaticTokenAuthProvider` in `src/mcp_server_datahub/auth.py`
+- Auth is skipped for `stdio` transport (subprocess, no network exposure)
+- If unset, server starts open and logs a warning for HTTP transports
 
 ## Version Management
 

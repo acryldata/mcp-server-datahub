@@ -152,6 +152,7 @@ Save standalone documents (insights, decisions, FAQs, notes) to DataHub's knowle
 
 | Variable | Default | Description |
 |----------|---------|-------------|
+| `DATAHUB_MCP_AUTH_TOKENS` | _(unset)_ | Comma-separated bearer tokens for server authentication (HTTP/SSE transports only — see [Server Authentication](#server-authentication)) |
 | `TOOLS_IS_MUTATION_ENABLED` | `false` | Enable mutation tools (add/remove tags, owners, etc.) |
 | `TOOLS_IS_USER_ENABLED` | `false` | Enable user tools (get_me) |
 | `DATAHUB_MCP_DOCUMENT_TOOLS_DISABLED` | `false` | Completely disable document tools |
@@ -164,6 +165,42 @@ Save standalone documents (insights, decisions, FAQs, notes) to DataHub's knowle
 | `DISABLE_NEWER_GMS_FIELD_DETECTION` | `false` | Disable adaptive GMS field detection |
 | `DATAHUB_MCP_DISABLE_DEFAULT_VIEW` | `false` | Disable automatic default view application |
 | `SEMANTIC_SEARCH_ENABLED` | `false` | Enable semantic (AI-powered) search |
+
+### Server Authentication
+
+When running the MCP server over **HTTP or SSE transport** (i.e. as a shared, network-accessible service) you should protect it with bearer-token authentication.
+
+Set `DATAHUB_MCP_AUTH_TOKENS` to a comma-separated list of opaque tokens before starting the server:
+
+```bash
+export DATAHUB_MCP_AUTH_TOKENS="your-secret-token-1,your-secret-token-2"
+```
+
+Each token acts as a shared secret (similar to an API key).  Supporting multiple tokens lets you rotate credentials without downtime — distribute the new token to your team, then remove the old one.
+
+MCP clients must include the token as a standard HTTP `Authorization` header:
+
+```
+Authorization: Bearer your-secret-token-1
+```
+
+Most MCP clients (Claude Desktop, opencode, etc.) support bearer-token auth in their server configuration.  For example, in `opencode.jsonc`:
+
+```jsonc
+"datahub": {
+  "type": "remote",
+  "url": "https://your-datahub-mcp-server/mcp",
+  "headers": {
+    "Authorization": "Bearer your-secret-token-1"
+  }
+}
+```
+
+> **Notes:**
+> - Authentication only applies to HTTP and SSE transports.  The `stdio` transport runs as a local subprocess and has no network exposure.
+> - If `DATAHUB_MCP_AUTH_TOKENS` is not set the server starts without authentication and logs a warning when using an HTTP transport.
+> - Tokens should be injected at runtime via a secret manager (Kubernetes Secrets, Vault, etc.) rather than committed to configuration files.
+> - To generate a cryptographically random token: `python -c "import secrets; print(secrets.token_urlsafe(32))"`
 
 ## Example: Data Discovery & Understanding Flow (for Agents Using DataHub Tools)
 
