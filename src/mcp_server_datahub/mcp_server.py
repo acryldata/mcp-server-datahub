@@ -65,6 +65,13 @@ from .graphql_helpers import (  # noqa: F401 (re-exported for backward compat)
 )
 from .search_filter_parser import FILTER_DOCS
 from .tools.assertions import get_dataset_assertions
+from .tools.data_products import (
+    add_assets_to_data_product,
+    create_data_product,
+    delete_data_product,
+    remove_assets_from_data_product,
+    update_data_product,
+)
 from .tools.dataset_queries import get_dataset_queries
 from .tools.descriptions import update_description
 from .tools.documents import grep_documents, search_documents
@@ -256,6 +263,36 @@ def register_mutation_tools(mcp_instance: FastMCP, is_oss: bool = False) -> None
     )
     _register_tool(
         mcp_instance, "remove_domains", remove_domains, tags={ToolType.MUTATION.value}
+    )
+    _register_tool(
+        mcp_instance,
+        "create_data_product",
+        create_data_product,
+        tags={ToolType.MUTATION.value},
+    )
+    _register_tool(
+        mcp_instance,
+        "update_data_product",
+        update_data_product,
+        tags={ToolType.MUTATION.value},
+    )
+    _register_tool(
+        mcp_instance,
+        "delete_data_product",
+        delete_data_product,
+        tags={ToolType.MUTATION.value},
+    )
+    _register_tool(
+        mcp_instance,
+        "add_assets_to_data_product",
+        add_assets_to_data_product,
+        tags={ToolType.MUTATION.value},
+    )
+    _register_tool(
+        mcp_instance,
+        "remove_assets_from_data_product",
+        remove_assets_from_data_product,
+        tags={ToolType.MUTATION.value},
     )
     _register_tool(mcp_instance, "update_description", update_description)
     _register_tool(mcp_instance, "add_structured_properties", add_structured_properties)

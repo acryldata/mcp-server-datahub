@@ -1,5 +1,12 @@
 """MCP tools for DataHub integrations."""
 
+from .data_products import (
+    add_assets_to_data_product,
+    create_data_product,
+    delete_data_product,
+    remove_assets_from_data_product,
+    update_data_product,
+)
 from .dataset_queries import get_dataset_queries
 from .descriptions import update_description
 from .documents import grep_documents, search_documents
@@ -20,10 +27,13 @@ from .terms import (
 )
 
 __all__ = [
+    "add_assets_to_data_product",
     "add_glossary_terms",
     "add_owners",
     "add_structured_properties",
     "add_tags",
+    "create_data_product",
+    "delete_data_product",
     "enhanced_search",
     "get_dataset_queries",
     "get_entities",
@@ -32,6 +42,7 @@ __all__ = [
     "get_me",
     "grep_documents",
     "list_schema_fields",
+    "remove_assets_from_data_product",
     "remove_domains",
     "remove_glossary_terms",
     "remove_owners",
@@ -40,5 +51,6 @@ __all__ = [
     "search",
     "search_documents",
     "set_domains",
+    "update_data_product",
     "update_description",
 ]

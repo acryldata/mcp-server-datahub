@@ -114,6 +114,7 @@ if using_oss:
     # The __init__.py re-exports functions which shadows the module names
 
     # Get actual module objects from sys.modules (not the shadowed function refs)
+    data_products_module = sys.modules["mcp_server_datahub.tools.data_products"]
     descriptions_module = sys.modules["mcp_server_datahub.tools.descriptions"]
     documents_module = sys.modules["mcp_server_datahub.tools.documents"]
     domains_module = sys.modules["mcp_server_datahub.tools.domains"]
@@ -133,6 +134,7 @@ if using_oss:
     search_module = sys.modules["mcp_server_datahub.tools.search"]
 
     tools_module.assertions = assertions_module  # type: ignore[attr-defined]
+    tools_module.data_products = data_products_module  # type: ignore[attr-defined]
     tools_module.dataset_queries = dataset_queries_module  # type: ignore[attr-defined]
     tools_module.descriptions = descriptions_module  # type: ignore[attr-defined]
     tools_module.documents = documents_module  # type: ignore[attr-defined]
@@ -148,6 +150,7 @@ if using_oss:
     tools_module.terms = terms_module  # type: ignore[attr-defined]
 
     sys.modules["datahub_integrations.mcp.tools.assertions"] = assertions_module
+    sys.modules["datahub_integrations.mcp.tools.data_products"] = data_products_module
     sys.modules["datahub_integrations.mcp.tools.dataset_queries"] = (
         dataset_queries_module
     )
