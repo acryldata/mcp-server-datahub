@@ -110,6 +110,16 @@ def test_create_data_product_empty_name(mock_datahub_client):
             create_data_product(name="", domain_urn="urn:li:domain:marketing")
 
 
+def test_create_data_product_whitespace_only_name(mock_datahub_client):
+    """Test that a whitespace-only name raises ValueError."""
+    with patch(
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
+        return_value=mock_datahub_client,
+    ):
+        with pytest.raises(ValueError, match="name cannot be empty"):
+            create_data_product(name="   ", domain_urn="urn:li:domain:marketing")
+
+
 def test_create_data_product_empty_domain_urn(mock_datahub_client):
     """Test that empty domain_urn raises ValueError."""
     with patch(
@@ -242,6 +252,18 @@ def test_update_data_product_empty_urn(mock_datahub_client):
     ):
         with pytest.raises(ValueError, match="data_product_urn cannot be empty"):
             update_data_product(data_product_urn="", name="New Name")
+
+
+def test_update_data_product_whitespace_only_name(mock_datahub_client):
+    """Test that a whitespace-only name raises ValueError."""
+    with patch(
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
+        return_value=mock_datahub_client,
+    ):
+        with pytest.raises(ValueError, match="name cannot be empty"):
+            update_data_product(
+                data_product_urn="urn:li:dataProduct:customer-360", name="   "
+            )
 
 
 def test_update_data_product_nonexistent(mock_datahub_client):
@@ -513,6 +535,41 @@ def test_add_assets_feature_flag_check_fails_closed(mock_datahub_client):
     assert mutation_call.kwargs["operation_name"] == "batchSetDataProduct"
 
 
+def test_add_assets_feature_flag_cache_hit_skips_flag_query(mock_datahub_client):
+    """Once the multipleDataProductsPerAsset flag is cached for a graph, a
+    second call against the same client skips the flag GraphQL query entirely."""
+    dp_urn = "urn:li:dataProduct:customer-360"
+    dataset_urn = (
+        "urn:li:dataset:(urn:li:dataPlatform:snowflake,db.schema.customers,PROD)"
+    )
+
+    mock_datahub_client._graph.execute_graphql.side_effect = [
+        {"entity": {"urn": dp_urn, "type": "DATA_PRODUCT"}},
+        {"appConfig": {"featureFlags": {"multipleDataProductsPerAsset": True}}},
+        {"batchAddToDataProducts": True},
+        # Second call: only validate + mutation, no flag query.
+        {"entity": {"urn": dp_urn, "type": "DATA_PRODUCT"}},
+        {"batchAddToDataProducts": True},
+    ]
+
+    with patch(
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
+        return_value=mock_datahub_client,
+    ):
+        first = add_assets_to_data_product(
+            data_product_urn=dp_urn, entity_urns=[dataset_urn]
+        )
+        second = add_assets_to_data_product(
+            data_product_urn=dp_urn, entity_urns=[dataset_urn]
+        )
+
+    assert first["success"] is True
+    assert second["success"] is True
+    assert mock_datahub_client._graph.execute_graphql.call_count == 5
+    second_mutation_call = mock_datahub_client._graph.execute_graphql.call_args_list[4]
+    assert second_mutation_call.kwargs["operation_name"] == "batchAddToDataProducts"
+
+
 def test_add_assets_empty_entity_urns(mock_datahub_client):
     """Test that empty entity_urns raises ValueError."""
     with patch(
@@ -670,8 +727,22 @@ def test_remove_assets_multiple_dp_per_asset_enabled(mock_datahub_client):
     assert mutation_call.kwargs["variables"]["input"]["dataProductUrns"] == [dp_urn]
 
 
+def _membership_response(*data_product_urns_by_entity):
+    """Build a getCurrentDataProducts-shaped GraphQL response.
+
+    Each positional arg is the current Data Product urn (or None) for the
+    entity at that index, matching entity_urns order.
+    """
+    response = {}
+    for i, current_dp_urn in enumerate(data_product_urns_by_entity):
+        relationships = [{"entity": {"urn": current_dp_urn}}] if current_dp_urn else []
+        response[f"e{i}"] = {"relationships": {"relationships": relationships}}
+    return response
+
+
 def test_remove_assets_multiple_dp_per_asset_disabled(mock_datahub_client):
-    """When the feature flag is off, assets are unset via batchSetDataProduct(null)."""
+    """When the feature flag is off, assets currently assigned to this Data
+    Product are unset via batchSetDataProduct(null)."""
     dp_urn = "urn:li:dataProduct:customer-360"
     dataset_urn = (
         "urn:li:dataset:(urn:li:dataPlatform:snowflake,db.schema.customers,PROD)"
@@ -680,6 +751,7 @@ def test_remove_assets_multiple_dp_per_asset_disabled(mock_datahub_client):
     mock_datahub_client._graph.execute_graphql.side_effect = [
         {"entity": {"urn": dp_urn, "type": "DATA_PRODUCT"}},
         {"appConfig": {"featureFlags": {"multipleDataProductsPerAsset": False}}},
+        _membership_response(dp_urn),  # dataset_urn is currently in this DP
         {"batchSetDataProduct": True},
     ]
 
@@ -692,9 +764,79 @@ def test_remove_assets_multiple_dp_per_asset_disabled(mock_datahub_client):
         )
 
     assert result["success"] is True
-    mutation_call = mock_datahub_client._graph.execute_graphql.call_args_list[2]
+    membership_call = mock_datahub_client._graph.execute_graphql.call_args_list[2]
+    assert membership_call.kwargs["operation_name"] == "getCurrentDataProducts"
+    assert "DataProductContains" in membership_call.kwargs["query"]
+
+    mutation_call = mock_datahub_client._graph.execute_graphql.call_args_list[3]
     assert mutation_call.kwargs["operation_name"] == "batchSetDataProduct"
     assert mutation_call.kwargs["variables"]["input"]["dataProductUrn"] is None
+    assert mutation_call.kwargs["variables"]["input"]["resourceUrns"] == [dataset_urn]
+
+
+def test_remove_assets_skips_assets_not_in_this_data_product(mock_datahub_client):
+    """When the feature flag is off, only assets currently assigned to THIS
+    Data Product are unset; assets belonging to a different Data Product are
+    left untouched and reported as skipped."""
+    dp_urn = "urn:li:dataProduct:customer-360"
+    other_dp_urn = "urn:li:dataProduct:other-product"
+    in_this_dp = (
+        "urn:li:dataset:(urn:li:dataPlatform:snowflake,db.schema.customers,PROD)"
+    )
+    in_other_dp = "urn:li:dataset:(urn:li:dataPlatform:snowflake,db.schema.orders,PROD)"
+
+    mock_datahub_client._graph.execute_graphql.side_effect = [
+        {"entity": {"urn": dp_urn, "type": "DATA_PRODUCT"}},
+        {"appConfig": {"featureFlags": {"multipleDataProductsPerAsset": False}}},
+        _membership_response(dp_urn, other_dp_urn),
+        {"batchSetDataProduct": True},
+    ]
+
+    with patch(
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
+        return_value=mock_datahub_client,
+    ):
+        result = remove_assets_from_data_product(
+            data_product_urn=dp_urn, entity_urns=[in_this_dp, in_other_dp]
+        )
+
+    assert result["success"] is True
+    assert in_other_dp in result["message"]
+
+    mutation_call = mock_datahub_client._graph.execute_graphql.call_args_list[3]
+    # Only the asset actually in this Data Product is sent to the mutation --
+    # the one in a different Data Product must never be touched.
+    assert mutation_call.kwargs["variables"]["input"]["resourceUrns"] == [in_this_dp]
+
+
+def test_remove_assets_no_matching_assets(mock_datahub_client):
+    """When none of the given assets are currently in this Data Product, the
+    tool no-ops without calling the unset mutation at all."""
+    dp_urn = "urn:li:dataProduct:customer-360"
+    other_dp_urn = "urn:li:dataProduct:other-product"
+    dataset_urn = (
+        "urn:li:dataset:(urn:li:dataPlatform:snowflake,db.schema.customers,PROD)"
+    )
+
+    mock_datahub_client._graph.execute_graphql.side_effect = [
+        {"entity": {"urn": dp_urn, "type": "DATA_PRODUCT"}},
+        {"appConfig": {"featureFlags": {"multipleDataProductsPerAsset": False}}},
+        _membership_response(other_dp_urn),
+    ]
+
+    with patch(
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
+        return_value=mock_datahub_client,
+    ):
+        result = remove_assets_from_data_product(
+            data_product_urn=dp_urn, entity_urns=[dataset_urn]
+        )
+
+    assert result["success"] is True
+    assert "No assets were removed" in result["message"]
+    # No mutation call should have been made -- only validate, flag-check, and
+    # the membership lookup.
+    assert mock_datahub_client._graph.execute_graphql.call_count == 3
 
 
 def test_remove_assets_mutation_returns_false(mock_datahub_client):
@@ -707,6 +849,7 @@ def test_remove_assets_mutation_returns_false(mock_datahub_client):
     mock_datahub_client._graph.execute_graphql.side_effect = [
         {"entity": {"urn": dp_urn, "type": "DATA_PRODUCT"}},
         {"appConfig": {"featureFlags": {"multipleDataProductsPerAsset": False}}},
+        _membership_response(dp_urn),
         {"batchSetDataProduct": False},
     ]
 
@@ -816,6 +959,7 @@ def test_remove_assets_graphql_exception(mock_datahub_client):
     mock_datahub_client._graph.execute_graphql.side_effect = [
         {"entity": {"urn": dp_urn, "type": "DATA_PRODUCT"}},
         {"appConfig": {"featureFlags": {"multipleDataProductsPerAsset": False}}},
+        _membership_response(dp_urn),
         Exception("Network error"),
     ]
 

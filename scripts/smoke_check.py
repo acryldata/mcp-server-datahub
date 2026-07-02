@@ -580,6 +580,7 @@ async def check_set_remove_domains(
 
 @check(
     "create_data_product",
+    "update_data_product",
     "add_assets_to_data_product",
     "remove_assets_from_data_product",
     "delete_data_product",
@@ -588,18 +589,49 @@ async def check_set_remove_domains(
 async def check_data_product_lifecycle(
     c: Client, report: SmokeCheckReport, urns: DiscoveredURNs
 ) -> None:
-    create_result = await call_tool(
-        c,
-        "create_data_product",
-        {
-            "name": "[Smoke Check] Test Data Product",
-            "domain_urn": urns.domain_urn,
-            "description": "Created by the MCP smoke check. Safe to delete.",
-        },
-    )
-    create_data = json.loads(create_result.content[0].text)
-    dp_urn = create_data.get("urn", "")
+    downstream_tools = [
+        "update_data_product",
+        "add_assets_to_data_product",
+        "remove_assets_from_data_product",
+        "delete_data_product",
+    ]
+
+    try:
+        create_result = await call_tool(
+            c,
+            "create_data_product",
+            {
+                "name": "[Smoke Check] Test Data Product",
+                "domain_urn": urns.domain_urn,
+                "description": "Created by the MCP smoke check. Safe to delete.",
+            },
+        )
+        create_data = json.loads(create_result.content[0].text)
+        dp_urn = create_data.get("urn", "")
+        if not dp_urn:
+            raise RuntimeError(
+                f"create_data_product succeeded but returned no urn: {create_data}"
+            )
+    except Exception as e:
+        report.record("create_data_product", False, error=str(e))
+        for tool in downstream_tools:
+            report.record(tool, False, error="Skipped: create_data_product failed")
+        return
+
     report.record("create_data_product", True, f"Created: {dp_urn}")
+
+    try:
+        await call_tool(
+            c,
+            "update_data_product",
+            {
+                "data_product_urn": dp_urn,
+                "description": "Updated by the MCP smoke check.",
+            },
+        )
+        report.record("update_data_product", True, f"Updated {dp_urn}")
+    except Exception as e:
+        report.record("update_data_product", False, error=str(e))
 
     try:
         await call_tool(
