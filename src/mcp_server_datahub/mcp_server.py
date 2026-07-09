@@ -71,6 +71,7 @@ from .tools.documents import grep_documents, search_documents
 from .tools.domains import remove_domains, set_domains
 from .tools.entities import get_entities, list_schema_fields
 from .tools.get_me import get_me
+from .tools.incidents import get_incidents, raise_incident, update_incident_status
 from .tools.lineage import (  # noqa: F401 (re-exported for backward compat)
     AssetLineageAPI,
     AssetLineageDirective,
@@ -123,6 +124,11 @@ DATA_QUALITY_TOOLS = [
     (
         "get_dataset_assertions",
         get_dataset_assertions,
+        {ToolType.SEARCH.value},
+    ),
+    (
+        "get_incidents",
+        get_incidents,
         {ToolType.SEARCH.value},
     ),
 ]
@@ -261,6 +267,15 @@ def register_mutation_tools(mcp_instance: FastMCP, is_oss: bool = False) -> None
     _register_tool(mcp_instance, "add_structured_properties", add_structured_properties)
     _register_tool(
         mcp_instance, "remove_structured_properties", remove_structured_properties
+    )
+    _register_tool(
+        mcp_instance, "raise_incident", raise_incident, tags={ToolType.MUTATION.value}
+    )
+    _register_tool(
+        mcp_instance,
+        "update_incident_status",
+        update_incident_status,
+        tags={ToolType.MUTATION.value},
     )
 
     # Register save_document tool (only if enabled via environment variable)
