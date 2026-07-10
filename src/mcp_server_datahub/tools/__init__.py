@@ -6,6 +6,7 @@ from .documents import grep_documents, search_documents
 from .domains import remove_domains, set_domains
 from .entities import get_entities, list_schema_fields
 from .get_me import get_me
+from .incidents import get_incidents, raise_incident, update_incident_status
 from .lineage import get_lineage, get_lineage_paths_between
 from .owners import add_owners, remove_owners
 from .search import enhanced_search, search
@@ -27,11 +28,13 @@ __all__ = [
     "enhanced_search",
     "get_dataset_queries",
     "get_entities",
+    "get_incidents",
     "get_lineage",
     "get_lineage_paths_between",
     "get_me",
     "grep_documents",
     "list_schema_fields",
+    "raise_incident",
     "remove_domains",
     "remove_glossary_terms",
     "remove_owners",
@@ -41,4 +44,5 @@ __all__ = [
     "search_documents",
     "set_domains",
     "update_description",
+    "update_incident_status",
 ]

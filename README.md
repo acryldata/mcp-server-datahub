@@ -94,6 +94,18 @@ List schema fields for a dataset with keyword filtering and pagination, useful w
 
 Retrieve the exact lineage paths between two assets or columns, including intermediate transformations and SQL query information.
 
+### Data Quality Tools
+
+These tools surface data reliability signals. They are enabled via the `DATA_QUALITY_TOOLS_ENABLED=true` environment variable.
+
+`get_dataset_assertions`
+
+Fetch data quality assertions and their recent run results for a dataset, with filtering by column, assertion type, and status. (DataHub Cloud only.)
+
+`get_incidents`
+
+Get incidents raised on an entity (dataset, dashboard, chart, dataFlow, dataJob), with filtering by state (ACTIVE/RESOLVED) and pagination.
+
 ### Mutation Tools
 
 These tools allow modifying metadata in DataHub. They are enabled via the `TOOLS_IS_MUTATION_ENABLED=true` environment variable.
@@ -121,6 +133,10 @@ Update, append to, or remove descriptions for entities or schema fields. Support
 `add_structured_properties` / `remove_structured_properties`
 
 Manage structured properties (typed metadata fields) on entities. Supports string, number, URN, date, and rich text value types.
+
+`raise_incident` / `update_incident_status`
+
+Raise incidents (freshness, volume, field-level quality, schema, operational, or custom) on affected entities, and update or resolve them — so agents that detect data problems can record them where owners and consumers will see them.
 
 ### User Tools
 
@@ -152,8 +168,9 @@ Save standalone documents (insights, decisions, FAQs, notes) to DataHub's knowle
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `TOOLS_IS_MUTATION_ENABLED` | `false` | Enable mutation tools (add/remove tags, owners, etc.) |
+| `TOOLS_IS_MUTATION_ENABLED` | `false` | Enable mutation tools (add/remove tags, owners, incidents, etc.) |
 | `TOOLS_IS_USER_ENABLED` | `false` | Enable user tools (get_me) |
+| `DATA_QUALITY_TOOLS_ENABLED` | `false` | Enable data quality tools (get_dataset_assertions, get_incidents) |
 | `DATAHUB_MCP_DOCUMENT_TOOLS_DISABLED` | `false` | Completely disable document tools |
 | `SAVE_DOCUMENT_TOOL_ENABLED` | `true` | Enable/disable the save_document tool |
 | `SAVE_DOCUMENT_PARENT_TITLE` | `Shared` | Title for the parent folder of saved documents |
