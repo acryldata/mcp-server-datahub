@@ -1,4 +1,5 @@
 import logging
+import sys
 from typing import Any
 
 import click
@@ -8,6 +9,7 @@ from datahub.telemetry import telemetry
 from fastmcp import FastMCP
 from fastmcp.server.middleware import Middleware
 from fastmcp.server.middleware.logging import LoggingMiddleware
+from loguru import logger
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from typing_extensions import Literal
@@ -18,7 +20,20 @@ from mcp_server_datahub.document_tools_middleware import DocumentToolsMiddleware
 from mcp_server_datahub.mcp_server import mcp, register_all_tools, with_datahub_client
 from mcp_server_datahub.version_requirements import VersionFilterMiddleware
 
-logging.basicConfig(level=logging.INFO)
+
+def _configure_logging(*, debug: bool) -> None:
+    """Keep stdlib and Loguru verbosity aligned with the CLI debug flag."""
+    level = logging.DEBUG if debug else logging.INFO
+    logging.basicConfig(level=level)
+    logging.getLogger().setLevel(level)
+
+    # Loguru ships with a DEBUG-level stderr handler. Replace it so normal MCP
+    # sessions do not emit full GraphQL queries; --debug restores that detail.
+    logger.remove()
+    logger.add(sys.stderr, level="DEBUG" if debug else "INFO")
+
+
+_configure_logging(debug=False)
 
 # Register tools with OSS-compatible descriptions
 register_all_tools(is_oss=True)
@@ -107,6 +122,7 @@ def create_app() -> FastMCP:
 )
 def main(transport: Literal["stdio", "sse", "http"], debug: bool) -> None:
     if debug:
+        _configure_logging(debug=True)
         # Add LoggingMiddleware before create_app() so it becomes the
         # outermost middleware (FastMCP reverses the list) and logs the
         # full request/response including all other middleware effects.
