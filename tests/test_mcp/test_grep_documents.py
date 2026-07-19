@@ -556,3 +556,130 @@ class TestGrepDocuments:
         assert "B" in excerpt
         # Should report full content length for pagination
         assert result["results"][0]["content_length"] == 300
+
+    @patch("datahub_integrations.mcp.graphql_helpers.get_datahub_client")
+    @patch("datahub_integrations.mcp.graphql_helpers.execute_graphql")
+    async def test_omitted_accounts_for_every_absent_urn(
+        self,
+        mock_execute_graphql,
+        mock_get_client,
+        mock_client,
+    ):
+        """Every requested URN absent from results is attributed to a cause,
+        so fail-closed callers can distinguish a missing document from a
+        document that simply did not match."""
+        mock_get_client.return_value = mock_client
+        mock_execute_graphql.return_value = {
+            "entities": [
+                {
+                    "urn": "urn:li:document:matching",
+                    "info": {
+                        "title": "Matching Doc",
+                        "contents": {"text": "text with pattern inside"},
+                    },
+                },
+                {
+                    "urn": "urn:li:document:nomatch",
+                    "info": {
+                        "title": "Non-matching Doc",
+                        "contents": {"text": "nothing relevant here"},
+                    },
+                },
+                {
+                    "urn": "urn:li:document:empty",
+                    "info": {
+                        "title": "Empty Doc",
+                        "contents": None,
+                    },
+                },
+                None,  # unresolved entry returned as null
+            ]
+        }
+
+        result = await async_background(grep_documents)(
+            urns=[
+                "urn:li:document:matching",
+                "urn:li:document:nomatch",
+                "urn:li:document:empty",
+                "urn:li:document:null-entry",
+                "urn:li:document:absent-from-response",
+            ],
+            pattern="pattern",
+        )
+
+        assert result["documents_with_matches"] == 1
+        assert result["results"][0]["urn"] == "urn:li:document:matching"
+        assert result["omitted"]["no_match"] == ["urn:li:document:nomatch"]
+        assert result["omitted"]["empty"] == ["urn:li:document:empty"]
+        assert result["omitted"]["not_found"] == [
+            "urn:li:document:null-entry",
+            "urn:li:document:absent-from-response",
+        ]
+        assert result["omitted"]["offset_beyond_length"] == []
+
+    @patch("datahub_integrations.mcp.graphql_helpers.get_datahub_client")
+    @patch("datahub_integrations.mcp.graphql_helpers.execute_graphql")
+    async def test_omitted_reports_offset_beyond_length(
+        self,
+        mock_execute_graphql,
+        mock_get_client,
+        mock_client,
+    ):
+        """A document skipped because start_offset is past its end is
+        attributed to offset_beyond_length, not silently dropped."""
+        mock_get_client.return_value = mock_client
+        mock_execute_graphql.return_value = {
+            "entities": [
+                {
+                    "urn": "urn:li:document:short",
+                    "info": {
+                        "title": "Short Doc",
+                        "contents": {"text": "tiny MATCH"},
+                    },
+                },
+                {
+                    "urn": "urn:li:document:long",
+                    "info": {
+                        "title": "Long Doc",
+                        "contents": {"text": "A" * 100 + "MATCH"},
+                    },
+                },
+            ]
+        }
+
+        result = await async_background(grep_documents)(
+            urns=["urn:li:document:short", "urn:li:document:long"],
+            pattern="MATCH",
+            start_offset=50,
+        )
+
+        assert result["documents_with_matches"] == 1
+        assert result["results"][0]["urn"] == "urn:li:document:long"
+        assert result["omitted"]["offset_beyond_length"] == ["urn:li:document:short"]
+        assert result["omitted"]["not_found"] == []
+
+    @patch("datahub_integrations.mcp.graphql_helpers.get_datahub_client")
+    @patch("datahub_integrations.mcp.graphql_helpers.execute_graphql")
+    async def test_omitted_is_empty_when_everything_matches(
+        self,
+        mock_execute_graphql,
+        mock_get_client,
+        mock_client,
+        mock_gql_response,
+    ):
+        """A full-match call reports empty accounting lists (stable shape)."""
+        mock_get_client.return_value = mock_client
+        mock_execute_graphql.return_value = mock_gql_response
+
+        result = await async_background(grep_documents)(
+            urns=["urn:li:document:doc1", "urn:li:document:doc2"],
+            pattern="(?i)error|kubectl",
+        )
+
+        assert result["documents_with_matches"] == 2
+        assert result["omitted"] == {
+            "not_found": [],
+            "empty": [],
+            "offset_beyond_length": [],
+            "no_match": [],
+        }
