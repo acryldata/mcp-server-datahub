@@ -683,3 +683,61 @@ class TestGrepDocuments:
             "offset_beyond_length": [],
             "no_match": [],
         }
+
+    @patch("datahub_integrations.mcp.graphql_helpers.get_datahub_client")
+    @patch("datahub_integrations.mcp.graphql_helpers.execute_graphql")
+    async def test_omitted_present_on_invalid_regex(
+        self,
+        mock_execute_graphql,
+        mock_get_client,
+        mock_client,
+    ):
+        """The error return carries the same omitted shape as every other
+        return, so shape-trusting callers never KeyError on a bad pattern."""
+        mock_get_client.return_value = mock_client
+
+        result = await async_background(grep_documents)(
+            urns=["urn:li:document:doc1"],
+            pattern="[invalid",
+        )
+
+        assert "error" in result
+        assert result["omitted"] == {
+            "not_found": [],
+            "empty": [],
+            "offset_beyond_length": [],
+            "no_match": [],
+        }
+
+    @patch("datahub_integrations.mcp.graphql_helpers.get_datahub_client")
+    @patch("datahub_integrations.mcp.graphql_helpers.execute_graphql")
+    async def test_urnless_entity_never_leaks_into_omitted(
+        self,
+        mock_execute_graphql,
+        mock_get_client,
+        mock_client,
+    ):
+        """An entity the server returns without a urn cannot be attributed,
+        so the requested urn lands in not_found and the empty string never
+        appears in any bucket (omitted stays bounded by the input list)."""
+        mock_get_client.return_value = mock_client
+        mock_execute_graphql.return_value = {
+            "entities": [
+                {
+                    "info": {
+                        "title": "Urnless Doc",
+                        "contents": None,
+                    },
+                },
+            ]
+        }
+
+        result = await async_background(grep_documents)(
+            urns=["urn:li:document:doc1"],
+            pattern="pattern",
+        )
+
+        assert result["results"] == []
+        assert result["omitted"]["not_found"] == ["urn:li:document:doc1"]
+        for bucket in result["omitted"].values():
+            assert "" not in bucket

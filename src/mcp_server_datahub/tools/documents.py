@@ -564,6 +564,9 @@ def grep_documents(
         past the end of their content
       - no_match: documents whose content contained zero pattern matches
       Bounded by the input URN list; all lists are empty on a full-match call.
+      On the invalid-regex error return the lists are present but unpopulated.
+      Duplicate input URNs are not deduplicated: not_found preserves input
+      multiplicity, while per-document causes follow the response entities.
     """
     client = graphql_helpers.get_datahub_client()
 
@@ -602,6 +605,7 @@ def grep_documents(
             "results": [],
             "total_matches": 0,
             "documents_with_matches": 0,
+            "omitted": omitted,
         }
 
     results = []
@@ -614,6 +618,10 @@ def grep_documents(
             continue
 
         urn = entity.get("urn", "")
+        if not urn:
+            # An entity with no urn cannot be attributed to a requested urn;
+            # the request it answered will land in not_found instead.
+            continue
         info = entity.get("info", {})
         title = info.get("title", "Untitled")
         contents = info.get("contents", {})
