@@ -741,3 +741,44 @@ class TestGrepDocuments:
         assert result["omitted"]["not_found"] == ["urn:li:document:doc1"]
         for bucket in result["omitted"].values():
             assert "" not in bucket
+
+    @patch("datahub_integrations.mcp.graphql_helpers.get_datahub_client")
+    @patch("datahub_integrations.mcp.graphql_helpers.execute_graphql")
+    async def test_wrong_entity_type_lands_in_not_found(
+        self,
+        mock_execute_graphql,
+        mock_get_client,
+        mock_client,
+    ):
+        """A valid but non-Document urn (e.g. a Dataset) resolves with a urn
+        and no Document info fragment; it is not a readable document, so it
+        is attributed to not_found, never misreported as an empty document."""
+        mock_get_client.return_value = mock_client
+        mock_execute_graphql.return_value = {
+            "entities": [
+                {
+                    "urn": "urn:li:dataset:(urn:li:dataPlatform:x,db.t,PROD)",
+                },
+                {
+                    "urn": "urn:li:document:doc1",
+                    "info": {
+                        "title": "Real Doc",
+                        "contents": {"text": "text with pattern"},
+                    },
+                },
+            ]
+        }
+
+        result = await async_background(grep_documents)(
+            urns=[
+                "urn:li:dataset:(urn:li:dataPlatform:x,db.t,PROD)",
+                "urn:li:document:doc1",
+            ],
+            pattern="pattern",
+        )
+
+        assert result["documents_with_matches"] == 1
+        assert result["omitted"]["not_found"] == [
+            "urn:li:dataset:(urn:li:dataPlatform:x,db.t,PROD)"
+        ]
+        assert result["omitted"]["empty"] == []

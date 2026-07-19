@@ -559,6 +559,7 @@ def grep_documents(
     - omitted: Accounting of requested URNs absent from results, by cause, so
       callers can distinguish "document missing" from "document did not match":
       - not_found: URNs that did not resolve to a readable document
+        (missing, unresolvable, or not a Document entity)
       - empty: documents that resolved but have no text content
       - offset_beyond_length: documents skipped because start_offset is at or
         past the end of their content
@@ -622,7 +623,13 @@ def grep_documents(
             # An entity with no urn cannot be attributed to a requested urn;
             # the request it answered will land in not_found instead.
             continue
-        info = entity.get("info", {})
+        info = entity.get("info")
+        if not isinstance(info, dict):
+            # The entity resolved but carries no Document info fragment
+            # (wrong entity type, e.g. a Dataset urn): it is not a readable
+            # document, so leave the urn to not_found rather than
+            # misreporting it as an empty document.
+            continue
         title = info.get("title", "Untitled")
         contents = info.get("contents", {})
         text = contents.get("text", "") if contents else ""
