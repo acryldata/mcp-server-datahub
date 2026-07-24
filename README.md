@@ -155,7 +155,7 @@ Save standalone documents (insights, decisions, FAQs, notes) to DataHub's knowle
 | `TOOLS_IS_MUTATION_ENABLED` | `false` | Enable mutation tools (add/remove tags, owners, etc.) |
 | `TOOLS_IS_USER_ENABLED` | `false` | Enable user tools (get_me) |
 | `DATAHUB_MCP_DOCUMENT_TOOLS_DISABLED` | `false` | Completely disable document tools |
-| `SAVE_DOCUMENT_TOOL_ENABLED` | `true` | Enable/disable the save_document tool |
+| `SAVE_DOCUMENT_TOOL_ENABLED` | `true` | Enable or disable `save_document`. The tool is registered only when `TOOLS_IS_MUTATION_ENABLED=true`. |
 | `SAVE_DOCUMENT_PARENT_TITLE` | `Shared` | Title for the parent folder of saved documents |
 | `SAVE_DOCUMENT_ORGANIZE_BY_USER` | `false` | Organize saved documents by user |
 | `SAVE_DOCUMENT_RESTRICT_UPDATES` | `true` | Only allow updating documents in the shared folder |
