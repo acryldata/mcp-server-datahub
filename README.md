@@ -122,6 +122,14 @@ Update, append to, or remove descriptions for entities or schema fields. Support
 
 Manage structured properties (typed metadata fields) on entities. Supports string, number, URN, date, and rich text value types.
 
+`raise_incident`
+
+Raise a native DataHub incident on an asset. The incident appears on the asset's Incidents tab and contributes to its health signals. Supports CRITICAL, HIGH, MEDIUM, and LOW priorities.
+
+`update_incident_status`
+
+Update the status of an existing incident (ACTIVE or RESOLVED), with an optional message describing the change. Useful for resolving incidents once the underlying issue is fixed.
+
 ### User Tools
 
 These tools provide information about the authenticated user. Enabled via `TOOLS_IS_USER_ENABLED=true`.
