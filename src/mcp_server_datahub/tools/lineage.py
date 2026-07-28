@@ -661,6 +661,28 @@ def get_lineage_paths_between(
             target_urn="urn:li:dataset:(...):final_table",
             direction="downstream"
         )
+
+    Raises:
+        ItemNotFoundError: when no path exists. This is a NORMAL NEGATIVE ANSWER
+            about a healthy graph, not a failure of the call, and callers that
+            treat any tool error as a fault will break on graphs where two assets
+            are simply unrelated. There are three distinct messages:
+
+            - "No lineage found from {source}" - the source (or source column)
+              has no lineage at all.
+            - "No lineage path found from {source} to {target}" - both endpoints
+              exist, but nothing connects them in the direction searched.
+            - "No lineage path found between {source} and {target} in either
+              upstream or downstream direction" - raised when direction was not
+              given and auto-discovery tried both.
+
+            A caller asking "are these two columns related?" should map all three
+            to "no", and distinguish them from ValueError, which signals a real
+            problem with the request or the response.
+
+        ValueError: for malformed input (for example an invalid hop count, or a
+            source column given without a target column), and for the case where
+            a target is found but the response carries no path information.
     """
     # Normalize column parameters
     if source_column == "null" or source_column == "":
