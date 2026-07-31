@@ -1680,6 +1680,14 @@ fragment entityDetails on Entity {
         ...datasetSchema
         ...viewProperties
     }
+    ... on SchemaFieldEntity {
+        fieldPath
+        parent {
+            urn
+            type
+        }
+        ...entitySchemaFieldEntityFields
+    }
     ... on StructuredPropertyEntity {
         ...structuredPropertyFields
         ...structuredPropertyDetailsFields
