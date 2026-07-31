@@ -84,7 +84,7 @@ Fetch real SQL queries referencing a dataset or column—manual or system-genera
 
 `get_entities`
 
-Fetch detailed metadata for one or more entities by URN; supports batch retrieval for efficient inspection of search results.
+Fetch detailed metadata for one or more entities by URN; supports batch retrieval for efficient inspection of search results. Set `include_system_metadata=true` to add bounded, per-aspect ingestion audit context. These timestamps describe catalog ingestion, not metadata validation; see [`get_entities` aspect audit context](docs/get-entities-audit-context.md).
 
 `list_schema_fields`
 
@@ -224,7 +224,16 @@ Example:
 If the question requires joining or entity navigation (e.g., connecting pets → adoptions):
 
 #### get_entities
-To retrieve entities related to a given URN, such as upstream/downstream tables.
+
+Retrieve detailed metadata for one or more entity URNs. Batch the top candidate URNs from
+search results to compare them efficiently.
+
+For provenance-sensitive inspection, set `include_system_metadata=true` to include a compact
+`aspectMetadata` map with normalized actor URNs, epoch-millisecond times, and selected
+`systemMetadata` fields. The option is off by default for backward compatibility. Ingestion
+timestamps are audit context, **not** proof that metadata was validated or is correct. See
+[`get_entities` aspect audit context](docs/get-entities-audit-context.md) for the response shape,
+limits, and fail-closed behavior.
 
 #### get_lineage_paths_between
 To calculate exact lineage paths between datasets if needed (e.g., between `pet_profiles` and `adoptions`).

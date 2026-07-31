@@ -1,7 +1,7 @@
 """Entity retrieval tools for DataHub MCP server."""
 
 import json
-from typing import Callable, Iterator, List, Optional
+from typing import Any, Callable, Iterator, List, Optional
 
 from datahub.errors import ItemNotFoundError
 from json_repair import repair_json
@@ -17,8 +17,184 @@ query_entity_gql = (graphql_helpers.GQL_DIR / "query_entity.gql").read_text()
 related_documents_gql = (graphql_helpers.GQL_DIR / "related_documents.gql").read_text()
 
 
+def _normalize_non_negative_int(value: Any, *, path: str) -> int:
+    """Normalize a JSON integer while rejecting ambiguous or invalid values."""
+    if isinstance(value, bool):
+        raise ValueError(f"Invalid {path}: expected a non-negative integer")
+
+    if isinstance(value, int):
+        normalized = value
+    elif isinstance(value, str):
+        stripped = value.strip()
+        if not stripped.isdigit():
+            raise ValueError(f"Invalid {path}: expected a non-negative integer")
+        normalized = int(stripped)
+    else:
+        raise ValueError(f"Invalid {path}: expected a non-negative integer")
+
+    if normalized < 0:
+        raise ValueError(f"Invalid {path}: expected a non-negative integer")
+    return normalized
+
+
+def _normalize_actor(value: Any, *, path: str) -> str:
+    """Normalize an audit actor to a non-empty URN string."""
+    actor = value
+    if isinstance(value, dict):
+        actor = value.get("urn")
+
+    if not isinstance(actor, str) or not actor.strip():
+        raise ValueError(
+            f"Invalid {path}: expected a non-empty actor URN string or object"
+        )
+    return actor.strip()
+
+
+def _normalize_audit_stamp(value: Any, *, path: str) -> dict:
+    """Normalize a DataHub AuditStamp to stable actor/time scalar fields."""
+    if not isinstance(value, dict):
+        raise ValueError(f"Invalid {path}: expected an audit stamp object")
+    if "actor" not in value or "time" not in value:
+        raise ValueError(f"Invalid {path}: audit stamp requires actor and time")
+
+    normalized = {
+        "actor": _normalize_actor(value["actor"], path=f"{path}.actor"),
+        "time": _normalize_non_negative_int(value["time"], path=f"{path}.time"),
+    }
+
+    if value.get("impersonator") is not None:
+        normalized["impersonator"] = _normalize_actor(
+            value["impersonator"], path=f"{path}.impersonator"
+        )
+
+    if value.get("message") is not None:
+        message = value["message"]
+        if not isinstance(message, str):
+            raise ValueError(f"Invalid {path}.message: expected a string")
+        if message:
+            normalized["message"] = message
+
+    return normalized
+
+
+def _normalize_system_metadata(value: Any, *, path: str) -> dict:
+    """Select and normalize bounded provenance fields from SystemMetadata."""
+    if not isinstance(value, dict):
+        raise ValueError(f"Invalid {path}: expected a systemMetadata object")
+
+    normalized: dict[str, Any] = {}
+
+    for field_name in (
+        "runId",
+        "lastRunId",
+        "pipelineName",
+        "registryName",
+        "registryVersion",
+        "version",
+    ):
+        field_value = value.get(field_name)
+        if field_value is None:
+            continue
+        if not isinstance(field_value, str):
+            raise ValueError(f"Invalid {path}.{field_name}: expected a string")
+        normalized[field_name] = field_value
+
+    for field_name in ("lastObserved", "schemaVersion"):
+        field_value = value.get(field_name)
+        if field_value is not None:
+            normalized[field_name] = _normalize_non_negative_int(
+                field_value, path=f"{path}.{field_name}"
+            )
+
+    for field_name in ("aspectCreated", "aspectModified"):
+        field_value = value.get(field_name)
+        if field_value is not None:
+            normalized[field_name] = _normalize_audit_stamp(
+                field_value, path=f"{path}.{field_name}"
+            )
+
+    # Deliberately omit SystemMetadata.properties. It is an arbitrary map and can
+    # be large or connector-specific; this opt-in response is an audit summary,
+    # not a second copy of the raw aspect envelope.
+    return normalized
+
+
+def _normalize_aspect_metadata(raw_response: Any, *, expected_urn: str) -> dict:
+    """Build a compact, fail-closed aspect audit map from entitiesV2."""
+    if not isinstance(raw_response, dict):
+        raise ValueError("Invalid aspect metadata response: expected an object")
+
+    response_urn = raw_response.get("urn")
+    if response_urn != expected_urn:
+        raise ValueError(
+            "Invalid aspect metadata response: "
+            f"expected URN {expected_urn}, received {response_urn!r}"
+        )
+
+    aspects = raw_response.get("aspects")
+    if not isinstance(aspects, dict) or not aspects:
+        raise ValueError(
+            f"Invalid aspect metadata response for {expected_urn}: "
+            "expected a non-empty aspects map"
+        )
+
+    normalized_aspects: dict[str, dict] = {}
+    for aspect_name in sorted(aspects):
+        if not isinstance(aspect_name, str) or not aspect_name:
+            raise ValueError(
+                f"Invalid aspect metadata response for {expected_urn}: "
+                "aspect names must be non-empty strings"
+            )
+
+        aspect_path = f"aspectMetadata.{aspect_name}"
+        envelope = aspects[aspect_name]
+        if not isinstance(envelope, dict):
+            raise ValueError(f"Invalid {aspect_path}: expected an aspect envelope")
+
+        envelope_name = envelope.get("name")
+        if envelope_name is not None and envelope_name != aspect_name:
+            raise ValueError(
+                f"Invalid {aspect_path}.name: expected {aspect_name}, "
+                f"received {envelope_name!r}"
+            )
+
+        normalized_envelope: dict[str, Any] = {}
+
+        aspect_type = envelope.get("type")
+        if aspect_type is not None:
+            if not isinstance(aspect_type, str) or not aspect_type:
+                raise ValueError(f"Invalid {aspect_path}.type: expected a string")
+            normalized_envelope["type"] = aspect_type
+
+        for field_name in ("version", "timestamp"):
+            field_value = envelope.get(field_name)
+            if field_value is not None:
+                normalized_envelope[field_name] = _normalize_non_negative_int(
+                    field_value, path=f"{aspect_path}.{field_name}"
+                )
+
+        if envelope.get("created") is not None:
+            normalized_envelope["created"] = _normalize_audit_stamp(
+                envelope["created"], path=f"{aspect_path}.created"
+            )
+
+        if envelope.get("systemMetadata") is not None:
+            system_metadata = _normalize_system_metadata(
+                envelope["systemMetadata"],
+                path=f"{aspect_path}.systemMetadata",
+            )
+            if system_metadata:
+                normalized_envelope["systemMetadata"] = system_metadata
+
+        normalized_aspects[aspect_name] = normalized_envelope
+
+    return normalized_aspects
+
+
 @read_only
-def get_entities(urns: List[str] | str) -> List[dict] | dict:
+def get_entities(
+    urns: List[str] | str, include_system_metadata: bool = False
+) -> List[dict] | dict:
     """Get detailed information about one or more entities by their DataHub URNs.
 
     IMPORTANT: Pass an array of URNs to retrieve multiple entities in a single call - this is much
@@ -28,8 +204,18 @@ def get_entities(urns: List[str] | str) -> List[dict] | dict:
     Accepts an array of URNs or a single URN. Supports all entity types including datasets,
     assertions, incidents, dashboards, charts, users, groups, and more. The response fields vary
     based on the entity type.
+
+    Set include_system_metadata=true to add an aspectMetadata map keyed by aspect name. Each
+    entry contains available aspect envelope audit data and selected systemMetadata fields, with
+    actor values normalized to URN strings and time values normalized to epoch-millisecond
+    integers. This is ingestion/catalog processing context, not evidence that the metadata was
+    validated or is semantically correct. The opt-in audit read fails closed: malformed or
+    mismatched metadata returns an error instead of silently omitting the requested context.
     """
     client = graphql_helpers.get_datahub_client()
+
+    if not isinstance(include_system_metadata, bool):
+        raise ValueError("include_system_metadata must be a boolean")
 
     # Handle JSON-stringified arrays (same issue as filters in search tool)
     # Some MCP clients/LLMs pass arrays as JSON strings instead of proper lists
@@ -124,7 +310,16 @@ def get_entities(urns: List[str] | str) -> List[dict] | dict:
             graphql_helpers.inject_urls_for_urns(client._graph, result, [""])
             graphql_helpers.truncate_descriptions(result)
 
-            results.append(graphql_helpers.clean_get_entities_response(result))
+            cleaned_result = graphql_helpers.clean_get_entities_response(result)
+
+            if include_system_metadata:
+                raw_aspect_metadata = client._graph.get_entity_raw(urn)
+                cleaned_result["aspectMetadata"] = _normalize_aspect_metadata(
+                    raw_aspect_metadata,
+                    expected_urn=urn,
+                )
+
+            results.append(cleaned_result)
 
         except Exception as e:
             logger.warning(f"Error fetching entity {urn}: {e}")
