@@ -64,6 +64,29 @@ async def test_list_tools(mcp_client: Client) -> None:
     tools = await mcp_client.list_tools()
     assert len(tools) > 0
 
+@pytest.mark.anyio
+async def test_get_entities_schema_field_urn(mcp_client: Client) -> None:
+    """A schemaField urn passed directly to get_entities must return the field's
+    aspects (fieldPath, parent, and structured properties when present), not just
+    the bare urn. Regression test for the SchemaFieldEntity branch in GetEntity."""
+
+    field_urn = f"urn:li:schemaField:({_test_urn},status)"
+    try:
+        result = await mcp_client.call_tool("get_entities", {"urns": field_urn})
+    except Exception as e:
+        if "not found" in str(e).lower():
+            pytest.skip(f"Test entity {field_urn} not found in DataHub instance")
+        raise
+        
+    assert result.content, "Tool result should have content"
+    content = assert_type(TextContent, result.content[0])
+    res = json.loads(content.text)
+    assert isinstance(res, dict)
+    assert res["urn"] == field_urn
+    # Before the fix, the response contained ONLY the urn.
+    assert res.get("fieldPath") == "status"
+    assert res.get("parent", {}).get("urn") == _test_urn
+
 
 @pytest.mark.anyio
 async def test_basic_search(mcp_client: Client) -> None:
