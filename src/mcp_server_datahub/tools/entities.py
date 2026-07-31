@@ -90,7 +90,6 @@ def _normalize_system_metadata(value: Any, *, path: str) -> dict:
         "pipelineName",
         "registryName",
         "registryVersion",
-        "version",
     ):
         field_value = value.get(field_name)
         if field_value is None:
@@ -99,7 +98,7 @@ def _normalize_system_metadata(value: Any, *, path: str) -> dict:
             raise ValueError(f"Invalid {path}.{field_name}: expected a string")
         normalized[field_name] = field_value
 
-    for field_name in ("lastObserved", "schemaVersion"):
+    for field_name in ("lastObserved", "schemaVersion", "version"):
         field_value = value.get(field_name)
         if field_value is not None:
             normalized[field_name] = _normalize_non_negative_int(

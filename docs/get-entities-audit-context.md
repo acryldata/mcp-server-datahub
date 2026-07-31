@@ -45,8 +45,8 @@ additional request. When enabled, the entity response includes an `aspectMetadat
 
 - `actor` is normalized to a non-empty URN string, whether the server returned a string or an
   object containing `urn`.
-- `time`, `timestamp`, `lastObserved`, and `schemaVersion` are normalized to non-negative
-  integers. Time values are Unix epoch milliseconds.
+- `time`, `timestamp`, `lastObserved`, `schemaVersion`, and system-metadata `version` are
+  normalized to non-negative integers. Time values are Unix epoch milliseconds.
 - The response includes aspect envelope `type`, `version`, `timestamp`, and `created`, plus the
   bounded `systemMetadata` fields useful for ingestion provenance: run IDs, pipeline name,
   registry name/version, aspect version/schema version, observation time, and aspect

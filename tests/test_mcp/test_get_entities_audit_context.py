@@ -140,7 +140,7 @@ async def test_opt_in_adds_normalized_bounded_aspect_metadata(
         "pipelineName": "snowflake-prod",
         "registryName": "datahub",
         "registryVersion": "1.0",
-        "version": "3",
+        "version": 3,
         "lastObserved": 1761189498008,
         "schemaVersion": 1,
         "aspectCreated": {
