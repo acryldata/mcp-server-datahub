@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from typing import Any
 
@@ -15,6 +16,40 @@ logger = logging.getLogger(__name__)
 telemetry.telemetry_instance.add_global_property(
     "mcp_server_datahub_version", __version__
 )
+
+# Strong references to in-flight telemetry tasks. asyncio only holds a weak
+# reference to a running task, so without this the task can be garbage
+# collected before it completes.
+_background_pings: set["asyncio.Task[None]"] = set()
+
+
+def _on_ping_done(task: "asyncio.Task[None]") -> None:
+    _background_pings.discard(task)
+    if not task.cancelled() and task.exception() is not None:
+        logger.debug("Telemetry ping failed", exc_info=task.exception())
+
+
+def _ping_in_background(event_name: str, properties: dict[str, Any]) -> None:
+    """Send a telemetry ping without making the caller wait for it.
+
+    `telemetry_instance.ping()` performs a blocking HTTP request. Calling it
+    inline from the request path means every tool call waits for the telemetry
+    endpoint to answer, and blocks the event loop while it waits — so a slow or
+    unreachable endpoint delays each call by however long that request takes.
+
+    Telemetry is best-effort, so hand it to a worker thread and do not await it.
+    """
+    try:
+        task = asyncio.create_task(
+            asyncio.to_thread(telemetry.telemetry_instance.ping, event_name, properties)
+        )
+    except RuntimeError:
+        # No running event loop — there is nothing to block, so send inline.
+        telemetry.telemetry_instance.ping(event_name, properties)
+        return
+
+    _background_pings.add(task)
+    task.add_done_callback(_on_ping_done)
 
 
 def _get_client_info(context: MiddlewareContext[Any]) -> dict[str, str]:
@@ -82,6 +117,4 @@ class TelemetryMiddleware(Middleware):
                 raise
             finally:
                 telemetry_data["duration_seconds"] = timer.elapsed_seconds()
-                telemetry.telemetry_instance.ping(
-                    "mcp-server-tool-call", telemetry_data
-                )
+                _ping_in_background("mcp-server-tool-call", telemetry_data)
