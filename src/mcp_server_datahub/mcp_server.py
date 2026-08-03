@@ -44,6 +44,7 @@ from .graphql_helpers import (  # noqa: F401 (re-exported for backward compat)
     _enable_newer_gms_fields,
     _is_datahub_cloud,
     _select_results_within_budget,
+    _supports_newer_gms_fields,
     _sort_fields_by_priority,
     clean_get_entities_response,
     clean_gql_response,
