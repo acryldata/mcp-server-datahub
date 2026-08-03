@@ -365,27 +365,71 @@ def _disable_cloud_fields(query: str) -> str:
 _newer_gms_fields_support_cache: dict[int, bool] = {}
 
 
+# Minimum OSS/Core GMS version that serves the #[NEWER_GMS] fields.
+#
+# Documents (Document.info.contents, subType, relatedAssets, ...) landed in OSS
+# 1.5.0, which is also where the rest of the #[NEWER_GMS] block became valid.
+# Verified against a 1.5.0.6 quickstart: the full entity_details.gql query with
+# every #[NEWER_GMS] field enabled validates and resolves without error.
+NEWER_GMS_MIN_OSS_VERSION = (1, 5, 0, 0)
+
+
 def _is_datahub_cloud(graph: DataHubGraph) -> bool:
     """Check if the graph instance is DataHub Cloud.
 
-    Cloud instances typically have newer GMS versions with additional fields.
     This heuristic uses the presence of frontend_base_url to detect Cloud instances.
     """
-    # Allow disabling newer GMS field detection via environment variable
-    # This is useful when the GMS version doesn't support all newer fields
+    # Retained here, unchanged, so that setting the flag still disables #[CLOUD]
+    # fields exactly as it did before -- that side effect is relied on in the
+    # field-only override path and is not what this change is about.
+    if get_boolean_env_variable("DISABLE_NEWER_GMS_FIELD_DETECTION", default=False):
+        return False
+
+    try:
+        # Only DataHub Cloud has a frontend base url.
+        _ = graph.frontend_base_url
+    except ValueError:
+        return False
+    return True
+
+
+def _supports_newer_gms_fields(graph: DataHubGraph, is_cloud: bool) -> bool:
+    """Check whether this server serves the #[NEWER_GMS] fields.
+
+    Cloud always does. A self-hosted server does too, once it is new enough --
+    which is the case this previously got wrong. The initial guess used to be
+    ``is_cloud`` alone, on the reasoning that Cloud "typically" runs a newer GMS.
+    The contrapositive does not hold: an OSS server on 1.5+ serves every one of
+    these fields, and gating them on deployment type stripped them anyway. The
+    visible symptom was ``get_entities`` on a Document URN returning ``{"urn":
+    ...}`` and nothing else on OSS -- no title, no contents -- because the whole
+    ``... on Document`` block is #[NEWER_GMS]-tagged. The same query against the
+    same server with the fields enabled returns the document in full.
+
+    Guessing wrong in either direction is recoverable: ``execute_graphql``
+    retries once with the fields disabled on a validation error and caches the
+    answer per graph, so an over-optimistic guess costs one round trip on the
+    first query and nothing after it.
+    """
+    # Allow disabling newer GMS field detection via environment variable.
+    # This is useful when the GMS version doesn't support all newer fields.
     if get_boolean_env_variable("DISABLE_NEWER_GMS_FIELD_DETECTION", default=False):
         logger.debug(
             "Newer GMS field detection disabled via DISABLE_NEWER_GMS_FIELD_DETECTION"
         )
         return False
 
+    if is_cloud:
+        return True
+
     try:
-        # Only DataHub Cloud has a frontend base url.
-        # Cloud instances typically run newer GMS versions with additional fields.
-        _ = graph.frontend_base_url
-    except ValueError:
+        return graph.server_config.is_version_at_least(*NEWER_GMS_MIN_OSS_VERSION)
+    except Exception as e:
+        # An unreachable or unparseable /config should not decide field
+        # selection. Fall back to the old conservative behaviour and let the
+        # retry path correct it if the fields are in fact available.
+        logger.debug(f"Could not determine GMS version, assuming older GMS: {e}")
         return False
-    return True
 
 
 def _is_field_validation_error(error_msg: str) -> bool:
@@ -431,15 +475,16 @@ def execute_graphql(
         else:
             query = _disable_newer_gms_fields(query)
     else:
-        # First attempt: try with newer GMS fields if it's detected as cloud
-        # (Cloud instances typically run newer GMS versions)
-        if is_cloud:
+        # First attempt: enable newer GMS fields if the server actually serves
+        # them -- Cloud, or a self-hosted GMS new enough to have them.
+        supports_newer_fields = _supports_newer_gms_fields(graph, is_cloud)
+        if supports_newer_fields:
             query = _enable_newer_gms_fields(query)
             newer_gms_enabled_for_this_query = True
         else:
             query = _disable_newer_gms_fields(query)
         # Cache the initial detection result
-        _newer_gms_fields_support_cache[graph_id] = is_cloud
+        _newer_gms_fields_support_cache[graph_id] = supports_newer_fields
 
     logger.debug(
         f"Executing GraphQL {operation_name or 'query'}: "
