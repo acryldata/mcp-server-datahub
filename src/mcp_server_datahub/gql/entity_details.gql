@@ -519,6 +519,9 @@ fragment entityPreview on Entity {
         properties {
             name
             description
+            lastModified {
+                time
+            }
             customProperties {
                 key
                 value
