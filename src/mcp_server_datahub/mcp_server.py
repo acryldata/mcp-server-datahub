@@ -65,6 +65,7 @@ from .graphql_helpers import (  # noqa: F401 (re-exported for backward compat)
 )
 from .search_filter_parser import FILTER_DOCS
 from .tools.assertions import get_dataset_assertions
+from .tools.aspect_history import get_aspect_history
 from .tools.dataset_queries import get_dataset_queries
 from .tools.descriptions import update_description
 from .tools.documents import grep_documents, search_documents
@@ -364,6 +365,12 @@ def register_search_tools(mcp_instance: FastMCP, is_oss: bool = False) -> None:
     )
     _register_tool(
         mcp_instance, "get_entities", get_entities, tags={ToolType.SEARCH.value}
+    )
+    _register_tool(
+        mcp_instance,
+        "get_aspect_history",
+        get_aspect_history,
+        tags={ToolType.SEARCH.value},
     )
     _register_tool(
         mcp_instance,
