@@ -255,16 +255,16 @@ def get_lineage(
     - Find Looker dashboards in lineage: query="/q tag:looker"
     - Get all results: query="*" or omit parameter
 
-    COUNT PARAMETER - Control result size:
+    MAX_RESULTS PARAMETER - Control result size:
     - Default: 30 results
-    - For aggregation: count=30 is sufficient (facets computed on ALL items server-side)
-    - For finding specific item: Increase count or use query to filter
-    - Example: count=100 for larger result sets
+    - For aggregation: max_results=30 is sufficient (facets computed on ALL items server-side)
+    - For finding specific item: Increase max_results or use query to filter
+    - Example: max_results=100 for larger result sets
 
-    WHEN TO USE QUERY vs COUNT:
+    WHEN TO USE QUERY vs MAX_RESULTS:
     - User asks "is X affected?" -> Use query to filter for X specifically
-    - Large lineage (>30 items) -> Keep count=30, use facets for aggregation
-    - Need complete list -> Increase count only if total <=100
+    - Large lineage (>30 items) -> Keep max_results=30, use facets for aggregation
+    - Need complete list -> Increase max_results only if total <=100
     """
     # Normalize column parameter: Some LLMs pass the string "null" instead of JSON null.
     # Note: This means columns literally named "null" cannot be queried.
