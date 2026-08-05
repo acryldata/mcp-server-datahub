@@ -824,13 +824,17 @@ fragment entityPreview on Entity {
     ... on MLFeatureTable {
         name
         description
-        featureTableProperties {
+        properties {
             description
             mlFeatures {
                 urn
             }
             mlPrimaryKeys {
                 urn
+            }
+            customProperties {
+                key
+                value
             }
         }
         ownership {
@@ -858,6 +862,12 @@ fragment entityPreview on Entity {
         name
         description
         origin
+        properties {
+            consumesFeatures: mlFeatures
+            groups {
+                urn
+            }
+        }
         ownership {
             ...ownershipFields
         }
@@ -882,6 +892,15 @@ fragment entityPreview on Entity {
     ... on MLFeature {
         name
         description
+        properties {
+            sources {
+                urn
+            }
+            customProperties {
+                key
+                value
+            }
+        }
         ownership {
             ...ownershipFields
         }
