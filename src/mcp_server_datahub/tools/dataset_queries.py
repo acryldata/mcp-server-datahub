@@ -103,6 +103,12 @@ def get_dataset_queries(
       - urn: Query identifier
       - properties.statement.value: The actual SQL text
       - properties.statement.language: Query language (SQL, etc.)
+      - properties.statement._truncated: Whether the returned SQL text was shortened
+      - properties.statement._originalLengthChars: Original SQL text length
+      - properties.statement._returnedLengthChars: Returned SQL text length, including
+        the truncation suffix when present
+      - properties.statement._fullStatementAvailableVia: A get_entities tool call that
+        retrieves the complete query entity (included only when the SQL text is truncated)
       - properties.source: MANUAL or SYSTEM
       - properties.name: Optional query name
       - platform: Source platform
@@ -121,6 +127,8 @@ def get_dataset_queries(
     - For production analysis: Use source="SYSTEM" to see dashboard/report queries
     - Start with moderate count (5-10) to avoid overwhelming context
     - If no queries found (total=0), proceed without query examples - not all tables have queries
+    - If _truncated is true, call get_entities with the query URN shown in
+      _fullStatementAvailableVia to retrieve the complete statement
     - Parse the SQL statements yourself to find patterns - they are not full-text searchable
     """
     client = graphql_helpers.get_datahub_client()
@@ -157,10 +165,23 @@ def get_dataset_queries(
         if query.get("subjects"):
             query["subjects"] = _deduplicate_subjects(query["subjects"])
 
-        # Truncate long SQL queries to prevent context window issues
+        # Truncate long SQL queries to prevent context window issues. Keep explicit
+        # metadata so callers can distinguish a complete statement from a shortened
+        # one without parsing the human-readable suffix.
         if queryProperties := query.get("properties"):
-            queryProperties["statement"]["value"] = graphql_helpers.truncate_query(
-                queryProperties["statement"]["value"]
-            )
+            statement = queryProperties["statement"]
+            original_value = statement["value"]
+            returned_value = graphql_helpers.truncate_query(original_value)
+
+            statement["value"] = returned_value
+            statement["_truncated"] = returned_value != original_value
+            statement["_originalLengthChars"] = len(original_value)
+            statement["_returnedLengthChars"] = len(returned_value)
+
+            if statement["_truncated"]:
+                statement["_fullStatementAvailableVia"] = {
+                    "tool": "get_entities",
+                    "arguments": {"urns": query["urn"]},
+                }
 
     return graphql_helpers.clean_gql_response(result)

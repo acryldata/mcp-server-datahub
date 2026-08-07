@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from datahub_integrations.mcp import graphql_helpers
 from datahub_integrations.mcp.mcp_server import async_background, get_dataset_queries
 
 pytestmark = pytest.mark.anyio
@@ -166,3 +167,61 @@ class TestGetDatasetQueriesParameters:
             if "subjects" in query:
                 # Subjects should be a list of URN strings, not full objects
                 assert isinstance(query["subjects"], list)
+
+    @patch("datahub_integrations.mcp.graphql_helpers.get_datahub_client")
+    @patch("datahub_integrations.mcp.graphql_helpers.execute_graphql")
+    async def test_get_dataset_queries_exposes_non_truncated_statement_metadata(
+        self, mock_execute_graphql, mock_get_client, mock_client, mock_gql_response
+    ):
+        """Short statements include explicit metadata and no full-query hint."""
+        mock_get_client.return_value = mock_client
+        mock_execute_graphql.return_value = mock_gql_response
+
+        result = await async_background(get_dataset_queries)(
+            urn="urn:li:dataset:(urn:li:dataPlatform:snowflake,db.schema.orders,PROD)",
+        )
+
+        for query in result["queries"]:
+            statement = query["properties"]["statement"]
+            assert statement["_truncated"] is False
+            assert statement["_originalLengthChars"] == len(statement["value"])
+            assert statement["_returnedLengthChars"] == len(statement["value"])
+            assert "_fullStatementAvailableVia" not in statement
+
+    @patch("datahub_integrations.mcp.graphql_helpers.get_datahub_client")
+    @patch("datahub_integrations.mcp.graphql_helpers.execute_graphql")
+    async def test_get_dataset_queries_exposes_truncated_statement_metadata(
+        self, mock_execute_graphql, mock_get_client, mock_client, mock_gql_response
+    ):
+        """Long statements report exact lengths and a complete-query retrieval hint."""
+        mock_get_client.return_value = mock_client
+        long_statement = "SELECT * FROM orders WHERE customer_id IS NOT NULL " * 20
+        mock_gql_response["listQueries"]["queries"] = [
+            {
+                "urn": "urn:li:query:long-query",
+                "properties": {
+                    "name": "Long query",
+                    "source": "MANUAL",
+                    "statement": {"value": long_statement, "language": "SQL"},
+                },
+                "platform": {"name": "snowflake"},
+                "subjects": [],
+            }
+        ]
+        mock_execute_graphql.return_value = mock_gql_response
+
+        with patch.object(graphql_helpers, "QUERY_LENGTH_HARD_LIMIT", 50):
+            result = await async_background(get_dataset_queries)(
+                urn="urn:li:dataset:(urn:li:dataPlatform:snowflake,db.schema.orders,PROD)",
+            )
+
+        statement = result["queries"][0]["properties"]["statement"]
+        assert statement["value"].endswith("... [truncated]")
+        assert statement["_truncated"] is True
+        assert statement["_originalLengthChars"] == len(long_statement)
+        assert statement["_returnedLengthChars"] == 50
+        assert statement["_returnedLengthChars"] == len(statement["value"])
+        assert statement["_fullStatementAvailableVia"] == {
+            "tool": "get_entities",
+            "arguments": {"urns": "urn:li:query:long-query"},
+        }
