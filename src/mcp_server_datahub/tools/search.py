@@ -30,6 +30,17 @@ def _search_implementation(
     # Cap num_results at 50 to prevent excessive requests
     num_results = min(num_results, 50)
 
+    # "relevance" is the *default* ranking, not a sortable field -- no DataHub search
+    # index has a `relevance` mapping to sort on. A caller asking to sort by
+    # relevance (a very natural guess, since it's literally the name of the default
+    # ordering) almost always means "leave the default ranking alone", but forwarding
+    # it verbatim to the backend raises `query_shard_exception: No mapping found for
+    # [relevance] in order to sort on`, which OpenSearch reports as
+    # `all_shards_failed` -- a confusing total search failure for what is, in intent,
+    # a no-op. Normalize it here instead of crashing.
+    if sort_by is not None and sort_by.strip().lower() == "relevance":
+        sort_by = None
+
     parsed_filter = graphql_helpers.parse_filter_input(filter)
 
     types, compiled_filters = compile_filters(parsed_filter)
