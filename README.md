@@ -100,7 +100,7 @@ These tools allow modifying metadata in DataHub. They are enabled via the `TOOLS
 
 `add_tags` / `remove_tags`
 
-Add or remove tags from entities or schema fields (columns). Supports bulk operations on multiple entities.
+Add or remove tags from entities or schema fields (columns). Supports bulk operations on multiple entities. Tags are assigned, not created: every tag URN must already exist in DataHub, and there is no tag-creation tool — create missing tags via the DataHub UI or the Python SDK first.
 
 `add_terms` / `remove_terms`
 
@@ -116,11 +116,11 @@ Assign or remove domain membership for entities. Each entity can belong to one d
 
 `update_description`
 
-Update, append to, or remove descriptions for entities or schema fields. Supports markdown formatting.
+Update, append to, or remove descriptions for entities or schema fields. Supports markdown formatting. Only the entity types accepted by DataHub's `updateDescription` mutation are supported (dataset, container, domain, glossaryTerm, glossaryNode, tag, corpGroup, notebook, mlModel, mlModelGroup, mlFeatureTable, mlFeature, mlPrimaryKey, dataProduct, businessAttribute, application, document); others — including chart, dashboard, dataFlow, dataJob and corpuser — are rejected with `Unsupported resource type`.
 
 `add_structured_properties` / `remove_structured_properties`
 
-Manage structured properties (typed metadata fields) on entities. Supports string, number, URN, date, and rich text value types.
+Manage structured properties (typed metadata fields) on entities. Supports string, number, URN, date, and rich text value types. As with tags, the property definition must already exist in DataHub — these tools assign values, they do not define properties.
 
 ### User Tools
 
