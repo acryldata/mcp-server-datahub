@@ -1,8 +1,10 @@
 from unittest.mock import Mock, patch
 
 import pytest
+from datahub.errors import SdkUsageError
+from datahub.sdk.tag import Tag
 
-from datahub_integrations.mcp.tools.tags import add_tags, remove_tags
+from datahub_integrations.mcp.tools.tags import add_tags, ensure_tag, remove_tags
 
 
 @pytest.fixture
@@ -12,6 +14,127 @@ def mock_datahub_client():
     mock_graph = Mock()
     mock_client._graph = mock_graph
     return mock_client
+
+
+def test_ensure_tag_creates_missing_tag(mock_datahub_client):
+    mock_datahub_client._graph.exists.return_value = False
+
+    with patch(
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
+        return_value=mock_datahub_client,
+    ):
+        result = ensure_tag(name="PII", description="Personally identifiable")
+
+    assert result == {
+        "success": True,
+        "tag_urn": "urn:li:tag:PII",
+        "created": True,
+    }
+    mock_datahub_client.entities.create.assert_called_once()
+    created_tag = mock_datahub_client.entities.create.call_args.args[0]
+    assert isinstance(created_tag, Tag)
+    assert created_tag.name == "PII"
+    assert created_tag.description == "Personally identifiable"
+
+
+def test_ensure_tag_returns_existing_without_modification(mock_datahub_client):
+    mock_datahub_client._graph.exists.return_value = True
+
+    with patch(
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
+        return_value=mock_datahub_client,
+    ):
+        result = ensure_tag(name="PII", description="Do not overwrite")
+
+    assert result == {
+        "success": True,
+        "tag_urn": "urn:li:tag:PII",
+        "created": False,
+    }
+    mock_datahub_client.entities.create.assert_not_called()
+
+
+def test_ensure_tag_is_idempotent(mock_datahub_client):
+    mock_datahub_client._graph.exists.side_effect = [False, True]
+
+    with patch(
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
+        return_value=mock_datahub_client,
+    ):
+        first = ensure_tag(name="PII")
+        second = ensure_tag(name="PII")
+
+    assert first["created"] is True
+    assert second["created"] is False
+    mock_datahub_client.entities.create.assert_called_once()
+
+
+@pytest.mark.parametrize("name", ["", " ", "\t"])
+def test_ensure_tag_rejects_empty_name(name):
+    with pytest.raises(ValueError, match="name cannot be empty"):
+        ensure_tag(name=name)
+
+
+def test_ensure_tag_propagates_datahub_api_failure(mock_datahub_client):
+    api_error = ConnectionError("DataHub API unavailable")
+    mock_datahub_client._graph.exists.side_effect = api_error
+
+    with patch(
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
+        return_value=mock_datahub_client,
+    ):
+        with pytest.raises(RuntimeError, match="DataHub API unavailable") as exc_info:
+            ensure_tag(name="PII")
+
+    assert exc_info.value.__cause__ is api_error
+
+
+def test_ensure_tag_propagates_permission_failure(mock_datahub_client):
+    permission_error = PermissionError("403 Forbidden: insufficient privileges")
+    mock_datahub_client._graph.exists.return_value = False
+    mock_datahub_client.entities.create.side_effect = permission_error
+
+    with patch(
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
+        return_value=mock_datahub_client,
+    ):
+        with pytest.raises(RuntimeError, match="403 Forbidden") as exc_info:
+            ensure_tag(name="PII")
+
+    assert exc_info.value.__cause__ is permission_error
+
+
+def test_ensure_tag_handles_concurrent_creation(mock_datahub_client):
+    mock_datahub_client._graph.exists.side_effect = [False, True]
+    mock_datahub_client.entities.create.side_effect = SdkUsageError(
+        "Entity urn:li:tag:PII already exists"
+    )
+
+    with patch(
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
+        return_value=mock_datahub_client,
+    ):
+        result = ensure_tag(name="PII")
+
+    assert result["created"] is False
+    mock_datahub_client.entities.create.assert_called_once()
+
+
+def test_ensure_tag_does_not_attach_tag(mock_datahub_client):
+    mock_datahub_client._graph.exists.return_value = False
+
+    with (
+        patch(
+            "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
+            return_value=mock_datahub_client,
+        ),
+        patch(
+            "datahub_integrations.mcp.graphql_helpers.execute_graphql"
+        ) as execute_graphql,
+    ):
+        ensure_tag(name="PII")
+
+    execute_graphql.assert_not_called()
 
 
 def test_add_tags_to_multiple_datasets(mock_datahub_client):

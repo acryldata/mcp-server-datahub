@@ -3,12 +3,59 @@
 import logging
 from typing import List, Literal, Optional
 
+from datahub.errors import SdkUsageError
 from datahub.sdk.main_client import DataHubClient
+from datahub.sdk.tag import Tag
 
 from .. import graphql_helpers
 from ..version_requirements import min_version
 
 logger = logging.getLogger(__name__)
+
+
+@min_version(cloud="0.3.16", oss="1.4.0")
+def ensure_tag(name: str, description: Optional[str] = None) -> dict:
+    """Ensure that a tag definition exists in DataHub.
+
+    The tag identifier is used as provided to construct its DataHub URN. If the
+    tag already exists, this operation leaves it unchanged, including its
+    description. Use the returned URN with add_tags to apply the tag to entities
+    or schema fields.
+
+    Args:
+        name: Tag identifier (for example, "PII" creates "urn:li:tag:PII").
+        description: Optional description used only when creating a new tag.
+
+    Returns:
+        Dictionary with:
+        - success: Boolean indicating that the tag exists
+        - tag_urn: The tag's DataHub URN
+        - created: Whether this call created the tag
+    """
+    if not name or not name.strip():
+        raise ValueError("name cannot be empty")
+
+    client = graphql_helpers.get_datahub_client()
+    tag = Tag(name=name, description=description)
+    tag_urn = str(tag.urn)
+
+    try:
+        if client._graph.exists(tag_urn):
+            return {"success": True, "tag_urn": tag_urn, "created": False}
+
+        try:
+            client.entities.create(tag)
+        except SdkUsageError:
+            # EntityClient.create performs its own existence check. Another caller
+            # may have created the same deterministic tag URN between our check and
+            # its check; in that case the requested postcondition is already met.
+            if client._graph.exists(tag_urn):
+                return {"success": True, "tag_urn": tag_urn, "created": False}
+            raise
+
+        return {"success": True, "tag_urn": tag_urn, "created": True}
+    except Exception as e:
+        raise RuntimeError(f"Error ensuring tag {tag_urn}: {str(e)}") from e
 
 
 def _validate_tag_urns(client: DataHubClient, tag_urns: List[str]) -> None:
