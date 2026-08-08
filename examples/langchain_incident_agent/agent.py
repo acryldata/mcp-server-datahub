@@ -34,12 +34,18 @@ def run_incident_agent(query: str) -> str:
 
 
 if __name__ == "__main__":
-    if len(sys.argv) > 1:
-        test_query = " ".join(sys.argv[1:])
-    else:
-        test_query = (
-            "The dataset urn:li:dataset:(urn:li:dataPlatform:snowflake,"
-            "showcase.ecommerce.orders,PROD) is stale. Please log an incident."
+    if len(sys.argv) <= 1:
+        # Dataset URNs are instance-specific, so there is no sample query that
+        # works everywhere. Point the user at their own instance instead.
+        print(
+            "Usage: python agent.py <your request, including a dataset URN>\n\n"
+            "Example:\n"
+            '  python agent.py "The dataset urn:li:dataset:'
+            "(urn:li:dataPlatform:snowflake,db.schema.orders,PROD) "
+            'is stale. Please log an incident."\n\n'
+            "Find real dataset URNs in your DataHub UI, or run:\n"
+            "  datahub search --entity dataset\n"
         )
+        raise SystemExit(1)
 
-    print(run_incident_agent(test_query))
+    print(run_incident_agent(" ".join(sys.argv[1:])))

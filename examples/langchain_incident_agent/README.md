@@ -46,6 +46,15 @@ export DATAHUB_GMS_TOKEN="<your-token>"          # required for DataHub Cloud
 | `DATAHUB_GMS_TOKEN` | For DataHub Cloud | _none_ | Auth token |
 | `DATAHUB_ACTOR_URN` | No | `urn:li:corpuser:datahub` | Actor recorded as having filed the incident |
 
+The agent needs a real dataset URN. Find one in your DataHub UI, or run:
+
+```bash
+datahub search --entity dataset
+```
+
+The tool verifies the dataset exists before filing, so a wrong URN fails with a
+clear error rather than creating an orphaned incident.
+
 ## Usage
 
 Run it from inside this directory (`agent.py` imports `tools.py` as a sibling
@@ -53,10 +62,10 @@ module):
 
 ```bash
 cd examples/langchain_incident_agent
-python agent.py "The dataset urn:li:dataset:(urn:li:dataPlatform:snowflake,showcase.ecommerce.orders,PROD) is stale. Please log an incident."
+python agent.py "The dataset urn:li:dataset:(urn:li:dataPlatform:snowflake,db.schema.orders,PROD) is stale. Please log an incident."
 ```
 
-With no argument, it runs a built-in sample query.
+With no argument, it prints usage and exits.
 
 The tool needs a **full dataset URN**. If you give it only a table name, it will
 ask you for the URN rather than inventing one. You can find a dataset's URN in

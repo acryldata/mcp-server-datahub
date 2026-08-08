@@ -7,6 +7,7 @@ import uuid
 
 from datahub.emitter.mcp import MetadataChangeProposalWrapper
 from datahub.emitter.rest_emitter import DatahubRestEmitter
+from datahub.ingestion.graph.client import DatahubClientConfig, DataHubGraph
 from datahub.metadata.schema_classes import (
     AuditStampClass,
     IncidentInfoClass,
@@ -46,6 +47,16 @@ def _make_emitter() -> DatahubRestEmitter:
     return DatahubRestEmitter(gms_server, token=gms_token)
 
 
+def _make_graph() -> DataHubGraph:
+    """Read-side client, configured from the same env vars as the emitter."""
+    return DataHubGraph(
+        DatahubClientConfig(
+            server=os.getenv("DATAHUB_GMS_URL", "http://localhost:8080"),
+            token=os.getenv("DATAHUB_GMS_TOKEN"),
+        )
+    )
+
+
 @tool
 def create_datahub_incident(
     dataset_urn: str,
@@ -82,6 +93,19 @@ def create_datahub_incident(
             f"Error: {dataset_urn!r} is not a valid DataHub URN. "
             "Look up the dataset's full URN before filing an incident."
         )
+
+    # A syntactically valid URN can still point at nothing. Without this check
+    # the emitter accepts an incident for a non-existent dataset and the tool
+    # reports success, leaving an orphaned incident and no visible error.
+    try:
+        if not _make_graph().exists(dataset_urn):
+            return (
+                f"Error: no dataset found in DataHub with URN {dataset_urn!r}. "
+                "Search DataHub for the correct URN before filing an incident."
+            )
+    except Exception as e:
+        logger.exception("Could not verify dataset %s exists", dataset_urn)
+        return f"Error: could not verify the dataset exists in DataHub: {e}"
 
     actor = os.getenv("DATAHUB_ACTOR_URN", DEFAULT_ACTOR)
     now = AuditStampClass(time=_now_millis(), actor=actor)
