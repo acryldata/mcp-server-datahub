@@ -143,7 +143,7 @@ def test_cross_product_batches_pairs_once_per_version_and_orders_results(graph):
     [
         (URN_A, "ownership"),
         (json.dumps([URN_A]), json.dumps(["ownership"])),
-        (f"[\"{URN_A}\",]", "[ownership]"),
+        (f'["{URN_A}",]', "[ownership]"),
     ],
 )
 def test_accepts_single_or_json_stringified_lists(graph, urns, aspects):
@@ -192,13 +192,12 @@ def test_pair_local_validation_and_missing_entity_do_not_abort_batch(graph):
         [URN_A, URN_B, "not-a-urn"],
         ["ownership", "dataHubIngestionSourceInfo"],
     )
-    by_pair = {
-        (item["urn"], item["aspectName"]): item for item in result["results"]
-    }
+    by_pair = {(item["urn"], item["aspectName"]): item for item in result["results"]}
     assert by_pair[(URN_A, "ownership")]["error"] is None
-    assert "allowed governance aspect" in by_pair[
-        (URN_A, "dataHubIngestionSourceInfo")
-    ]["error"]
+    assert (
+        "allowed governance aspect"
+        in by_pair[(URN_A, "dataHubIngestionSourceInfo")]["error"]
+    )
     assert "not found" in by_pair[(URN_B, "ownership")]["error"]
     assert "valid DataHub URN" in by_pair[("not-a-urn", "ownership")]["error"]
 

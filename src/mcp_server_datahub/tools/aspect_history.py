@@ -69,9 +69,7 @@ class _PairState:
         return (self.urn, self.aspect_name)
 
 
-def _validate_bounded_int(
-    name: str, value: int, *, minimum: int, maximum: int
-) -> None:
+def _validate_bounded_int(name: str, value: int, *, minimum: int, maximum: int) -> None:
     if type(value) is not int or not minimum <= value <= maximum:
         raise ValueError(f"{name} must be an integer from {minimum} to {maximum}")
 
@@ -88,7 +86,9 @@ def _normalize_string_list(
             try:
                 parsed = json.loads(repair_json(candidate))
             except Exception as exc:
-                raise ValueError(f"{name} must be a string or array of strings") from exc
+                raise ValueError(
+                    f"{name} must be a string or array of strings"
+                ) from exc
             value = parsed
         else:
             value = [candidate]
@@ -257,9 +257,7 @@ def get_aspect_history(
         minimum=1,
         maximum=MAX_ASPECT_HISTORY_START_VERSION,
     )
-    _validate_bounded_int(
-        "limit", limit, minimum=1, maximum=MAX_ASPECT_HISTORY_LIMIT
-    )
+    _validate_bounded_int("limit", limit, minimum=1, maximum=MAX_ASPECT_HISTORY_LIMIT)
     if type(include_current) is not bool:
         raise ValueError("include_current must be a boolean")
 
@@ -310,11 +308,15 @@ def get_aspect_history(
     openapi = VersionedOpenApiClient(graph)
     http_calls = 0
 
-    def read_version(version: int, pairs: list[_PairState]) -> dict[tuple[str, str], dict]:
+    def read_version(
+        version: int, pairs: list[_PairState]
+    ) -> dict[tuple[str, str], dict]:
         nonlocal http_calls
         batch = openapi.get_entities(
             [
-                VersionedAspectPair(state.urn, state.entity_name or "", state.aspect_name)
+                VersionedAspectPair(
+                    state.urn, state.entity_name or "", state.aspect_name
+                )
                 for state in pairs
             ],
             version=version,

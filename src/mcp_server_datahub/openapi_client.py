@@ -66,10 +66,7 @@ class VersionedOpenApiClient:
                     group_keys.append((urn, aspect_name))
                 request_payload.append(entity_request)
 
-            url = (
-                f"{self._graph._gms_server}/openapi/v3/entity/"
-                f"{entity_name}/batchGet"
-            )
+            url = f"{self._graph._gms_server}/openapi/v3/entity/{entity_name}/batchGet"
             try:
                 http_calls += 1
                 response = self._graph._session.post(
@@ -79,9 +76,7 @@ class VersionedOpenApiClient:
                     headers=_JSON_HEADERS,
                 )
                 if getattr(response, "status_code", None) == 404:
-                    raise RuntimeError(
-                        "versioned OpenAPI v3 batchGet is unavailable"
-                    )
+                    raise RuntimeError("versioned OpenAPI v3 batchGet is unavailable")
                 response.raise_for_status()
                 body = response.json()
                 if not isinstance(body, list):
@@ -102,9 +97,8 @@ class VersionedOpenApiClient:
                     continue
                 for aspect_name in entities[urn]:
                     envelope = entity.get(aspect_name)
-                    if (
-                        isinstance(envelope, dict)
-                        and isinstance(envelope.get("value"), dict)
+                    if isinstance(envelope, dict) and isinstance(
+                        envelope.get("value"), dict
                     ):
                         aspects[(urn, aspect_name)] = envelope
 
