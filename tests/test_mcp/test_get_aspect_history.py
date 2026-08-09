@@ -1,363 +1,317 @@
-"""Tests for the bounded, read-only get_aspect_history tool."""
+"""Tests for batch-shaped, version-aware aspect history."""
 
 import json
 import sys
 from unittest.mock import MagicMock, patch
 
 import pytest
-from datahub.errors import ItemNotFoundError
 from datahub_integrations.mcp.mcp_server import get_aspect_history
 
-aspect_history_module = sys.modules[get_aspect_history.__module__]
+history_module = sys.modules[get_aspect_history.__module__]
 
-DATASET_URN = (
-    "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.customer_orders,PROD)"
-)
-ASPECT_NAME = "datasetProperties"
+URN_A = "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.orders,PROD)"
+URN_B = "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.customers,PROD)"
+CHART_URN = "urn:li:chart:(looker,orders)"
 
 
-def _response(body, *, status_code: int = 200, error: Exception | None = None):
+def _aspect(value, *, run_id="run-1", extra=None):
+    envelope = {
+        "value": value,
+        "systemMetadata": {
+            "runId": run_id,
+            "pipelineName": "snowflake-prod",
+            "properties": {"secret": "not-projected"},
+        },
+        "auditStamp": {
+            "time": 1_785_900_000_000,
+            "actor": "urn:li:corpuser:__datahub_system",
+            "message": "not-projected",
+        },
+    }
+    if extra:
+        envelope.update(extra)
+    return envelope
+
+
+def _entity(urn, **aspects):
+    return {"urn": urn, **aspects}
+
+
+def _response(body, *, status=200, error=None):
     response = MagicMock()
-    response.status_code = status_code
+    response.status_code = status
     response.json.return_value = body
-    if error is not None:
+    if error:
         response.raise_for_status.side_effect = error
     return response
 
 
-def _envelope(
-    *,
-    value: dict,
-    system_metadata: dict | None = None,
-    audit_stamp: dict | None = None,
-) -> list[dict]:
-    aspect = {"value": value}
-    if system_metadata is not None:
-        aspect["systemMetadata"] = system_metadata
-    if audit_stamp is not None:
-        aspect["auditStamp"] = audit_stamp
-    return [{"urn": DATASET_URN, ASPECT_NAME: aspect}]
-
-
 @pytest.fixture
-def mock_client():
+def graph():
+    value = MagicMock()
+    value._gms_server = "https://datahub.example.test"
+    value.exists.return_value = True
+    return value
+
+
+def _run(graph, *args, **kwargs):
     client = MagicMock()
-    client._graph.exists.return_value = True
-    return client
+    client._graph = graph
+    with patch(
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
+        return_value=client,
+    ):
+        return get_aspect_history(*args, **kwargs)
 
 
-def test_is_marked_read_only():
+def test_is_read_only_and_version_gated():
     assert get_aspect_history._read_only_hint is True
+    requirement = get_aspect_history._version_requirement
+    assert requirement.cloud_min == (0, 3, 16, 0)
+    assert requirement.oss_min == (1, 4, 0, 0)
 
 
-def test_returns_current_history_pagination_and_bounded_provenance(mock_client):
-    current = _response(
-        _envelope(
-            value={"name": "customer_orders", "description": "<b>Current</b>"},
-            system_metadata={
-                "version": "1",
-                "runId": "run-current",
-                "lastRunId": "run-current",
-                "pipelineName": "snowflake-prod",
-                "lastObserved": 1_700_000_003_000,
-                "schemaVersion": 1,
-                "properties": {"credential": "must-not-be-projected"},
-            },
-            audit_stamp={
-                "time": 1_700_000_003_000,
-                "actor": "urn:li:corpuser:datahub",
-                "message": "must-not-be-projected",
-            },
-        )
-    )
-    oldest = _response(
-        _envelope(
-            value={"name": "orders_v1"},
-            system_metadata={
-                "runId": "run-1",
-                "pipelineName": "snowflake-prod",
-                "lastObserved": 1_700_000_001_000,
-            },
-        )
-    )
-    newer = _response(
-        _envelope(
-            value={"name": "orders_v2"},
-            system_metadata={
-                "runId": "run-2",
-                "pipelineName": "snowflake-prod",
-                "lastObserved": 1_700_000_002_000,
-            },
-        )
-    )
-    mock_client._graph._session.post.side_effect = [
-        current,
-        oldest,
-        newer,
+def test_cross_product_batches_pairs_once_per_version_and_orders_results(graph):
+    graph._session.post.side_effect = [
+        _response(
+            [
+                _entity(
+                    URN_A,
+                    ownership=_aspect({"owners": ["alice"]}),
+                    domains=_aspect({"domains": ["finance"]}),
+                ),
+                _entity(URN_B, ownership=_aspect({"owners": ["carol"]})),
+            ]
+        ),
+        _response(
+            [
+                _entity(URN_A, ownership=_aspect({"owners": ["bob"]})),
+                _entity(URN_B, ownership=_aspect({"owners": ["dave"]})),
+            ]
+        ),
         _response([]),
     ]
 
-    with patch(
-        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
-        return_value=mock_client,
-    ):
-        result = get_aspect_history(
-            DATASET_URN,
-            ASPECT_NAME,
-            start_version=1,
-            limit=5,
-        )
-
-    assert result["current"]["version"] == 0
-    assert result["current"]["value"]["name"] == "customer_orders"
-    assert result["current"]["value"]["description"] == "Current"
-    assert [entry["version"] for entry in result["history"]] == [1, 2]
-    assert [entry["value"]["name"] for entry in result["history"]] == [
-        "orders_v1",
-        "orders_v2",
-    ]
-    assert result["page"] == {
-        "startVersion": 1,
-        "requestedLimit": 5,
-        "returned": 2,
-        "hasMore": False,
-        "nextStartVersion": None,
-        "truncatedByResponseBudget": False,
-    }
-
-    projected_system_metadata = result["current"]["systemMetadata"]
-    assert projected_system_metadata["runId"] == "run-current"
-    assert projected_system_metadata["pipelineName"] == "snowflake-prod"
-    assert "properties" not in projected_system_metadata
-    assert result["current"]["auditStamp"] == {
-        "time": 1_700_000_003_000,
-        "actor": "urn:li:corpuser:datahub",
-    }
-    assert "message" not in result["current"]["auditStamp"]
-    assert result["provenance"]["systemMetadataRequested"] is True
-    assert "untrusted catalog data" in result["dataHandling"]
-
-    first_call = mock_client._graph._session.post.call_args_list[0]
-    assert first_call.args[0].endswith(
-        "/openapi/v3/entity/dataset/batchGet?systemMetadata=true"
+    result = _run(
+        graph,
+        [URN_A, URN_B],
+        ["ownership", "domains"],
+        limit=3,
     )
-    assert first_call.kwargs["headers"] == {
-        "Accept": "application/json",
-        "Content-Type": "application/json",
+
+    assert [(item["urn"], item["aspectName"]) for item in result["results"]] == [
+        (URN_A, "ownership"),
+        (URN_A, "domains"),
+        (URN_B, "ownership"),
+        (URN_B, "domains"),
+    ]
+    assert result["results"][0]["current"]["value"]["owners"] == ["alice"]
+    assert result["results"][0]["history"][0]["value"]["owners"] == ["bob"]
+    assert result["results"][1]["history"] == []
+    assert result["results"][3]["current"] is None
+    assert result["results"][3]["error"] is None
+    assert result["batch"] == {
+        "urns": 2,
+        "aspects": 2,
+        "pairs": 4,
+        "returnedPairs": 4,
+        "httpCalls": 3,
+        "truncatedByResponseBudget": False,
+        "droppedPairs": [],
     }
-    assert json.loads(first_call.kwargs["data"]) == [
+
+    first = graph._session.post.call_args_list[0]
+    assert first.args[0].endswith("/openapi/v3/entity/dataset/batchGet")
+    assert first.kwargs["params"] == {"systemMetadata": "true"}
+    payload = json.loads(first.kwargs["data"])
+    assert payload == [
         {
-            "urn": DATASET_URN,
-            ASPECT_NAME: {"headers": {"If-Version-Match": "0"}},
-        }
-    ]
-    requested_versions = [
-        json.loads(call.kwargs["data"])[0][ASPECT_NAME]["headers"]["If-Version-Match"]
-        for call in mock_client._graph._session.post.call_args_list
-    ]
-    assert requested_versions == ["0", "1", "2", "3"]
-
-
-def test_lookahead_produces_honest_next_start_version(mock_client):
-    mock_client._graph._session.post.side_effect = [
-        _response(_envelope(value={"name": "v1"})),
-        _response(_envelope(value={"name": "v2"})),
-        _response(_envelope(value={"name": "v3"})),
+            "urn": URN_A,
+            "ownership": {"headers": {"If-Version-Match": "0"}},
+            "domains": {"headers": {"If-Version-Match": "0"}},
+        },
+        {
+            "urn": URN_B,
+            "ownership": {"headers": {"If-Version-Match": "0"}},
+            "domains": {"headers": {"If-Version-Match": "0"}},
+        },
     ]
 
-    with patch(
-        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
-        return_value=mock_client,
-    ):
-        result = get_aspect_history(
-            DATASET_URN,
-            ASPECT_NAME,
-            start_version=1,
-            limit=2,
-            include_current=False,
-        )
 
-    assert result["current"] is None
-    assert [entry["version"] for entry in result["history"]] == [1, 2]
-    assert result["page"]["hasMore"] is True
-    assert result["page"]["nextStartVersion"] == 3
-    assert result["page"]["truncatedByResponseBudget"] is False
+@pytest.mark.parametrize(
+    ("urns", "aspects"),
+    [
+        (URN_A, "ownership"),
+        (json.dumps([URN_A]), json.dumps(["ownership"])),
+        (f"[\"{URN_A}\",]", "[ownership]"),
+    ],
+)
+def test_accepts_single_or_json_stringified_lists(graph, urns, aspects):
+    graph._session.post.side_effect = [_response([]), _response([])]
+    result = _run(graph, urns, aspects)
+    assert result["batch"]["pairs"] == 1
+    assert result["results"][0]["error"] is None
+
+
+def test_limit_and_start_version_are_per_pair_with_honest_lookahead(graph):
+    graph._session.post.side_effect = [
+        _response(
+            [
+                _entity(URN_A, ownership=_aspect({"v": 7})),
+                _entity(URN_B, ownership=_aspect({"v": 7})),
+            ]
+        ),
+        _response(
+            [
+                _entity(URN_A, ownership=_aspect({"v": 8})),
+                _entity(URN_B, ownership=_aspect({"v": 8})),
+            ]
+        ),
+    ]
+    result = _run(
+        graph,
+        [URN_A, URN_B],
+        "ownership",
+        start_version=7,
+        limit=1,
+        include_current=False,
+    )
+    for item in result["results"]:
+        assert [entry["version"] for entry in item["history"]] == [7]
+        assert item["page"]["hasMore"] is True
+        assert item["page"]["nextStartVersion"] == 8
+        assert item["page"]["requestedLimit"] == 1
+    assert result["batch"]["httpCalls"] == 2
+
+
+def test_pair_local_validation_and_missing_entity_do_not_abort_batch(graph):
+    graph.exists.side_effect = lambda urn: urn != URN_B
+    graph._session.post.side_effect = [_response([]), _response([])]
+    result = _run(
+        graph,
+        [URN_A, URN_B, "not-a-urn"],
+        ["ownership", "dataHubIngestionSourceInfo"],
+    )
+    by_pair = {
+        (item["urn"], item["aspectName"]): item for item in result["results"]
+    }
+    assert by_pair[(URN_A, "ownership")]["error"] is None
+    assert "allowed governance aspect" in by_pair[
+        (URN_A, "dataHubIngestionSourceInfo")
+    ]["error"]
+    assert "not found" in by_pair[(URN_B, "ownership")]["error"]
+    assert "valid DataHub URN" in by_pair[("not-a-urn", "ownership")]["error"]
+
+
+def test_transport_failure_is_pair_local_across_entity_types(graph):
+    def post(url, **kwargs):
+        if "/dataset/" in url:
+            return _response([], status=503, error=RuntimeError("provider detail"))
+        return _response([_entity(CHART_URN, ownership=_aspect({"owners": []}))])
+
+    graph._session.post.side_effect = post
+    result = _run(
+        graph,
+        [URN_A, CHART_URN],
+        "ownership",
+        limit=1,
+    )
+    dataset, chart = result["results"]
+    assert dataset["error"] == "DataHub batchGet failed (RuntimeError)"
+    assert "provider detail" not in dataset["error"]
+    assert chart["error"] is None
+    assert chart["current"] is not None
+
+
+def test_provenance_is_allowlisted_and_values_are_bounded(graph):
+    graph._session.post.side_effect = [
+        _response(
+            [
+                _entity(
+                    URN_A,
+                    ownership=_aspect(
+                        {"description": "<b>Current</b>"}, run_id="run-current"
+                    ),
+                )
+            ]
+        ),
+        _response([]),
+    ]
+    result = _run(graph, URN_A, "ownership")
+    current = result["results"][0]["current"]
+    assert current["value"]["description"] == "Current"
+    assert current["systemMetadata"]["runId"] == "run-current"
+    assert "properties" not in current["systemMetadata"]
+    assert current["auditStamp"] == {
+        "time": 1_785_900_000_000,
+        "actor": "urn:li:corpuser:__datahub_system",
+    }
+
+
+def test_oversized_value_returns_preview_instead_of_raw_value(graph):
+    graph._session.post.side_effect = [
+        _response([_entity(URN_A, ownership=_aspect({"text": "x" * 20_000}))]),
+        _response([]),
+    ]
+    result = _run(graph, URN_A, "ownership")
+    current = result["results"][0]["current"]
+    assert current["valueTruncated"] is True
+    assert current["valueChars"] > history_module.MAX_ASPECT_VALUE_CHARS
+    assert len(current["valuePreview"]) <= history_module.MAX_ASPECT_VALUE_CHARS
+    assert "value" not in current
+
+
+def test_global_budget_reports_dropped_pairs(graph, monkeypatch):
+    graph._session.post.side_effect = [
+        _response(
+            [
+                _entity(URN_A, ownership=_aspect({"text": "x" * 200})),
+                _entity(URN_B, ownership=_aspect({"text": "y" * 200})),
+            ]
+        ),
+        _response([]),
+    ]
+    monkeypatch.setattr(history_module, "MAX_RESULTS_CHARS", 700)
+    result = _run(graph, [URN_A, URN_B], "ownership")
+    assert result["batch"]["truncatedByResponseBudget"] is True
+    assert result["batch"]["returnedPairs"] < 2
+    assert result["batch"]["droppedPairs"]
 
 
 @pytest.mark.parametrize(
     ("kwargs", "message"),
     [
         ({"start_version": 0}, "start_version"),
-        ({"start_version": 1_000_001}, "start_version"),
         ({"start_version": True}, "start_version"),
         ({"limit": 0}, "limit"),
         ({"limit": 21}, "limit"),
-        ({"limit": False}, "limit"),
         ({"include_current": "true"}, "include_current"),
+        ({"urns": []}, "urns"),
+        ({"aspect_names": []}, "aspect_names"),
+        ({"urns": [URN_A] * 11}, "urns"),
+        ({"aspect_names": ["ownership"] * 9}, "aspect_names"),
+        (
+            {"urns": [URN_A] * 6, "aspect_names": ["ownership"] * 8},
+            "must not exceed",
+        ),
     ],
 )
 def test_rejects_unbounded_or_ambiguous_arguments(kwargs, message):
+    arguments = {"urns": URN_A, "aspect_names": "ownership", **kwargs}
     with pytest.raises(ValueError, match=message):
-        get_aspect_history(DATASET_URN, ASPECT_NAME, **kwargs)
+        get_aspect_history(**arguments)
 
 
-def test_rejects_aspects_outside_governance_allowlist():
-    with pytest.raises(ValueError, match="supported governance aspect"):
-        get_aspect_history(DATASET_URN, "dataHubIngestionSourceInfo")
+def test_response_explains_retention_and_untrusted_data(graph):
+    graph._session.post.side_effect = [_response([]), _response([])]
+    result = _run(graph, URN_A, "domains")
+    assert "retention policy" in result["provenance"]["boundedBy"]
+    assert "oldest to newest" in result["provenance"]["versionSemantics"]["historical"]
+    assert "untrusted catalog data" in result["dataHandling"]
 
 
-@pytest.mark.parametrize(
-    "urn",
-    [
-        "not-a-urn",
-        "urn:li:dataset:" + ("x" * 2_100),
-    ],
-)
-def test_rejects_invalid_or_oversized_urn_before_network_access(urn):
-    with pytest.raises(ValueError, match="urn"):
-        get_aspect_history(urn, ASPECT_NAME)
-
-
-def test_entity_not_found_is_distinct_from_missing_aspect_version(mock_client):
-    mock_client._graph.exists.return_value = False
-
-    with patch(
-        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
-        return_value=mock_client,
-    ):
-        with pytest.raises(ItemNotFoundError, match="not found"):
-            get_aspect_history(DATASET_URN, ASPECT_NAME)
-
-    mock_client._graph._session.post.assert_not_called()
-
-
-def test_missing_version_is_the_only_end_of_history_signal(mock_client):
-    mock_client._graph._session.post.side_effect = [
-        _response(_envelope(value={"name": "current"})),
-        _response([]),
-    ]
-
-    with patch(
-        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
-        return_value=mock_client,
-    ):
-        result = get_aspect_history(DATASET_URN, ASPECT_NAME)
-
-    assert result["current"]["value"]["name"] == "current"
-    assert result["history"] == []
-    assert result["page"]["hasMore"] is False
-
-
-def test_http_and_authorization_errors_are_not_silenced(mock_client):
-    denied = PermissionError("403 forbidden")
-    mock_client._graph._session.post.return_value = _response(
-        {"error": "forbidden"},
-        status_code=403,
-        error=denied,
-    )
-
-    with patch(
-        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
-        return_value=mock_client,
-    ):
-        with pytest.raises(PermissionError, match="403 forbidden"):
-            get_aspect_history(
-                DATASET_URN,
-                ASPECT_NAME,
-                include_current=False,
-            )
-
-
-def test_missing_openapi_capability_fails_explicitly(mock_client):
-    mock_client._graph._session.post.return_value = _response(
-        {"error": "not found"},
-        status_code=404,
-    )
-
-    with patch(
-        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
-        return_value=mock_client,
-    ):
-        with pytest.raises(RuntimeError, match="requires DataHub's OpenAPI v3"):
-            get_aspect_history(
-                DATASET_URN,
-                ASPECT_NAME,
-                include_current=False,
-            )
-
-
-@pytest.mark.parametrize(
-    "body",
-    [
-        {"urn": DATASET_URN},
-        [{"urn": "urn:li:dataset:(urn:li:dataPlatform:test,wrong,PROD)"}],
-        [{"urn": DATASET_URN, ASPECT_NAME: {}}],
-        [{"urn": DATASET_URN, ASPECT_NAME: {"value": "not-an-object"}}],
-    ],
-)
-def test_malformed_success_responses_fail_closed(mock_client, body):
-    mock_client._graph._session.post.return_value = _response(body)
-
-    with patch(
-        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
-        return_value=mock_client,
-    ):
-        with pytest.raises(RuntimeError):
-            get_aspect_history(
-                DATASET_URN,
-                ASPECT_NAME,
-                include_current=False,
-            )
-
-
-def test_oversized_single_value_becomes_an_explicit_preview(
-    mock_client,
-    monkeypatch,
-):
-    monkeypatch.setattr(aspect_history_module, "MAX_ASPECT_VALUE_CHARS", 80)
-    mock_client._graph._session.post.side_effect = [
-        _response(_envelope(value={"customProperties": {"payload": "x" * 500}})),
-        _response([]),
-    ]
-
-    with patch(
-        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
-        return_value=mock_client,
-    ):
-        result = get_aspect_history(DATASET_URN, ASPECT_NAME)
-
-    assert result["current"]["valueTruncated"] is True
-    assert result["current"]["valueChars"] > 80
-    assert result["current"]["valuePreview"].endswith("... [truncated]")
-    assert "value" not in result["current"]
-
-
-def test_total_response_budget_stops_with_resumable_cursor(
-    mock_client,
-    monkeypatch,
-):
-    monkeypatch.setattr(
-        aspect_history_module,
-        "MAX_ASPECT_HISTORY_RESPONSE_CHARS",
-        500,
-    )
-    mock_client._graph._session.post.side_effect = [
-        _response(_envelope(value={"description": "a" * 300})),
-        _response(_envelope(value={"description": "b" * 300})),
-    ]
-
-    with patch(
-        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
-        return_value=mock_client,
-    ):
-        result = get_aspect_history(
-            DATASET_URN,
-            ASPECT_NAME,
-            include_current=False,
-            limit=5,
-        )
-
-    assert [entry["version"] for entry in result["history"]] == [1]
-    assert result["page"]["hasMore"] is True
-    assert result["page"]["nextStartVersion"] == 2
-    assert result["page"]["truncatedByResponseBudget"] is True
+def test_404_at_versioned_seam_is_stable_pair_error(graph):
+    graph._session.post.return_value = _response([], status=404)
+    result = _run(graph, URN_A, "ownership")
+    assert result["results"][0]["error"] == "DataHub batchGet failed (RuntimeError)"
+    assert result["batch"]["httpCalls"] == 1
