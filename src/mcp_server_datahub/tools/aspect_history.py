@@ -288,23 +288,23 @@ def get_aspect_history(
             parsed_by_urn[urn] = "urn must contain a bounded DataHub URN"
             continue
         try:
-            parsed = Urn.from_string(urn)
-            normalized = str(parsed)
+            parsed_urn = Urn.from_string(urn)
+            normalized = str(parsed_urn)
             if not graph.exists(normalized):
                 parsed_by_urn[urn] = f"Entity {normalized} not found"
             else:
-                parsed_by_urn[urn] = (normalized, parsed.entity_type)
+                parsed_by_urn[urn] = (normalized, parsed_urn.entity_type)
         except Exception:
             parsed_by_urn[urn] = "urn must be a valid DataHub URN"
 
     for state in states:
-        parsed = parsed_by_urn[state.urn]
-        if isinstance(parsed, str):
-            state.error = parsed
+        parsed_result = parsed_by_urn[state.urn]
+        if isinstance(parsed_result, str):
+            state.error = parsed_result
         elif state.aspect_name not in ASPECT_HISTORY_ALLOWLIST:
             state.error = "aspect_name is not an allowed governance aspect"
         else:
-            state.urn, state.entity_name = parsed
+            state.urn, state.entity_name = parsed_result
 
     active = [state for state in states if state.error is None]
     openapi = VersionedOpenApiClient(graph)
