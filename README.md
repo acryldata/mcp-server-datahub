@@ -74,6 +74,10 @@ The DataHub MCP Server provides the following tools:
 
 Search DataHub using structured keyword search (/q syntax) with boolean logic, filters, pagination, and optional sorting by usage metrics.
 
+> **Page size is capped at 50.** `num_results` above 50 is silently reduced —
+> the response carries `count: 50` with no error or truncation flag. Compare
+> `count` against `total` and page with `offset` to read a full result set.
+
 `get_lineage`
 
 Retrieve upstream or downstream lineage for any entity (datasets, columns, dashboards, etc.) with filtering, query-within-lineage, pagination, and hop control.
@@ -85,6 +89,12 @@ Fetch real SQL queries referencing a dataset or column—manual or system-genera
 `get_entities`
 
 Fetch detailed metadata for one or more entities by URN; supports batch retrieval for efficient inspection of search results.
+
+> **Batch reads are bounded per server process, not per call.** In testing
+> against DataHub OSS v1.7.0 a session stopped responding after roughly six
+> URNs in total, blocking rather than raising; `search` was unaffected in the
+> same session. Spread large hydrations across processes, or read aspects via
+> `/openapi/v3/entity`.
 
 `list_schema_fields`
 
