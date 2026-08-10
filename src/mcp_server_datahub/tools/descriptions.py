@@ -99,9 +99,10 @@ def update_description(
             f"Invalid operation '{operation}'. Must be 'replace', 'append', or 'remove'"
         )
 
-    # For append operation, we need to fetch existing description first
+    # Appends need the current description. Column-level writes also need the
+    # schema so a missing field cannot be reported as a successful mutation.
     existing_description = ""
-    if operation == "append":
+    if operation == "append" or column_path:
         # Query to get existing description
         query = """
             query getEntity($urn: String!) {
@@ -186,6 +187,7 @@ def update_description(
             }
         """
 
+        matching_field = None
         try:
             result = graphql_helpers.execute_graphql(
                 client._graph,
@@ -194,16 +196,23 @@ def update_description(
                 operation_name="getEntity",
             )
 
-            entity_data = result.get("entity", {})
+            entity_data = result.get("entity") or {}
             if column_path:
-                # Get column description
-                schema_metadata = entity_data.get("schemaMetadata", {})
-                fields = schema_metadata.get("fields", [])
-                for field in fields:
-                    if field.get("fieldPath") == column_path:
-                        existing_description = field.get("description", "")
-                        break
-            else:
+                schema_metadata = entity_data.get("schemaMetadata") or {}
+                fields = schema_metadata.get("fields") or []
+                matching_field = next(
+                    (
+                        field
+                        for field in fields
+                        if field.get("fieldPath") == column_path
+                    ),
+                    None,
+                )
+                if operation == "append":
+                    existing_description = (
+                        matching_field.get("description") if matching_field else ""
+                    ) or ""
+            elif operation == "append":
                 # Get entity description
                 # Try editableProperties first (for Dataset, Container, etc.)
                 editable_props = entity_data.get("editableProperties", {})
@@ -215,10 +224,20 @@ def update_description(
                     existing_description = properties.get("description", "")
 
         except Exception as e:
+            if column_path:
+                raise RuntimeError(
+                    f"Failed to validate column_path '{column_path}' on {entity_urn}: {e}"
+                ) from e
             logger.warning(
                 f"Failed to fetch existing description for {entity_urn}: {e}. Will treat as empty."
             )
             existing_description = ""
+
+        if column_path and matching_field is None:
+            raise ValueError(
+                f"column_path '{column_path}' does not exist on {entity_urn}. "
+                "Verify the target dataset and column path before retrying."
+            )
 
     # Determine final description based on operation
     if operation == "append":
