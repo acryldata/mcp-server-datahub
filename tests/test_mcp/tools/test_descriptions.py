@@ -52,9 +52,16 @@ def test_update_description_replace_column(mock_datahub_client):
     entity_urn = "urn:li:dataset:(urn:li:dataPlatform:snowflake,db.schema.users,PROD)"
     column_path = "email"
 
-    mock_datahub_client._graph.execute_graphql.return_value = {
-        "updateDescription": True
-    }
+    mock_datahub_client._graph.execute_graphql.side_effect = [
+        {
+            "entity": {
+                "schemaMetadata": {
+                    "fields": [{"fieldPath": column_path, "description": ""}]
+                }
+            }
+        },
+        {"updateDescription": True},
+    ]
 
     with patch(
         "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
@@ -72,9 +79,57 @@ def test_update_description_replace_column(mock_datahub_client):
     assert result["column_path"] == column_path
 
     # Verify subResource fields are set for column-level descriptions
-    call_args = mock_datahub_client._graph.execute_graphql.call_args
+    assert mock_datahub_client._graph.execute_graphql.call_count == 2
+    call_args = mock_datahub_client._graph.execute_graphql.call_args_list[1]
     assert call_args.kwargs["variables"]["input"]["subResource"] == "email"
     assert call_args.kwargs["variables"]["input"]["subResourceType"] == "DATASET_FIELD"
+
+
+def test_update_description_append_rejects_missing_column(mock_datahub_client):
+    """Test that a missing column fails before the mutation is attempted."""
+    entity_urn = "urn:li:dataset:(urn:li:dataPlatform:duckdb,db.schema.users,PROD)"
+
+    mock_datahub_client._graph.execute_graphql.return_value = {
+        "entity": {"schemaMetadata": None}
+    }
+
+    with patch(
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
+        return_value=mock_datahub_client,
+    ):
+        with pytest.raises(ValueError, match="column_path 'email' does not exist"):
+            update_description(
+                entity_urn=entity_urn,
+                operation="append",
+                description="test",
+                column_path="email",
+            )
+
+    assert mock_datahub_client._graph.execute_graphql.call_count == 1
+
+
+def test_update_description_replace_column_validation_failure(mock_datahub_client):
+    """Test that schema lookup failures do not fall through to the mutation."""
+    entity_urn = "urn:li:dataset:(urn:li:dataPlatform:snowflake,db.users,PROD)"
+    mock_datahub_client._graph.execute_graphql.side_effect = Exception(
+        "GMS unavailable"
+    )
+
+    with patch(
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
+        return_value=mock_datahub_client,
+    ):
+        with pytest.raises(
+            RuntimeError, match="Failed to validate column_path 'email'"
+        ):
+            update_description(
+                entity_urn=entity_urn,
+                operation="replace",
+                description="User email",
+                column_path="email",
+            )
+
+    assert mock_datahub_client._graph.execute_graphql.call_count == 1
 
 
 def test_update_description_replace_with_markdown(mock_datahub_client):
@@ -241,9 +296,16 @@ def test_update_description_remove_from_column(mock_datahub_client):
     entity_urn = "urn:li:dataset:(urn:li:dataPlatform:snowflake,db.schema.users,PROD)"
     column_path = "old_field"
 
-    mock_datahub_client._graph.execute_graphql.return_value = {
-        "updateDescription": True
-    }
+    mock_datahub_client._graph.execute_graphql.side_effect = [
+        {
+            "entity": {
+                "schemaMetadata": {
+                    "fields": [{"fieldPath": column_path, "description": "Old"}]
+                }
+            }
+        },
+        {"updateDescription": True},
+    ]
 
     with patch(
         "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
@@ -256,7 +318,8 @@ def test_update_description_remove_from_column(mock_datahub_client):
     assert result["success"] is True
 
     # Verify subResource fields are set for column-level
-    call_args = mock_datahub_client._graph.execute_graphql.call_args
+    assert mock_datahub_client._graph.execute_graphql.call_count == 2
+    call_args = mock_datahub_client._graph.execute_graphql.call_args_list[1]
     assert call_args.kwargs["variables"]["input"]["subResource"] == "old_field"
 
 
