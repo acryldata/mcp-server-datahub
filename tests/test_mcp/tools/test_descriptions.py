@@ -593,3 +593,82 @@ def test_update_description_remove_glossary_term(mock_datahub_client):
     # Verify empty description was sent
     call_args = mock_datahub_client._graph.execute_graphql.call_args
     assert call_args.kwargs["variables"]["input"]["description"] == ""
+
+
+# Null-aspect tests: GraphQL returns an explicit null for an aspect that is not set,
+# so `.get(key, {})` yields None rather than the default.
+
+
+def test_update_description_append_with_null_editable_properties(
+    mock_datahub_client, caplog
+):
+    """Append on an entity whose editableProperties aspect is unset."""
+    entity_urn = "urn:li:dataset:(urn:li:dataPlatform:snowflake,db.schema.users,PROD)"
+    append_text = "Owned by the growth team."
+
+    mock_datahub_client._graph.execute_graphql.side_effect = [
+        {"entity": {"editableProperties": None, "schemaMetadata": None}},
+        {"updateDescription": True},
+    ]
+
+    with patch(
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
+        return_value=mock_datahub_client,
+    ):
+        result = update_description(
+            entity_urn=entity_urn, operation="append", description=append_text
+        )
+
+    assert result["success"] is True
+    assert "Failed to fetch existing description" not in caplog.text
+
+    update_call = mock_datahub_client._graph.execute_graphql.call_args_list[1]
+    assert update_call.kwargs["variables"]["input"]["description"] == append_text
+
+
+def test_update_description_append_column_with_null_schema_metadata(
+    mock_datahub_client, caplog
+):
+    """Append on a column of an entity that has no schemaMetadata aspect."""
+    entity_urn = "urn:li:dataset:(urn:li:dataPlatform:snowflake,db.schema.users,PROD)"
+    append_text = "Primary key."
+
+    mock_datahub_client._graph.execute_graphql.side_effect = [
+        {"entity": {"editableProperties": None, "schemaMetadata": None}},
+        {"updateDescription": True},
+    ]
+
+    with patch(
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
+        return_value=mock_datahub_client,
+    ):
+        result = update_description(
+            entity_urn=entity_urn,
+            operation="append",
+            description=append_text,
+            column_path="user_id",
+        )
+
+    assert result["success"] is True
+    assert "Failed to fetch existing description" not in caplog.text
+
+
+def test_update_description_append_with_null_entity(mock_datahub_client, caplog):
+    """Append when the entity lookup itself returns null."""
+    entity_urn = "urn:li:container:12345"
+
+    mock_datahub_client._graph.execute_graphql.side_effect = [
+        {"entity": None},
+        {"updateDescription": True},
+    ]
+
+    with patch(
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
+        return_value=mock_datahub_client,
+    ):
+        result = update_description(
+            entity_urn=entity_urn, operation="append", description="New text"
+        )
+
+    assert result["success"] is True
+    assert "Failed to fetch existing description" not in caplog.text

@@ -302,7 +302,7 @@ def list_schema_fields(
             )
 
         # Pre-compute matching count (need all fields for this)
-        fields_for_counting = result.get("schemaMetadata", {}).get("fields", [])
+        fields_for_counting = (result.get("schemaMetadata") or {}).get("fields", [])
         matching_count = sum(
             1 for field in fields_for_counting if score_field_by_keywords(field) > 0
         )
