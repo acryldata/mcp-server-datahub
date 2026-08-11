@@ -52,9 +52,16 @@ def test_update_description_replace_column(mock_datahub_client):
     entity_urn = "urn:li:dataset:(urn:li:dataPlatform:snowflake,db.schema.users,PROD)"
     column_path = "email"
 
-    mock_datahub_client._graph.execute_graphql.return_value = {
-        "updateDescription": True
-    }
+    mock_datahub_client._graph.execute_graphql.side_effect = [
+        {
+            "entity": {
+                "schemaMetadata": {
+                    "fields": [{"fieldPath": column_path, "description": ""}]
+                }
+            }
+        },
+        {"updateDescription": True},
+    ]
 
     with patch(
         "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
@@ -72,7 +79,7 @@ def test_update_description_replace_column(mock_datahub_client):
     assert result["column_path"] == column_path
 
     # Verify subResource fields are set for column-level descriptions
-    call_args = mock_datahub_client._graph.execute_graphql.call_args
+    call_args = mock_datahub_client._graph.execute_graphql.call_args_list[1]
     assert call_args.kwargs["variables"]["input"]["subResource"] == "email"
     assert call_args.kwargs["variables"]["input"]["subResourceType"] == "DATASET_FIELD"
 
@@ -241,9 +248,16 @@ def test_update_description_remove_from_column(mock_datahub_client):
     entity_urn = "urn:li:dataset:(urn:li:dataPlatform:snowflake,db.schema.users,PROD)"
     column_path = "old_field"
 
-    mock_datahub_client._graph.execute_graphql.return_value = {
-        "updateDescription": True
-    }
+    mock_datahub_client._graph.execute_graphql.side_effect = [
+        {
+            "entity": {
+                "schemaMetadata": {
+                    "fields": [{"fieldPath": column_path, "description": ""}]
+                }
+            }
+        },
+        {"updateDescription": True},
+    ]
 
     with patch(
         "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
@@ -256,11 +270,44 @@ def test_update_description_remove_from_column(mock_datahub_client):
     assert result["success"] is True
 
     # Verify subResource fields are set for column-level
-    call_args = mock_datahub_client._graph.execute_graphql.call_args
+    call_args = mock_datahub_client._graph.execute_graphql.call_args_list[1]
     assert call_args.kwargs["variables"]["input"]["subResource"] == "old_field"
 
 
 # Validation tests
+
+
+@pytest.mark.parametrize("operation", ["replace", "append", "remove"])
+def test_update_description_rejects_unknown_column_path(mock_datahub_client, operation):
+    """Test that column-level updates fail when the schema field is absent."""
+    entity_urn = "urn:li:dataset:(urn:li:dataPlatform:snowflake,db.schema.users,PROD)"
+    column_path = "missing_column"
+    mock_datahub_client._graph.execute_graphql.return_value = {
+        "entity": {
+            "schemaMetadata": {
+                "fields": [{"fieldPath": "email", "description": "Email address"}]
+            }
+        }
+    }
+    kwargs = {
+        "entity_urn": entity_urn,
+        "operation": operation,
+        "column_path": column_path,
+    }
+    if operation != "remove":
+        kwargs["description"] = "Test description"
+
+    with patch(
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
+        return_value=mock_datahub_client,
+    ):
+        with pytest.raises(
+            ValueError,
+            match="Column path 'missing_column' was not found on entity",
+        ):
+            update_description(**kwargs)
+
+    assert mock_datahub_client._graph.execute_graphql.call_count == 1
 
 
 def test_update_description_empty_entity_urn(mock_datahub_client):

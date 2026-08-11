@@ -99,9 +99,10 @@ def update_description(
             f"Invalid operation '{operation}'. Must be 'replace', 'append', or 'remove'"
         )
 
-    # For append operation, we need to fetch existing description first
+    # For append operation, we need to fetch the existing description first.
+    # Column-level operations also fetch the schema to confirm the field exists.
     existing_description = ""
-    if operation == "append":
+    if operation == "append" or column_path is not None:
         # Query to get existing description
         query = """
             query getEntity($urn: String!) {
@@ -194,15 +195,24 @@ def update_description(
                 operation_name="getEntity",
             )
 
-            entity_data = result.get("entity", {})
-            if column_path:
+            entity_data = result.get("entity") or {}
+            if column_path is not None:
                 # Get column description
-                schema_metadata = entity_data.get("schemaMetadata", {})
-                fields = schema_metadata.get("fields", [])
-                for field in fields:
-                    if field.get("fieldPath") == column_path:
-                        existing_description = field.get("description", "")
-                        break
+                schema_metadata = entity_data.get("schemaMetadata") or {}
+                fields = schema_metadata.get("fields") or []
+                matching_field = next(
+                    (
+                        field
+                        for field in fields
+                        if field.get("fieldPath") == column_path
+                    ),
+                    None,
+                )
+                if matching_field is None:
+                    raise ValueError(
+                        f"Column path '{column_path}' was not found on entity {entity_urn}"
+                    )
+                existing_description = matching_field.get("description", "")
             else:
                 # Get entity description
                 # Try editableProperties first (for Dataset, Container, etc.)
@@ -214,7 +224,13 @@ def update_description(
                     properties = entity_data.get("properties", {})
                     existing_description = properties.get("description", "")
 
+        except ValueError:
+            raise
         except Exception as e:
+            if column_path is not None:
+                raise RuntimeError(
+                    f"Error validating column path '{column_path}' for {entity_urn}: {e}"
+                ) from e
             logger.warning(
                 f"Failed to fetch existing description for {entity_urn}: {e}. Will treat as empty."
             )
@@ -245,7 +261,7 @@ def update_description(
     }
 
     # Add subresource fields if provided (for column-level descriptions)
-    if column_path:
+    if column_path is not None:
         variables["input"]["subResource"] = column_path
         variables["input"]["subResourceType"] = "DATASET_FIELD"
 
