@@ -563,6 +563,34 @@ def save_document(
                 "author": None,
             }
 
+        try:
+            existing_document = client.entities.get(urn)
+        except Exception as e:
+            logger.error(
+                f"Failed to verify document exists before updating '{urn}': {e}",
+                exc_info=True,
+            )
+            return {
+                "success": False,
+                "urn": None,
+                "message": (
+                    f"Could not verify that document '{urn}' exists. "
+                    "The document was not updated."
+                ),
+                "author": None,
+            }
+
+        if existing_document is None:
+            return {
+                "success": False,
+                "urn": None,
+                "message": (
+                    f"Document '{urn}' was not found. "
+                    "Provide no urn to create a new document."
+                ),
+                "author": None,
+            }
+
         # Validate that the document is within the agent-authored hierarchy
         # This prevents accidental modification of user-created or imported documents
         if _restrict_updates_to_shared_folder():
