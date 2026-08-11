@@ -181,6 +181,22 @@ def test_non_numeric_system_metadata_version_falls_back(graph):
     assert _versions(item) == [2, 1]
 
 
+def test_aspect_never_written_costs_no_history_probes(graph):
+    """No v0 means the aspect was never written, so there is nothing to page."""
+    graph._session.post.return_value = _response([_entity(URN_A)])
+
+    result = _run(graph, URN_A, "domains", limit=10)
+    item = result["results"][0]
+
+    assert item["current"] is None
+    assert item["history"] == []
+    assert item["error"] is None
+    assert item["page"]["anchorSource"] == "aspectAbsent"
+    assert item["page"]["hasMore"] is False
+    # 1 exists() probe + 1 v0 read, and no version probes at all.
+    assert result["batch"]["httpCalls"] == 2
+
+
 def test_probe_budget_exhaustion_is_reported_as_more_available(graph):
     """Sparse windows can burn the probe budget; that must not read as "no more"."""
     # Every other version retained, so each kept version costs two probes.

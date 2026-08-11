@@ -50,6 +50,7 @@ MAX_ASPECT_HISTORY_VERSION_PROBES = (
 ANCHOR_SYSTEM_METADATA = "systemMetadata"
 ANCHOR_CALLER = "caller"
 ANCHOR_FALLBACK = "fallback"
+ANCHOR_ASPECT_ABSENT = "aspectAbsent"
 
 _SYSTEM_METADATA_FIELDS = (
     "lastObserved",
@@ -304,9 +305,13 @@ def get_aspect_history(
     Paging walks *downward* from an anchor resolved per pair. By default the anchor
     is the newest retained version, read from the current aspect's
     ``systemMetadata.version``. Pass ``from_version`` to anchor explicitly; it is
-    clamped to the newest version when that is known. ``page.nextFromVersion``
-    is the cursor to pass as ``from_version`` for the following page, and
-    ``page.anchorSource`` reports how the anchor was chosen.
+    clamped to the newest version when that is known. ``page.fromVersion`` reports
+    the anchor this page resolved to (not necessarily the first version returned,
+    since the anchor itself may have been pruned), ``page.nextFromVersion`` is the
+    cursor to pass as ``from_version`` for the following page, and
+    ``page.anchorSource`` reports how the anchor was chosen: ``systemMetadata``,
+    ``caller``, ``fallback``, or ``aspectAbsent`` when the aspect has never been
+    written on that entity and therefore has no versions at all.
 
     Version numbers are not dense from 1. GMS keeps v0 as the latest and numbers
     history 1..N with 1 oldest, but version-based retention (about 20 versions by
@@ -419,7 +424,15 @@ def get_aspect_history(
             if state.error is not None:
                 continue
             aspect = current.get(state.key)
-            if aspect is not None and include_current:
+            if aspect is None:
+                # GMS keeps v0 as the latest value, so an aspect with no v0 has
+                # never been written and cannot have positive versions. Stop here
+                # rather than spending the probe budget looking for history that
+                # cannot exist.
+                state.anchor_source = ANCHOR_ASPECT_ABSENT
+                state.exhausted = True
+                continue
+            if include_current:
                 state.current = _format_aspect_version(0, aspect)
 
             newest = _newest_retained_version(aspect)
