@@ -270,6 +270,47 @@ The agent may either:
 | `get_lineage_paths_between` | Understand deeper relationships between datasets. |
 
 
+## Notes & Gotchas for Agent Authors
+
+A few behaviors are easy to trip over when building autonomous agents on top of
+these tools — especially agents that both read *and* write metadata. Documenting
+them here so the next builder doesn't have to rediscover them empirically.
+
+### Reads after writes are eventually consistent
+
+DataHub acknowledges a mutation (or an ingestion run) once it has been committed
+to the metadata store (GMS), but the search index (OpenSearch/Elasticsearch)
+that backs `search` is updated **asynchronously** afterward. An agent that
+writes an entity — or ingests a batch of entities — and then immediately calls
+`search` may not see them yet.
+
+If your flow is *ingest/write → search → act* in a single automated pass (for
+example in CI), don't assume the freshly written assets are searchable the
+instant the write returns. Poll until the expected assets appear before relying
+on `search` results, rather than reading once immediately after the write.
+Point lookups by URN (`get_entities`) reflect writes sooner than `search` does,
+since they don't depend on the search index.
+
+### `get_lineage` only traverses lineage relationships
+
+`get_lineage` walks the lineage graph (dataset → dataset, field → field, and
+similar `DownstreamOf`/`Consumes`/`Produces`-style edges). Some relationships
+that *feel* like lineage are modeled as entity aspects rather than lineage
+edges, and those are **not** returned by `get_lineage`. For ML agents in
+particular:
+
+- An `MLModel`'s deployments (`MLModelProperties.deployments`) are an aspect on
+  the model, not a downstream lineage edge — traversing downstream from a model
+  surfaces its `MLModelGroup`, not its `MLModelDeployment`(s).
+- Likewise, an `MLModel`'s features (`MLModelProperties.mlFeatures`) and an
+  `MLFeature`'s sources (`MLFeatureProperties.sources`) are aspect fields.
+
+To read these, fetch the entity's aspects directly (`get_entities`) rather than
+expecting them in a `get_lineage` traversal. Mentioning it because "which
+datasets feed this model, and where is it deployed?" is a natural first question
+for a production-ML agent, and it isn't answerable from lineage alone.
+
+
 ## Developing
 
 See [DEVELOPING.md](DEVELOPING.md).
