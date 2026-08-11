@@ -40,6 +40,7 @@ asyncio_default_fixture_loop_scope = "function"
 
 [project.scripts]
 mcp-server-datahub = "mcp_server_datahub.__main__:main"
+mcp-server-datahub-http = "mcp_server_datahub.__main__:http_main"
 
 [build-system]
 requires = ["setuptools>=64", "setuptools-scm>=8"]
@@ -47,6 +48,9 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+mcp_server_datahub = ["gql/*.gql"]
 
 [tool.setuptools_scm]
 version_file = "src/mcp_server_datahub/_version.py"

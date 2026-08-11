@@ -41,11 +41,15 @@ test against a real HTTP/SSE server or a stdio subprocess.
 | Stdio | `--stdio-cmd "uv run mcp-server-datahub"` | Launches server as a subprocess, communicates via stdin/stdout. |
 | PyPI | `--pypi [version]` | Installs from PyPI in a clean temp venv and re-runs the smoke check. |
 
+For a streamable HTTP URL, omitting `--token` derives the credential from
+`DATAHUB_GMS_TOKEN` or `~/.datahubenv`. SSE URLs deliberately do not receive
+an Authorization header.
+
 #### Examples
 
 ```bash
 # Against a running HTTP server:
-uv run mcp-server-datahub --transport http &
+env -u DATAHUB_GMS_TOKEN uv run mcp-server-datahub-http &
 uv run python scripts/smoke_check.py --url http://127.0.0.1:8000/mcp
 kill %1
 
@@ -68,11 +72,11 @@ bash scripts/test_all_modes.sh --all    # everything (flags forwarded to smoke_c
 
 The script:
 1. Runs the smoke check **in-process** (default mode).
-2. Starts the server with `--transport http`, runs smoke check with `--url`, stops it.
+2. Starts `mcp-server-datahub-http`, runs smoke check with `--url` and bearer authentication, stops it.
 3. Starts the server with `--transport sse`, runs smoke check with `--url`, stops it.
 4. Runs the smoke check with `--stdio-cmd` (subprocess mode).
-5. Starts the server via `uv run fastmcp run :create_app`, runs smoke check
-   with `--url`, stops it.  This exercises the `create_app()` factory that
+5. Starts the server via `uv run fastmcp run :create_http_app`, runs smoke check
+   with `--url`, stops it. This exercises the authenticated `create_http_app()` factory that
    `fastmcp dev` uses under the hood.  We use `uv run fastmcp run` directly
    as a substitute so that the test suite doesn't require Node.js / npx.
 6. Prints a summary of pass/fail across all modes.
@@ -98,8 +102,8 @@ scripts/logs/
   sse_server.stderr
   stdio-subprocess.stdout
   stdio-subprocess.stderr
-  fastmcp-run-create_app-factory.stdout
-  fastmcp-run-create_app-factory.stderr
+  fastmcp-run-create_http_app-factory.stdout
+  fastmcp-run-create_http_app-factory.stderr
   fastmcp-run_server.stdout
   fastmcp-run_server.stderr
 ```
@@ -118,7 +122,7 @@ If you need to reproduce or debug individual modes outside of
 uv run python scripts/smoke_check.py
 
 # --- Mode 2: HTTP ---
-uv run mcp-server-datahub --transport http &
+env -u DATAHUB_GMS_TOKEN uv run mcp-server-datahub-http &
 # wait until: curl -sf http://127.0.0.1:8000/health
 uv run python scripts/smoke_check.py --url http://127.0.0.1:8000/mcp
 kill %1
@@ -132,8 +136,8 @@ kill %1
 # --- Mode 4: Stdio ---
 uv run python scripts/smoke_check.py --stdio-cmd "uv run mcp-server-datahub"
 
-# --- Mode 5: fastmcp run (create_app factory) ---
-uv run fastmcp run src/mcp_server_datahub/__main__.py:create_app --transport http &
+# --- Mode 5: fastmcp run (explicit HTTP factory) ---
+env -u DATAHUB_GMS_TOKEN uv run fastmcp run src/mcp_server_datahub/__main__.py:create_http_app --transport http &
 # wait until: curl -sf http://127.0.0.1:8000/health
 uv run python scripts/smoke_check.py --url http://127.0.0.1:8000/mcp
 kill %1
