@@ -811,6 +811,9 @@ fragment entityPreview on Entity {
                 value
             }
         }
+        ownership {
+            ...ownershipFields
+        }
         deprecation {
             ...deprecationFields
         }
