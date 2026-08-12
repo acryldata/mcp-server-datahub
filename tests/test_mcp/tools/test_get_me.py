@@ -221,7 +221,8 @@ def test_get_me_warns_for_nonexistent_user(
 
     assert result["success"] is True
     assert "non-existent authenticated user" in caplog.text
-    assert "authentication settings or supplied token might be invalid" in caplog.text
+    assert "METADATA_SERVICE_AUTH_ENABLED" in caplog.text
+    assert "supplied token might be invalid" in caplog.text
 
 
 def test_get_me_user_with_multiple_groups(mock_datahub_client):
