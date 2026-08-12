@@ -103,6 +103,9 @@ Connect to `http://localhost:8000/mcp` and include the token on every request:
 Authorization: Bearer <datahub-personal-access-token>
 ```
 
+Tokens are accepted only in the `Authorization` header; query-string tokens
+such as `?access_token=...` are rejected.
+
 For a local build, create a `.env` file containing `DATAHUB_GMS_URL`, then run:
 
 ```bash

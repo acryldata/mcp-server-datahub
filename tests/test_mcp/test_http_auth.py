@@ -264,20 +264,25 @@ _INITIALIZE_REQUEST = {
 
 @pytest.mark.anyio
 @pytest.mark.parametrize(
-    "headers",
+    ("headers", "path"),
     [
-        {},
-        {"Authorization": "Bearer invalid-token"},
+        ({}, "/mcp"),
+        ({"Authorization": "Bearer invalid-token"}, "/mcp"),
+        ({}, "/mcp?access_token=valid-token"),
+        ({}, "/mcp?token=valid-token"),
     ],
 )
-async def test_http_rejects_missing_or_invalid_token(headers: dict[str, str]) -> None:
+async def test_http_rejects_missing_invalid_or_query_token(
+    headers: dict[str, str],
+    path: str,
+) -> None:
     app = _make_authenticated_http_app("valid-token")
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app),
         base_url="http://testserver",
         follow_redirects=True,
     ) as client:
-        response = await client.post("/mcp", json=_INITIALIZE_REQUEST, headers=headers)
+        response = await client.post(path, json=_INITIALIZE_REQUEST, headers=headers)
 
     assert response.status_code == 401
 
