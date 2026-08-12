@@ -221,7 +221,7 @@ def test_get_me_warns_for_nonexistent_user(
 
     assert result["success"] is True
     assert "non-existent authenticated user" in caplog.text
-    assert "METADATA_SERVICE_AUTH_ENABLED" in caplog.text
+    assert "Check the auth settings and METADATA_SERVICE_AUTH_ENABLED" in caplog.text
     assert "supplied token might be invalid" in caplog.text
 
 

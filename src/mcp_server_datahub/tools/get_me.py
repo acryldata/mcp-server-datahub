@@ -91,8 +91,8 @@ def get_me() -> dict[str, Any]:
             if corp_user.get("exists") is False:
                 logger.warning(
                     "DataHub returned a non-existent authenticated user (%s). "
-                    "METADATA_SERVICE_AUTH_ENABLED or the supplied token might "
-                    "be invalid.",
+                    "Check the auth settings and METADATA_SERVICE_AUTH_ENABLED; "
+                    "the supplied token might be invalid.",
                     corp_user.get("urn") or corp_user.get("username") or "unknown",
                 )
             return {
