@@ -37,7 +37,7 @@ _HTTP_MAX_CONCURRENT_VALIDATIONS = 8
 
 
 class _DataHubClientMiddleware(Middleware):
-    """Propagate one legacy DataHub client into every MCP request."""
+    """Propagate one local DataHub client into every MCP request."""
 
     def __init__(self, client: DataHubClient) -> None:
         self._client = client
@@ -100,6 +100,9 @@ class _DataHubTokenVerifier(TokenVerifier):
             self._clients[token] = client
             return client
 
+    def invalidate_client(self, token: str) -> None:
+        self._clients.pop(token, None)
+
     async def verify_token(self, token: str) -> Optional[AccessToken]:
         try:
             await self.get_client(token)
@@ -115,6 +118,16 @@ class _DataHubTokenVerifier(TokenVerifier):
         )
 
 
+def _is_datahub_auth_failure(exc: BaseException) -> bool:
+    cause: Optional[BaseException] = exc
+    while cause is not None:
+        response = getattr(cause, "response", None)
+        if getattr(response, "status_code", None) in (401, 403):
+            return True
+        cause = cause.__cause__ or cause.__context__
+    return False
+
+
 class _AuthenticatedDataHubClientMiddleware(Middleware):
     """Use the DataHub client associated with the authenticated HTTP request."""
 
@@ -126,9 +139,14 @@ class _AuthenticatedDataHubClientMiddleware(Middleware):
         if access_token is None:
             raise RuntimeError("Authenticated HTTP request has no access token")
 
-        client = await self._token_verifier.get_client(access_token.token)
-        with with_datahub_client(client):
-            return await call_next(context)
+        try:
+            client = await self._token_verifier.get_client(access_token.token)
+            with with_datahub_client(client):
+                return await call_next(context)
+        except Exception as exc:
+            if _is_datahub_auth_failure(exc):
+                self._token_verifier.invalidate_client(access_token.token)
+            raise
 
 
 # This endpoint deliberately remains outside MCP authentication so container
@@ -138,7 +156,7 @@ async def health(request: Request) -> Response:
     return JSONResponse({"status": "ok"})
 
 
-_AppMode = Literal["legacy", "http"]
+_AppMode = Literal["local", "http"]
 _app_mode: Optional[_AppMode] = None
 
 
@@ -174,10 +192,10 @@ def _configure_app(
     return mcp
 
 
-def create_legacy_app() -> FastMCP:
-    """Create the legacy local app used by the CLI's stdio and SSE modes."""
+def create_local_app() -> FastMCP:
+    """Create the local app used by the CLI's stdio and SSE modes."""
 
-    existing_app = _get_existing_app("legacy")
+    existing_app = _get_existing_app("local")
     if existing_app is not None:
         return existing_app
 
@@ -185,7 +203,7 @@ def create_legacy_app() -> FastMCP:
         client_mode=ClientMode.SDK,
         datahub_component=f"mcp-server-datahub/{__version__}",
     )
-    return _configure_app("legacy", _DataHubClientMiddleware(client))
+    return _configure_app("local", _DataHubClientMiddleware(client))
 
 
 def create_http_app() -> FastMCP:
@@ -233,7 +251,7 @@ def main(transport: Literal["stdio", "sse"], debug: bool) -> None:
         # Add LoggingMiddleware first so it wraps the complete middleware stack.
         mcp.add_middleware(LoggingMiddleware(include_payloads=True))
 
-    create_legacy_app().run(transport=transport, show_banner=False)
+    create_local_app().run(transport=transport, show_banner=False)
 
 
 @click.command()

@@ -1,6 +1,7 @@
-"""Tests for HTTP bearer authentication and legacy local configuration."""
+"""Tests for HTTP bearer authentication and local configuration."""
 
 import asyncio
+from types import SimpleNamespace
 from typing import Any, Optional
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -16,7 +17,7 @@ from mcp_server_datahub.__main__ import (
     _DataHubClientMiddleware,
     _DataHubTokenVerifier,
     create_http_app,
-    create_legacy_app,
+    create_local_app,
     http_main,
     main,
 )
@@ -142,7 +143,33 @@ async def test_authenticated_middleware_never_falls_back_without_token() -> None
     call_next.assert_not_awaited()
 
 
-def test_create_legacy_app_preserves_from_env_configuration() -> None:
+@pytest.mark.anyio
+@pytest.mark.parametrize("status_code", [401, 403, 500])
+async def test_authenticated_middleware_evicts_auth_failures_from_cache(
+    status_code: int,
+) -> None:
+    verifier = _DataHubTokenVerifier("https://datahub.example")
+    token = "cached-token"
+    verifier._clients[token] = MagicMock()
+    middleware = _AuthenticatedDataHubClientMiddleware(verifier)
+    call_next = AsyncMock()
+    error = RuntimeError("DataHub request failed")
+    error.response = SimpleNamespace(status_code=status_code)  # type: ignore[attr-defined]
+    call_next.side_effect = error
+    access_token = AccessToken(token=token, client_id="test-client", scopes=[])
+
+    with (
+        patch(
+            "mcp_server_datahub.__main__.get_access_token", return_value=access_token
+        ),
+        pytest.raises(RuntimeError, match="DataHub request failed"),
+    ):
+        await middleware.on_message(MagicMock(), call_next)
+
+    assert (token in verifier._clients) is (status_code == 500)
+
+
+def test_create_local_app_preserves_from_env_configuration() -> None:
     client = MagicMock()
 
     with patch(
@@ -150,13 +177,13 @@ def test_create_legacy_app_preserves_from_env_configuration() -> None:
         return_value=client,
     ) as from_env:
         with patch("mcp_server_datahub.__main__._configure_app") as configure:
-            create_legacy_app()
+            create_local_app()
 
     from_env.assert_called_once_with(
         client_mode=ClientMode.SDK,
         datahub_component=f"mcp-server-datahub/{__version__}",
     )
-    assert configure.call_args.args[0] == "legacy"
+    assert configure.call_args.args[0] == "local"
     middleware = configure.call_args.args[1]
     assert isinstance(middleware, _DataHubClientMiddleware)
     assert middleware._client is client
@@ -201,7 +228,7 @@ def test_create_http_app_installs_authentication(
     assert middleware._token_verifier is verifier
 
 
-def test_legacy_cli_does_not_offer_http_transport() -> None:
+def test_local_cli_does_not_offer_http_transport() -> None:
     result = CliRunner().invoke(main, ["--transport", "http"])
 
     assert result.exit_code == 2

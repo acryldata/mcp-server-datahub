@@ -17,7 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking for HTTP deployments:** HTTP now uses the separate
   `mcp-server-datahub-http` entry point and requires each MCP client to provide
   its own DataHub bearer token. `DATAHUB_GMS_TOKEN` remains supported by the
-  legacy local stdio and SSE transports; HTTP refuses to start when it is set.
+  local stdio and SSE transports; HTTP refuses to start when it is set.
 
 ### Security
 

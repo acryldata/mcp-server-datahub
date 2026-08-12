@@ -72,7 +72,11 @@ uvx mcp-server-datahub
 
 The stdio server loads `DATAHUB_GMS_URL` and `DATAHUB_GMS_TOKEN` from the
 environment, falling back to `~/.datahubenv` created by `datahub init`. This is
-the legacy deployment mode and does not require HTTP authentication.
+the local deployment mode and does not require HTTP authentication.
+
+The local CLI also supports SSE for trusted, local-network use. SSE does not
+provide the per-request bearer authentication used by the dedicated HTTP
+entry point and should not be exposed as a shared network service.
 
 ### Docker HTTP deployment
 
@@ -83,7 +87,7 @@ DataHub token so DataHub permissions and audit identity are preserved per user.
 > **Breaking change for existing HTTP deployments:** HTTP now has a separate
 > `mcp-server-datahub-http` entry point. It refuses to start when
 > `DATAHUB_GMS_TOKEN` is configured, and every client must send its own DataHub
-> bearer token. Local stdio and legacy SSE behavior are unchanged.
+> bearer token. Local stdio and SSE behavior are unchanged.
 
 ```bash
 docker run --rm -p 8000:8000 \
@@ -127,17 +131,15 @@ readinessProbe:
     port: 8000
 ```
 
-Bearer tokens must be protected in transit. Terminate TLS at an ingress or
-reverse proxy before exposing the HTTP deployment outside a trusted network.
-DataHub metadata-service authentication must also be enabled (set
-`METADATA_SERVICE_AUTH_ENABLED=true` on OSS). If it is disabled, DataHub accepts
-arbitrary bearer values and the MCP server cannot establish the caller's
-identity.
+Bearer tokens must be protected in transit. Terminate TLS and apply
+rate-limiting at an ingress or reverse proxy before exposing the HTTP deployment
+outside a trusted network. Rate limiting is especially important because each
+new invalid token can trigger a validation request to GMS.
 
 Successfully verified tokens and their DataHub clients are cached for five
-minutes. Consequently, a token revoked in DataHub can remain usable by the MCP
-server for up to five minutes. Failed validations are not cached; concurrent
-upstream validations are bounded to protect DataHub.
+minutes. If a cached request receives a 401 or 403 from DataHub, that client is
+evicted and the next request revalidates the token. Failed validations are not
+cached; concurrent upstream validations are bounded to protect DataHub.
 
 ## Demo
 
