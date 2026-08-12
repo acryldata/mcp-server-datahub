@@ -200,11 +200,31 @@ jobs:
         run: |
           uv run pytest tests/test_mcp_integration.py -v --timeout=120
 
+      - name: Run HTTP integration tests (longtail)
+        if: matrix.test_env == 'longtail'
+        env:
+          DATAHUB_GMS_URL: ${{ secrets.LONGTAIL_GMS_URL }}
+          DATAHUB_GMS_TOKEN: ${{ secrets.LONGTAIL_GMS_TOKEN }}
+          MCP_TRANSPORT: "http"
+        run: |
+          uv run pytest tests/test_mcp_integration.py -v --timeout=120
+
       - name: Run integration tests (OSS)
         if: matrix.test_env == 'oss'
         env:
           DATAHUB_GMS_URL: "http://localhost:8080"
           DATAHUB_GMS_TOKEN: ""
+        run: |
+          uv run pytest tests/test_mcp_integration.py -v --timeout=120
+
+      - name: Run HTTP integration tests (OSS)
+        if: matrix.test_env == 'oss'
+        env:
+          DATAHUB_GMS_URL: "http://localhost:8080"
+          # Quickstart has GMS auth disabled, but HTTP mode still requires a
+          # non-empty bearer token at the MCP boundary.
+          DATAHUB_GMS_TOKEN: "ci-token"
+          MCP_TRANSPORT: "http"
         run: |
           uv run pytest tests/test_mcp_integration.py -v --timeout=120
 

@@ -4,12 +4,19 @@ These tests validate the MCP server end-to-end through the MCP protocol,
 ensuring proper integration with DataHub GMS.
 """
 
+import asyncio
+import contextlib
 import json
+import os
+import socket
+from dataclasses import dataclass
 from typing import Any, AsyncGenerator, Iterable, Type, TypeVar
 
+import httpx
 import pytest
 from datahub.sdk.main_client import DataHubClient
 from fastmcp import Client
+from fastmcp.client.transports import StreamableHttpTransport
 from mcp.types import TextContent
 from loguru import logger
 from mcp_server_datahub._telemetry import TelemetryMiddleware
@@ -31,6 +38,146 @@ _test_target_urn = "urn:li:dataset:(urn:li:dataPlatform:looker,long-tail-compani
 mcp.add_middleware(TelemetryMiddleware())
 
 T = TypeVar("T")
+
+_HTTP_MODE = "http"
+_LOCAL_MODE = "local"
+_HTTP_SERVER_START_TIMEOUT_SECONDS = 30
+_HTTP_SERVER_SHUTDOWN_TIMEOUT_SECONDS = 5
+
+_INITIALIZE_REQUEST = {
+    "jsonrpc": "2.0",
+    "method": "initialize",
+    "id": 1,
+    "params": {
+        "protocolVersion": "2025-06-18",
+        "capabilities": {},
+        "clientInfo": {"name": "mcp-integration-test", "version": "1"},
+    },
+}
+
+
+@dataclass
+class _HttpServer:
+    base_url: str
+    token: str
+    process: asyncio.subprocess.Process
+    stderr_lines: list[str]
+    stderr_task: asyncio.Task[None]
+
+
+def _integration_transport() -> str:
+    transport = os.environ.get("MCP_TRANSPORT", _LOCAL_MODE).lower()
+    if transport not in {_LOCAL_MODE, _HTTP_MODE}:
+        raise RuntimeError(
+            f"Unsupported MCP_TRANSPORT={transport!r}; expected {_LOCAL_MODE!r} or {_HTTP_MODE!r}"
+        )
+    return transport
+
+
+def _free_port() -> int:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind(("127.0.0.1", 0))
+        return int(sock.getsockname()[1])
+
+
+async def _collect_stderr(stream: asyncio.StreamReader, lines: list[str]) -> None:
+    while line := await stream.readline():
+        lines.append(line.decode(errors="replace"))
+
+
+async def _wait_for_http_server(server: _HttpServer) -> None:
+    async with httpx.AsyncClient(
+        base_url=server.base_url,
+        timeout=httpx.Timeout(1.0),
+    ) as client:
+        for _ in range(_HTTP_SERVER_START_TIMEOUT_SECONDS * 10):
+            if server.process.returncode is not None:
+                stderr = "".join(server.stderr_lines)
+                raise RuntimeError(
+                    f"MCP HTTP server exited with code {server.process.returncode}: {stderr}"
+                )
+            try:
+                response = await client.get("/health")
+                if response.status_code == 200:
+                    return
+            except httpx.HTTPError:
+                pass
+            await asyncio.sleep(0.1)
+
+    raise TimeoutError(f"MCP HTTP server did not start at {server.base_url}")
+
+
+async def _wait_for_log(server: _HttpServer, text: str) -> None:
+    async with asyncio.timeout(_HTTP_SERVER_START_TIMEOUT_SECONDS):
+        while not any(text in line for line in server.stderr_lines):
+            await asyncio.sleep(0.05)
+
+
+async def _stop_http_server(server: _HttpServer) -> None:
+    if server.process.returncode is None:
+        server.process.terminate()
+        try:
+            await asyncio.wait_for(
+                server.process.wait(),
+                timeout=_HTTP_SERVER_SHUTDOWN_TIMEOUT_SECONDS,
+            )
+        except asyncio.TimeoutError:
+            server.process.kill()
+            await server.process.wait()
+
+    server.stderr_task.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await server.stderr_task
+
+
+@pytest.fixture
+async def http_server() -> AsyncGenerator[_HttpServer | None, None]:
+    if _integration_transport() != _HTTP_MODE:
+        yield None
+        return
+
+    gms_url = os.environ.get("DATAHUB_GMS_URL")
+    token = os.environ.get("DATAHUB_GMS_TOKEN")
+    if not gms_url or not token:
+        pytest.fail(
+            "HTTP integration tests require DATAHUB_GMS_URL and a non-empty DATAHUB_GMS_TOKEN"
+        )
+
+    port = _free_port()
+    server_env = os.environ.copy()
+    for name in list(server_env):
+        if name.startswith("DATAHUB_"):
+            server_env.pop(name)
+    server_env["DATAHUB_GMS_URL"] = gms_url
+    server_env["FASTMCP_HOST"] = "127.0.0.1"
+    server_env["FASTMCP_PORT"] = str(port)
+    server_env["TOOLS_IS_USER_ENABLED"] = "true"
+    # HTTP mode must validate the per-request Authorization header. Do not let
+    # the server inherit the test runner's shared credential or auth-provider
+    # configuration; DATAHUB_GMS_URL is its only DataHub setting.
+    server_env.pop("MCP_TRANSPORT", None)
+
+    process = await asyncio.create_subprocess_exec(
+        "mcp-server-datahub-http",
+        env=server_env,
+        stdout=asyncio.subprocess.DEVNULL,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    assert process.stderr is not None
+    stderr_lines: list[str] = []
+    server = _HttpServer(
+        base_url=f"http://127.0.0.1:{port}",
+        token=token,
+        process=process,
+        stderr_lines=stderr_lines,
+        stderr_task=asyncio.create_task(_collect_stderr(process.stderr, stderr_lines)),
+    )
+
+    try:
+        await _wait_for_http_server(server)
+        yield server
+    finally:
+        await _stop_http_server(server)
 
 
 def assert_type(expected_type: Type[T], obj: Any) -> T:
@@ -54,9 +201,116 @@ def setup_client() -> Iterable[None]:
 
 
 @pytest.fixture
-async def mcp_client() -> AsyncGenerator[Client, None]:
-    async with Client(mcp) as mcp_client:
+async def mcp_client(http_server: _HttpServer | None) -> AsyncGenerator[Client, None]:
+    if http_server is None:
+        async with Client(mcp) as mcp_client:
+            yield mcp_client
+        return
+
+    transport = StreamableHttpTransport(
+        f"{http_server.base_url}/mcp",
+        headers={"Authorization": f"Bearer {http_server.token}"},
+    )
+    async with Client(transport) as mcp_client:
         yield mcp_client
+
+
+def _require_http_server(http_server: _HttpServer | None) -> _HttpServer:
+    if http_server is None:
+        pytest.skip("HTTP-only integration test")
+    return http_server
+
+
+def _tool_result_data(result: Any) -> dict[str, Any]:
+    if result.data is not None:
+        assert isinstance(result.data, dict)
+        return result.data
+    content = assert_type(TextContent, result.content[0])
+    data = json.loads(content.text)
+    assert isinstance(data, dict)
+    return data
+
+
+@pytest.mark.anyio
+async def test_http_rejects_missing_authorization_header(
+    http_server: _HttpServer | None,
+) -> None:
+    server = _require_http_server(http_server)
+    async with httpx.AsyncClient(base_url=server.base_url) as client:
+        response = await client.post("/mcp", json=_INITIALIZE_REQUEST)
+
+    assert response.status_code == 401
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("query_name", ["access_token", "token"])
+async def test_http_rejects_query_string_token(
+    http_server: _HttpServer | None,
+    query_name: str,
+) -> None:
+    server = _require_http_server(http_server)
+    async with httpx.AsyncClient(base_url=server.base_url) as client:
+        response = await client.post(
+            f"/mcp?{query_name}={server.token}",
+            json=_INITIALIZE_REQUEST,
+        )
+
+    assert response.status_code == 401
+
+
+@pytest.mark.anyio
+async def test_http_valid_header_supports_get_me_and_search(
+    mcp_client: Client,
+    http_server: _HttpServer | None,
+) -> None:
+    _require_http_server(http_server)
+
+    get_me_result = await mcp_client.call_tool("get_me", {})
+    assert not get_me_result.is_error
+
+    search_result = await mcp_client.call_tool(
+        "search", {"query": "*", "num_results": 1}
+    )
+    assert not search_result.is_error
+
+
+@pytest.mark.anyio
+async def test_http_reuses_cached_token_across_mcp_sessions(
+    http_server: _HttpServer | None,
+) -> None:
+    server = _require_http_server(http_server)
+    transport = StreamableHttpTransport(
+        f"{server.base_url}/mcp",
+        headers={"Authorization": f"Bearer {server.token}"},
+    )
+
+    async with Client(transport) as first_client:
+        first_result = await first_client.call_tool("get_me", {})
+    async with Client(transport) as second_client:
+        second_result = await second_client.call_tool(
+            "search", {"query": "*", "num_results": 1}
+        )
+
+    assert not first_result.is_error
+    assert not second_result.is_error
+
+
+@pytest.mark.anyio
+async def test_http_get_me_warns_for_nonexistent_user(
+    mcp_client: Client,
+    http_server: _HttpServer | None,
+) -> None:
+    server = _require_http_server(http_server)
+    result = await mcp_client.call_tool("get_me", {})
+    assert not result.is_error
+
+    data = _tool_result_data(result)
+    corp_user = data.get("data", {}).get("corpUser", {})
+    if corp_user.get("exists") is not False:
+        pytest.skip("The configured DataHub returned an existing authenticated user")
+
+    await _wait_for_log(server, "non-existent authenticated user")
+    await _wait_for_log(server, "METADATA_SERVICE_AUTH_ENABLED")
 
 
 @pytest.mark.anyio
