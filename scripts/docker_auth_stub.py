@@ -47,6 +47,7 @@ class _Handler(BaseHTTPRequestHandler):
             self.send_error(400, "unexpected GraphQL query")
             return
 
+        response: dict[str, object]
         if "getMe" in query:
             response = {
                 "data": {
