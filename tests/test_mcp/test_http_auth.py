@@ -16,6 +16,8 @@ from mcp_server_datahub.__main__ import (
     _AuthenticatedDataHubClientMiddleware,
     _DataHubClientMiddleware,
     _DataHubTokenVerifier,
+    _build_and_verify_http_client,
+    _is_datahub_auth_failure,
     create_http_app,
     create_local_app,
     http_main,
@@ -52,6 +54,28 @@ async def test_token_verifier_rejects_invalid_token() -> None:
         side_effect=RuntimeError("401 Unauthorized"),
     ):
         assert await verifier.verify_token("invalid-token") is None
+
+
+def test_http_token_validation_fetches_exists(caplog: pytest.LogCaptureFixture) -> None:
+    client = MagicMock()
+    client._graph.execute_graphql.return_value = {
+        "me": {
+            "corpUser": {
+                "urn": "urn:li:corpuser:__datahub_system",
+                "username": "__datahub_system",
+                "exists": False,
+            }
+        }
+    }
+
+    with patch("mcp_server_datahub.__main__._build_http_client", return_value=client):
+        assert (
+            _build_and_verify_http_client("https://datahub.example", "token") is client
+        )
+
+    query = client._graph.execute_graphql.call_args.args[0]
+    assert "exists" in query
+    assert "METADATA_SERVICE_AUTH_ENABLED" in caplog.text
 
 
 @pytest.mark.anyio
@@ -167,6 +191,26 @@ async def test_authenticated_middleware_evicts_auth_failures_from_cache(
         await middleware.on_message(MagicMock(), call_next)
 
     assert (token in verifier._clients) is (status_code == 500)
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        RuntimeError("GraphError: HTTP 403: Forbidden"),
+        RuntimeError("GraphError from SDK"),
+    ],
+)
+def test_auth_failure_detection_handles_wrapped_statuses(error: RuntimeError) -> None:
+    if str(error) == "GraphError from SDK":
+        error.info = {"status_code": 401}  # type: ignore[attr-defined]
+    assert _is_datahub_auth_failure(error)
+
+
+def test_auth_failure_detection_handles_cyclic_exception_context() -> None:
+    error = RuntimeError("wrapped SDK error")
+    error.__context__ = error
+
+    assert not _is_datahub_auth_failure(error)
 
 
 def test_create_local_app_preserves_from_env_configuration() -> None:

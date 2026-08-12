@@ -110,6 +110,11 @@ Authorization: Bearer <datahub-personal-access-token>
 Tokens are accepted only in the `Authorization` header; query-string tokens
 such as `?access_token=...` are rejected.
 
+DataHub must have `METADATA_SERVICE_AUTH_ENABLED=true` to establish caller
+identity. When upstream auth is disabled, GMS may return a synthetic,
+non-existent actor for arbitrary bearer values; the MCP server cannot correct
+that upstream configuration.
+
 For a local build, create a `.env` file containing `DATAHUB_GMS_URL`, then run:
 
 ```bash

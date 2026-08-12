@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+import re
 from typing import Any, Optional
 
 import click
@@ -30,7 +31,11 @@ logger = logging.getLogger(__name__)
 # Register tools with OSS-compatible descriptions
 register_all_tools(is_oss=True)
 
-_GET_ME_QUERY = "query getMe { me { corpUser { urn username } } }"
+_GET_ME_QUERY = "query getMe { me { corpUser { urn username exists } } }"
+_AUTH_FAILURE_STATUS_RE = re.compile(
+    r"\b(?:HTTP(?:\s+error)?\s*|status(?:_code)?\s*[:=]?\s*)?(401|403)\b",
+    re.IGNORECASE,
+)
 _HTTP_CLIENT_CACHE_TTL_SECONDS = 300
 _HTTP_CLIENT_CACHE_MAX_SIZE = 1024
 _HTTP_MAX_CONCURRENT_VALIDATIONS = 8
@@ -60,7 +65,15 @@ def _build_http_client(server_url: str, token: str) -> DataHubClient:
 
 def _build_and_verify_http_client(server_url: str, token: str) -> DataHubClient:
     client = _build_http_client(server_url, token)
-    client._graph.execute_graphql(_GET_ME_QUERY)
+    result = client._graph.execute_graphql(_GET_ME_QUERY)
+    corp_user = (result.get("me") or {}).get("corpUser") or {}
+    if corp_user.get("exists") is False:
+        logger.critical(
+            "DataHub returned a non-existent authenticated user during HTTP token "
+            "validation (%s). Check the auth settings and "
+            "METADATA_SERVICE_AUTH_ENABLED; the supplied token might be invalid.",
+            corp_user.get("urn") or corp_user.get("username") or "unknown",
+        )
     return client
 
 
@@ -120,12 +133,48 @@ class _DataHubTokenVerifier(TokenVerifier):
 
 def _is_datahub_auth_failure(exc: BaseException) -> bool:
     cause: Optional[BaseException] = exc
-    while cause is not None:
+    seen: set[int] = set()
+    while cause is not None and id(cause) not in seen:
+        seen.add(id(cause))
         response = getattr(cause, "response", None)
-        if getattr(response, "status_code", None) in (401, 403):
+        if _exception_status_code(cause) in (401, 403) or getattr(
+            response, "status_code", None
+        ) in (401, 403):
             return True
         cause = cause.__cause__ or cause.__context__
     return False
+
+
+def _exception_status_code(exc: BaseException) -> Optional[int]:
+    """Extract an HTTP status from SDK exception attributes or messages."""
+    for source in (exc, getattr(exc, "info", None)):
+        if source is None:
+            continue
+        values: list[Any] = [
+            getattr(source, "status_code", None),
+            getattr(source, "status", None),
+            getattr(source, "http_status", None),
+        ]
+        if isinstance(source, dict):
+            values.extend(
+                [
+                    source.get("status_code"),
+                    source.get("status"),
+                    source.get("http_status"),
+                ]
+            )
+        for value in values:
+            if isinstance(value, int):
+                status_code = value
+            elif isinstance(value, str) and value.isdigit():
+                status_code = int(value)
+            else:
+                continue
+            if status_code in (401, 403):
+                return status_code
+
+    match = _AUTH_FAILURE_STATUS_RE.search(str(exc))
+    return int(match.group(1)) if match else None
 
 
 class _AuthenticatedDataHubClientMiddleware(Middleware):
