@@ -23,8 +23,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - HTTP bearer tokens are verified against DataHub before MCP access is granted,
   with a bounded positive cache and bounded concurrent validation.
-- The server warns at startup when DataHub reports metadata-service token
-  authentication is disabled.
 
 ## [0.5.3] - 2026-03-09
 

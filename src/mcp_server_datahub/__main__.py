@@ -31,19 +31,9 @@ logger = logging.getLogger(__name__)
 register_all_tools(is_oss=True)
 
 _GET_ME_QUERY = "query getMe { me { corpUser { urn username } } }"
-_AUTH_CONFIG_QUERY = """
-query getAuthConfig {
-  appConfig {
-    authConfig {
-      tokenAuthEnabled
-    }
-  }
-}
-"""
 _HTTP_CLIENT_CACHE_TTL_SECONDS = 300
 _HTTP_CLIENT_CACHE_MAX_SIZE = 1024
 _HTTP_MAX_CONCURRENT_VALIDATIONS = 8
-_AUTH_PROBE_TIMEOUT_SECONDS = 3
 
 
 class _DataHubClientMiddleware(Middleware):
@@ -72,60 +62,6 @@ def _build_and_verify_http_client(server_url: str, token: str) -> DataHubClient:
     client = _build_http_client(server_url, token)
     client._graph.execute_graphql(_GET_ME_QUERY)
     return client
-
-
-def _get_datahub_auth_enabled(server_url: str) -> Optional[bool]:
-    """Read DataHub's public app configuration without a bearer token."""
-
-    client = DataHubClient(
-        config=DatahubClientConfig(
-            server=server_url,
-            timeout_sec=_AUTH_PROBE_TIMEOUT_SECONDS,
-            retry_max_times=0,
-            client_mode=ClientMode.SDK,
-            datahub_component=f"mcp-server-datahub/{__version__}",
-        )
-    )
-    result = client._graph.execute_graphql(_AUTH_CONFIG_QUERY)
-    app_config = result.get("appConfig") or {}
-    auth_config = app_config.get("authConfig") or {}
-    enabled = auth_config.get("tokenAuthEnabled")
-    return enabled if isinstance(enabled, bool) else None
-
-
-def _warn_if_datahub_auth_disabled(server_url: str) -> None:
-    try:
-        auth_enabled = _get_datahub_auth_enabled(server_url)
-    except Exception as exc:
-        cause: Optional[BaseException] = exc
-        while cause is not None:
-            response = getattr(cause, "response", None)
-            if getattr(response, "status_code", None) in (401, 403):
-                # A tokenless probe being rejected proves that GMS enforces
-                # authentication, even if appConfig itself is protected.
-                return
-            cause = cause.__cause__
-
-        # Older DataHub versions may not expose appConfig. The HTTP verifier
-        # still fails closed at the MCP boundary, but cannot prove that GMS
-        # itself validates the supplied identity.
-        logger.warning(
-            "Could not determine whether DataHub token auth is enabled: %s", exc
-        )
-        return
-
-    if auth_enabled is False:
-        logger.critical(
-            "DATAHUB SECURITY WARNING: metadata-service token authentication is "
-            "disabled. DataHub will accept arbitrary bearer values, so HTTP MCP "
-            "requests are not authenticated. Enable METADATA_SERVICE_AUTH_ENABLED "
-            "before exposing this deployment."
-        )
-    elif auth_enabled is None:
-        logger.warning(
-            "DataHub did not report whether token authentication is enabled; "
-            "verify METADATA_SERVICE_AUTH_ENABLED before exposing HTTP mode"
-        )
 
 
 class _DataHubTokenVerifier(TokenVerifier):
@@ -269,7 +205,6 @@ def create_http_app() -> FastMCP:
             "credential and send a DataHub token with each request"
         )
 
-    _warn_if_datahub_auth_disabled(server_url)
     token_verifier = _DataHubTokenVerifier(server_url)
     return _configure_app(
         "http",

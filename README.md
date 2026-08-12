@@ -129,7 +129,7 @@ reverse proxy before exposing the HTTP deployment outside a trusted network.
 DataHub metadata-service authentication must also be enabled (set
 `METADATA_SERVICE_AUTH_ENABLED=true` on OSS). If it is disabled, DataHub accepts
 arbitrary bearer values and the MCP server cannot establish the caller's
-identity; the server emits a critical startup warning when it detects this.
+identity.
 
 Successfully verified tokens and their DataHub clients are cached for five
 minutes. Consequently, a token revoked in DataHub can remain usable by the MCP

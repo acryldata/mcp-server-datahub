@@ -15,8 +15,6 @@ from mcp_server_datahub.__main__ import (
     _AuthenticatedDataHubClientMiddleware,
     _DataHubClientMiddleware,
     _DataHubTokenVerifier,
-    _get_datahub_auth_enabled,
-    _warn_if_datahub_auth_disabled,
     create_http_app,
     create_legacy_app,
     http_main,
@@ -192,7 +190,6 @@ def test_create_http_app_installs_authentication(
 
     with (
         patch("mcp_server_datahub.__main__._configure_app") as configure,
-        patch("mcp_server_datahub.__main__._warn_if_datahub_auth_disabled"),
     ):
         create_http_app()
 
@@ -227,35 +224,6 @@ def test_http_cli_uses_only_http_factory() -> None:
         show_banner=False,
         stateless_http=True,
     )
-
-
-def test_auth_disabled_emits_critical_warning(caplog: pytest.LogCaptureFixture) -> None:
-    with patch(
-        "mcp_server_datahub.__main__._get_datahub_auth_enabled",
-        return_value=False,
-    ):
-        _warn_if_datahub_auth_disabled("https://datahub.example")
-
-    assert "SECURITY WARNING" in caplog.text
-    assert "METADATA_SERVICE_AUTH_ENABLED" in caplog.text
-
-
-@pytest.mark.parametrize(
-    "result",
-    [
-        {"appConfig": None},
-        {"appConfig": {"authConfig": None}},
-    ],
-)
-def test_auth_probe_handles_null_config(result: dict[str, Any]) -> None:
-    client = MagicMock()
-    client._graph.execute_graphql.return_value = result
-
-    with patch(
-        "mcp_server_datahub.__main__.DataHubClient",
-        return_value=client,
-    ):
-        assert _get_datahub_auth_enabled("https://datahub.example") is None
 
 
 class _StaticTokenVerifier(_DataHubTokenVerifier):
@@ -348,8 +316,7 @@ async def test_production_http_app_keeps_health_public_and_mcp_private(
     monkeypatch.delenv("DATAHUB_GMS_TOKEN", raising=False)
 
     try:
-        with patch("mcp_server_datahub.__main__._warn_if_datahub_auth_disabled"):
-            app = create_http_app().http_app(stateless_http=True)
+        app = create_http_app().http_app(stateless_http=True)
 
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app),
