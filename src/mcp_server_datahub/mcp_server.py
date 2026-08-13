@@ -257,10 +257,23 @@ def register_mutation_tools(mcp_instance: FastMCP, is_oss: bool = False) -> None
     _register_tool(
         mcp_instance, "remove_domains", remove_domains, tags={ToolType.MUTATION.value}
     )
-    _register_tool(mcp_instance, "update_description", update_description)
-    _register_tool(mcp_instance, "add_structured_properties", add_structured_properties)
     _register_tool(
-        mcp_instance, "remove_structured_properties", remove_structured_properties
+        mcp_instance,
+        "update_description",
+        update_description,
+        tags={ToolType.MUTATION.value},
+    )
+    _register_tool(
+        mcp_instance,
+        "add_structured_properties",
+        add_structured_properties,
+        tags={ToolType.MUTATION.value},
+    )
+    _register_tool(
+        mcp_instance,
+        "remove_structured_properties",
+        remove_structured_properties,
+        tags={ToolType.MUTATION.value},
     )
 
     # Register save_document tool (only if enabled via environment variable)
