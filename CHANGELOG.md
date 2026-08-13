@@ -5,6 +5,25 @@ All notable changes to mcp-server-datahub will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- A non-root Docker image, Docker Compose configuration, public `GET /health`
+  endpoint, and multi-architecture Docker Hub/GHCR release workflow.
+
+### Changed
+
+- **Breaking for HTTP deployments:** HTTP now uses the separate
+  `mcp-server-datahub-http` entry point and requires each MCP client to provide
+  its own DataHub bearer token. `DATAHUB_GMS_TOKEN` remains supported by the
+  local stdio and SSE transports; HTTP refuses to start when it is set.
+
+### Security
+
+- HTTP bearer tokens are verified against DataHub before MCP access is granted,
+  with a bounded positive cache and bounded concurrent validation.
+
 ## [0.5.3] - 2026-03-09
 
 ### Highlights — New SQL-like Filter Syntax

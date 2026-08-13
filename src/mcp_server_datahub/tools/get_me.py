@@ -40,6 +40,7 @@ def get_me() -> dict[str, Any]:
                     type
                     urn
                     username
+                    exists
                     info {
                         active
                         displayName
@@ -86,6 +87,14 @@ def get_me() -> dict[str, Any]:
 
         me_data = result.get("me")
         if me_data:
+            corp_user = me_data.get("corpUser") or {}
+            if corp_user.get("exists") is False:
+                logger.warning(
+                    "DataHub returned a non-existent authenticated user (%s). "
+                    "Check the auth settings and METADATA_SERVICE_AUTH_ENABLED; "
+                    "the supplied token might be invalid.",
+                    corp_user.get("urn") or corp_user.get("username") or "unknown",
+                )
             return {
                 "success": True,
                 "data": me_data,
