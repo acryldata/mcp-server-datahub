@@ -1156,3 +1156,84 @@ async def test_get_lineage_paths_between_upstream(mcp_client: Client) -> None:
         if "No lineage" in str(e):
             pytest.skip("No upstream lineage path exists")
         raise
+
+
+_ASPECT_HISTORY_URN = (
+    "urn:li:dataset:(urn:li:dataPlatform:hive,mcp_server_aspect_history_fixture,PROD)"
+)
+_ASPECT_HISTORY_WRITES = 25
+
+
+def _require_disposable_instance() -> None:
+    """Only run write-based tests against a throwaway local quickstart.
+
+    The CI matrix also runs this suite against a real DataHub Cloud instance, and
+    nothing else in this file writes. Gating on a loopback GMS keeps the writes
+    confined to the quickstart the OSS legs stand up and throw away.
+    """
+    gms_url = os.environ.get("DATAHUB_GMS_URL", "")
+    host = gms_url.split("://")[-1].split(":")[0]
+    if host not in ("localhost", "127.0.0.1"):
+        pytest.skip("Write-based test runs only against a local quickstart")
+
+
+@pytest.mark.anyio
+async def test_get_aspect_history_against_a_multi_version_aspect(
+    mcp_client: Client,
+) -> None:
+    """History must start one below v0's reported version, and never repeat it.
+
+    ``v0.systemMetadata.version`` reports the logical next version N while the
+    demoted values occupy rows 1..N-1, and a read at N resolves to the current
+    envelope rather than returning empty. An anchor placed at N therefore makes
+    ``history[0]`` a silent duplicate of ``current``. Only a real server shows
+    this: a fake that serves whatever version it is asked for cannot.
+    """
+    _require_disposable_instance()
+    client = DataHubClient.from_env()
+    graph = client._graph
+
+    for i in range(1, _ASPECT_HISTORY_WRITES + 1):
+        response = graph._session.post(
+            f"{graph._gms_server}/openapi/v3/entity/dataset?async=false",
+            data=json.dumps(
+                [
+                    {
+                        "urn": _ASPECT_HISTORY_URN,
+                        "datasetProperties": {
+                            "value": {
+                                "name": "mcp_server_aspect_history_fixture",
+                                "description": f"revision {i}",
+                            }
+                        },
+                    }
+                ]
+            ),
+        )
+        response.raise_for_status()
+
+    result = await mcp_client.call_tool(
+        "get_aspect_history",
+        {
+            "urns": _ASPECT_HISTORY_URN,
+            "aspect_names": "datasetProperties",
+            "limit": 5,
+        },
+    )
+    data = _tool_result_data(result)
+    item = data["results"][0]
+
+    assert item["error"] is None
+    current_version = int(item["current"]["systemMetadata"]["version"])
+    # The suite runs twice against one quickstart, so the aspect may already
+    # carry versions from an earlier pass. Assert relationships, not a count.
+    assert current_version >= _ASPECT_HISTORY_WRITES
+
+    assert item["history"], "a repeatedly written aspect must expose history"
+    assert item["history"][0]["version"] == current_version - 1
+    assert item["history"][0]["value"] != item["current"]["value"]
+    assert item["page"]["fromVersion"] == current_version - 1
+    assert item["page"]["anchorSource"] == "systemMetadata"
+
+    versions = [entry["version"] for entry in item["history"]]
+    assert versions == sorted(versions, reverse=True)
