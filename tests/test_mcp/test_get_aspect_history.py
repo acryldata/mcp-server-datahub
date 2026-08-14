@@ -73,7 +73,12 @@ def _serve_retained_versions(graph, *, retained, newest=None):
     N-1 shows up here as a duplicate of ``current`` at ``history[0]``.
     """
     retained = set(retained)
-    newest_logical = int(newest) if newest is not None else None
+    try:
+        newest_logical = int(newest) if newest is not None else None
+    except (TypeError, ValueError):
+        # A non-numeric anchor is a case the tool has to survive, so the fake has
+        # to serve it rather than crash: no version aliases to current.
+        newest_logical = None
 
     def post(url, **kwargs):
         body = []
@@ -351,9 +356,10 @@ def test_pairs_with_different_anchors_share_one_request_per_step(graph):
                 if aspect_name == "urn":
                     continue
                 version = int(spec["headers"]["If-Version-Match"])
-                if version == 0:
+                if version == 0 or version == int(newest):
+                    # A read at the logical next version aliases to current.
                     entity[aspect_name] = _aspect({"v": 0}, newest=newest)
-                elif 1 <= version <= int(newest):
+                elif 1 <= version < int(newest):
                     entity[aspect_name] = _aspect({"v": version})
             body.append(entity)
         return _response(body)
@@ -363,8 +369,8 @@ def test_pairs_with_different_anchors_share_one_request_per_step(graph):
     result = _run(graph, [URN_A, URN_B], "datasetProperties", limit=2)
     by_urn = {item["urn"]: item for item in result["results"]}
 
-    assert _versions(by_urn[URN_A]) == [26, 25]
-    assert _versions(by_urn[URN_B]) == [9, 8]
+    assert _versions(by_urn[URN_A]) == [25, 24]
+    assert _versions(by_urn[URN_B]) == [8, 7]
 
     # Step 1 asks each URN for its own anchor inside a single request.
     step_one = json.loads(graph._session.post.call_args_list[1].kwargs["data"])
@@ -372,7 +378,7 @@ def test_pairs_with_different_anchors_share_one_request_per_step(graph):
         entry["urn"]: entry["datasetProperties"]["headers"]["If-Version-Match"]
         for entry in step_one
     }
-    assert versions == {URN_A: "26", URN_B: "9"}
+    assert versions == {URN_A: "25", URN_B: "8"}
 
 
 @pytest.mark.parametrize(
