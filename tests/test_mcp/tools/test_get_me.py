@@ -200,6 +200,31 @@ def test_get_me_minimal_user_data(mock_datahub_client):
     assert len(result["data"]["corpUser"]["groups"]["relationships"]) == 0
 
 
+def test_get_me_warns_for_nonexistent_user(
+    mock_datahub_client, caplog: pytest.LogCaptureFixture
+):
+    mock_datahub_client._graph.execute_graphql.return_value = {
+        "me": {
+            "corpUser": {
+                "urn": "urn:li:corpuser:__datahub_system",
+                "username": "__datahub_system",
+                "exists": False,
+            }
+        }
+    }
+
+    with patch(
+        "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
+        return_value=mock_datahub_client,
+    ):
+        result = get_me()
+
+    assert result["success"] is True
+    assert "non-existent authenticated user" in caplog.text
+    assert "Check the auth settings and METADATA_SERVICE_AUTH_ENABLED" in caplog.text
+    assert "supplied token might be invalid" in caplog.text
+
+
 def test_get_me_user_with_multiple_groups(mock_datahub_client):
     """Test retrieving user with multiple group memberships."""
     mock_datahub_client._graph.execute_graphql.return_value = {

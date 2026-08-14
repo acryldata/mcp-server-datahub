@@ -14,6 +14,9 @@ Usage:
     # Against a running HTTP/SSE server:
     uv run python scripts/smoke_check.py --url http://localhost:8000/mcp
 
+    # Against the authenticated HTTP server:
+    uv run python scripts/smoke_check.py --url http://localhost:8000/mcp --token mytoken
+
     # Via stdio subprocess (launches server as child process):
     uv run python scripts/smoke_check.py --stdio-cmd "uv run mcp-server-datahub"
 
@@ -46,6 +49,7 @@ from dataclasses import dataclass, field
 from functools import partial
 from collections.abc import Coroutine
 from typing import Any, Callable, Optional
+from urllib.parse import urlparse
 
 import anyio
 import click
@@ -654,12 +658,30 @@ async def check_update_description(
 # ---------------------------------------------------------------------------
 
 
+def _is_streamable_http_url(url: str) -> bool:
+    return not urlparse(url).path.rstrip("/").endswith("/sse")
+
+
+def _build_url_transport(url: str, token: Optional[str]) -> Any:
+    """Preserve FastMCP URL inference for SSE; add auth only to HTTP."""
+
+    if _is_streamable_http_url(url) and token:
+        from fastmcp.client.transports import StreamableHttpTransport
+
+        return StreamableHttpTransport(
+            url,
+            headers={"Authorization": f"Bearer {token}"},
+        )
+    return url
+
+
 async def run_smoke_check(
     test_mutations: bool = False,
     test_user: bool = False,
     test_urn: Optional[str] = None,
     url: Optional[str] = None,
     stdio_cmd: Optional[str] = None,
+    token: Optional[str] = None,
 ) -> SmokeCheckReport:
     """Run smoke checks against an MCP server.
 
@@ -673,16 +695,34 @@ async def run_smoke_check(
     """
     from fastmcp.client.transports import StdioTransport
 
+    configured_client: Optional[DataHubClient] = None
+    is_streamable_http = bool(url and _is_streamable_http_url(url))
+    if is_streamable_http and token is None:
+        # Reuse the locally configured credential for authenticated HTTP smoke
+        # tests. OSS instances without token auth still need a non-empty bearer
+        # value to pass through the MCP authentication layer.
+        configured_client = DataHubClient.from_env(client_mode=ClientMode.SDK)
+        token = configured_client._graph.config.token or "datahub-oss"
+
     # Determine the transport target for Client()
     transport_target: Any  # str (URL), StdioTransport, or FastMCP instance
     if url:
         # Remote HTTP/SSE — server is already running and configured
-        transport_target = url
+        transport_target = _build_url_transport(url, token)
         mode_label = f"HTTP/SSE → {url}"
     elif stdio_cmd:
         # Stdio subprocess — launch server as child process
         parts = shlex.split(stdio_cmd)
-        transport_target = StdioTransport(command=parts[0], args=parts[1:])
+        datahub_env = {
+            name: value
+            for name in ("DATAHUB_GMS_URL", "DATAHUB_GMS_TOKEN")
+            if (value := os.environ.get(name))
+        }
+        transport_target = StdioTransport(
+            command=parts[0],
+            args=parts[1:],
+            env=datahub_env or None,
+        )
         mode_label = f"stdio → {stdio_cmd}"
     else:
         # In-process (original behaviour)
@@ -714,12 +754,10 @@ async def run_smoke_check(
     print()
 
     report = SmokeCheckReport()
-    client = DataHubClient.from_env(client_mode=ClientMode.SDK)
+    client = configured_client or DataHubClient.from_env(client_mode=ClientMode.SDK)
 
     # Safety check: only allow smoke tests against localhost
     gms_server = str(client._graph.config.server)
-    from urllib.parse import urlparse
-
     parsed = urlparse(gms_server)
     if parsed.hostname not in ("localhost", "127.0.0.1", "::1"):
         raise click.ClickException(
@@ -921,6 +959,11 @@ def _parse_pypi_args() -> Optional[tuple[Optional[str], list[str]]]:
     default=None,
     help='Launch server as stdio subprocess (e.g. "uv run mcp-server-datahub")',
 )
+@click.option(
+    "--token",
+    default=None,
+    help="Bearer token to send with requests made via --url",
+)
 def main(
     mutations: bool,
     user: bool,
@@ -928,6 +971,7 @@ def main(
     urn: Optional[str],
     url: Optional[str],
     stdio_cmd: Optional[str],
+    token: Optional[str],
 ) -> None:
     """Smoke check all MCP server tools against a live DataHub instance."""
     if test_all:
@@ -941,6 +985,7 @@ def main(
             test_urn=urn,
             url=url,
             stdio_cmd=stdio_cmd,
+            token=token,
         )
     )
     report.print_report()

@@ -37,15 +37,101 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.10"
+          python-version: "3.11"
 
       - name: Install dependencies
         run: make setup
 
-      # tests/test_mcp is fully mocked and needs no live DataHub, unlike
-      # tests/test_mcp_integration.py which the integration-test job covers.
       - name: Run unit tests
-        run: uv run pytest tests/test_mcp -v --timeout=120
+        run: uv run pytest tests/test_mcp/ -v
+
+  docker-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image
+        run: |
+          docker build \
+            --build-arg VERSION=1.2.3 \
+            --build-arg VCS_REF=${{ github.sha }} \
+            --tag mcp-server-datahub:test \
+            .
+
+      - name: Verify version and health check
+        run: |
+          reported_version=$(docker run --rm --entrypoint mcp-server-datahub-http mcp-server-datahub:test --version)
+          test "$reported_version" = "mcp-server-datahub-http, version 1.2.3"
+          docker run --rm --entrypoint sh mcp-server-datahub:test \
+            -c '! command -v uv'
+
+          container_id=$(docker run --detach \
+            --env DATAHUB_GMS_URL=http://datahub.example \
+            --env FASTMCP_PORT=8123 \
+            --health-interval=1s \
+            --publish 127.0.0.1:18123:8123 \
+            mcp-server-datahub:test)
+          trap 'docker rm --force "$container_id"' EXIT
+
+          healthy=false
+          for attempt in $(seq 1 30); do
+            status=$(docker inspect --format '{{.State.Health.Status}}' "$container_id")
+            if [ "$status" = "healthy" ]; then
+              healthy=true
+              break
+            fi
+            if [ "$status" = "unhealthy" ]; then
+              docker logs "$container_id"
+              exit 1
+            fi
+            sleep 1
+          done
+
+          if [ "$healthy" != "true" ]; then
+            docker logs "$container_id"
+            exit 1
+          fi
+
+          curl --fail --silent --show-error http://127.0.0.1:18123/health
+
+      - name: Start stub GMS
+        run: python scripts/docker_auth_stub.py & echo $! > /tmp/docker-auth-stub.pid
+
+      - name: Call authenticated tool through image
+        run: |
+          container_id=$(docker run --detach \
+            --add-host host.docker.internal:host-gateway \
+            --env DATAHUB_GMS_URL=http://host.docker.internal:18080 \
+            --env FASTMCP_PORT=8124 \
+            --publish 127.0.0.1:18124:8124 \
+            mcp-server-datahub:test)
+          trap 'docker rm --force "$container_id"; kill "$(cat /tmp/docker-auth-stub.pid)"' EXIT
+          healthy=false
+          for attempt in $(seq 1 30); do
+            if curl --silent --fail http://127.0.0.1:18124/health >/dev/null; then
+              healthy=true
+              break
+            fi
+            sleep 1
+          done
+          test "$healthy" = true
+          docker run --rm --network host --entrypoint python mcp-server-datahub:test - <<'PY'
+          import asyncio
+
+          from fastmcp import Client
+          from fastmcp.client.transports import StreamableHttpTransport
+
+          async def main() -> None:
+              transport = StreamableHttpTransport(
+                  "http://127.0.0.1:18124/mcp",
+                  headers={"Authorization": "Bearer ci-token"},
+              )
+              async with Client(transport) as client:
+                  result = await client.call_tool("get_me", {})
+                  assert not result.is_error, result
+
+          asyncio.run(main())
+          PY
 
   integration-test:
     runs-on: ubuntu-latest
@@ -114,11 +200,31 @@ jobs:
         run: |
           uv run pytest tests/test_mcp_integration.py -v --timeout=120
 
+      - name: Run HTTP integration tests (longtail)
+        if: matrix.test_env == 'longtail'
+        env:
+          DATAHUB_GMS_URL: ${{ secrets.LONGTAIL_GMS_URL }}
+          DATAHUB_GMS_TOKEN: ${{ secrets.LONGTAIL_GMS_TOKEN }}
+          MCP_TRANSPORT: "http"
+        run: |
+          uv run pytest tests/test_mcp_integration.py -v --timeout=120
+
       - name: Run integration tests (OSS)
         if: matrix.test_env == 'oss'
         env:
           DATAHUB_GMS_URL: "http://localhost:8080"
           DATAHUB_GMS_TOKEN: ""
+        run: |
+          uv run pytest tests/test_mcp_integration.py -v --timeout=120
+
+      - name: Run HTTP integration tests (OSS)
+        if: matrix.test_env == 'oss'
+        env:
+          DATAHUB_GMS_URL: "http://localhost:8080"
+          # Quickstart has GMS auth disabled, but HTTP mode still requires a
+          # non-empty bearer token at the MCP boundary.
+          DATAHUB_GMS_TOKEN: "ci-token"
+          MCP_TRANSPORT: "http"
         run: |
           uv run pytest tests/test_mcp_integration.py -v --timeout=120
 

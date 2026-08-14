@@ -62,6 +62,90 @@ Understand how your data is organized before searching:
 
 See instructions in the [DataHub MCP server docs](https://docs.datahub.com/docs/features/feature-guides/mcp).
 
+### Local stdio deployment
+
+The default transport remains stdio for local MCP clients:
+
+```bash
+uvx mcp-server-datahub
+```
+
+The stdio server loads `DATAHUB_GMS_URL` and `DATAHUB_GMS_TOKEN` from the
+environment, falling back to `~/.datahubenv` created by `datahub init`. This is
+the local deployment mode and does not require HTTP authentication.
+
+The local CLI also supports SSE for trusted, local-network use. SSE does not
+provide the per-request bearer authentication used by the dedicated HTTP
+entry point and should not be exposed as a shared network service.
+
+### Docker HTTP deployment
+
+The container runs the stateless HTTP transport on port 8000. It deliberately
+does not use a server-wide `DATAHUB_GMS_TOKEN`; each MCP client supplies its own
+DataHub token so DataHub permissions and audit identity are preserved per user.
+
+> **Breaking change for existing HTTP deployments:** HTTP now has a separate
+> `mcp-server-datahub-http` entry point. It refuses to start when
+> `DATAHUB_GMS_TOKEN` is configured, and every client must send its own DataHub
+> bearer token. Local stdio and SSE behavior are unchanged.
+
+```bash
+docker run --rm -p 8000:8000 \
+  -e DATAHUB_GMS_URL=https://your-datahub.example \
+  acryldata/mcp-server-datahub:latest
+```
+
+The same isolated HTTP entry point is available outside Docker:
+
+```bash
+DATAHUB_GMS_URL=https://your-datahub.example mcp-server-datahub-http
+```
+
+Connect to `http://localhost:8000/mcp` and include the token on every request:
+
+```text
+Authorization: Bearer <datahub-personal-access-token>
+```
+
+Tokens are accepted only in the `Authorization` header; query-string tokens
+such as `?access_token=...` are rejected.
+
+DataHub must have `METADATA_SERVICE_AUTH_ENABLED=true` to establish caller
+identity. When upstream auth is disabled, GMS may return a synthetic,
+non-existent actor for arbitrary bearer values; the MCP server cannot correct
+that upstream configuration.
+
+For a local build, create a `.env` file containing `DATAHUB_GMS_URL`, then run:
+
+```bash
+docker compose up --build
+```
+
+The image and server expose an unauthenticated `GET /health` endpoint for
+container, load-balancer, and Kubernetes probes. The endpoint reports process
+health only and does not contact DataHub.
+
+```yaml
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 8000
+readinessProbe:
+  httpGet:
+    path: /health
+    port: 8000
+```
+
+Bearer tokens must be protected in transit. Terminate TLS and apply
+rate-limiting at an ingress or reverse proxy before exposing the HTTP deployment
+outside a trusted network. Rate limiting is especially important because each
+new invalid token can trigger a validation request to GMS.
+
+Successfully verified tokens and their DataHub clients are cached for five
+minutes. If a cached request receives a 401 or 403 from DataHub, that client is
+evicted and the next request revalidates the token. Failed validations are not
+cached; concurrent upstream validations are bounded to protect DataHub.
+
 ## Demo
 
 Check out the [demo video](https://youtu.be/VXRvHIZ3Eww?t=1878), done in collaboration with the team at Block.
@@ -152,6 +236,10 @@ Save standalone documents (insights, decisions, FAQs, notes) to DataHub's knowle
 
 | Variable | Default | Description |
 |----------|---------|-------------|
+| `DATAHUB_GMS_URL` | none | DataHub server URL. Required in HTTP mode; stdio can also load it from `~/.datahubenv`. |
+| `DATAHUB_GMS_TOKEN` | none | Legacy stdio/SSE credential. HTTP mode refuses to start when this shared credential is set. |
+| `FASTMCP_HOST` | FastMCP default (`127.0.0.1`); image default (`0.0.0.0`) | HTTP/SSE bind address. |
+| `FASTMCP_PORT` | `8000` | HTTP/SSE listen port; also used by the image health check. |
 | `TOOLS_IS_MUTATION_ENABLED` | `false` | Enable mutation tools (add/remove tags, owners, etc.) |
 | `TOOLS_IS_USER_ENABLED` | `false` | Enable user tools (get_me) |
 | `DATAHUB_MCP_DOCUMENT_TOOLS_DISABLED` | `false` | Completely disable document tools |

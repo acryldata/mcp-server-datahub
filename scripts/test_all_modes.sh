@@ -82,9 +82,15 @@ start_server() {
     local log_slug="$2"
     echo "  Starting server (transport=$transport, port=$PORT)..."
     cd "$PROJECT_DIR"
-    uv run mcp-server-datahub --transport "$transport" \
-        >"$LOG_DIR/${log_slug}_server.stdout" \
-        2>"$LOG_DIR/${log_slug}_server.stderr" &
+    if [[ "$transport" == "http" ]]; then
+        env -u DATAHUB_GMS_TOKEN uv run mcp-server-datahub-http \
+            >"$LOG_DIR/${log_slug}_server.stdout" \
+            2>"$LOG_DIR/${log_slug}_server.stderr" &
+    else
+        uv run mcp-server-datahub --transport "$transport" \
+            >"$LOG_DIR/${log_slug}_server.stdout" \
+            2>"$LOG_DIR/${log_slug}_server.stderr" &
+    fi
     SERVER_PID=$!
     # Give server a moment to bind
     wait_for_server "$HEALTH_URL"
@@ -156,27 +162,27 @@ stop_server
 run_smoke_check "Stdio (subprocess)" --stdio-cmd "uv run mcp-server-datahub"
 
 # ---------------------------------------------------------------------------
-# Mode 5: fastmcp run (create_app factory)
+# Mode 5: fastmcp run (explicit HTTP factory)
 #
-# This exercises the create_app() entry point that `fastmcp dev` uses.
+# This exercises the same authenticated factory as the HTTP executable.
 # Under the hood, `fastmcp dev` runs:
 #   npx @modelcontextprotocol/inspector uv run fastmcp run <spec>
 # We use `uv run fastmcp run` directly as a substitute so that the test
 # suite doesn't require Node.js / npx.  If the fastmcp implementation
-# changes, this mode will catch regressions in the create_app() code path.
+# changes, this mode will catch regressions in the HTTP factory code path.
 #
 # Note: fastmcp run does not pass stateless_http=True, so this mode does
 # NOT test the stateless HTTP transport.  Mode 2 covers that.
 # ---------------------------------------------------------------------------
 echo ""
-echo "  Starting server via 'fastmcp run :create_app' (transport=http)..."
+echo "  Starting server via 'fastmcp run :create_http_app' (transport=http)..."
 cd "$PROJECT_DIR"
-uv run fastmcp run src/mcp_server_datahub/__main__.py:create_app --transport http \
+env -u DATAHUB_GMS_TOKEN uv run fastmcp run src/mcp_server_datahub/__main__.py:create_http_app --transport http \
     >"$LOG_DIR/fastmcp-run_server.stdout" \
     2>"$LOG_DIR/fastmcp-run_server.stderr" &
 SERVER_PID=$!
 wait_for_server "$HEALTH_URL"
-run_smoke_check "fastmcp run (create_app factory)" --url "$HTTP_URL"
+run_smoke_check "fastmcp run (create_http_app factory)" --url "$HTTP_URL"
 stop_server
 
 # ---------------------------------------------------------------------------
