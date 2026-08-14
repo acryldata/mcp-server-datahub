@@ -188,8 +188,8 @@ def _format_aspect_version(version: int, aspect: dict[str, Any]) -> dict[str, An
     return entry
 
 
-def _newest_retained_version(aspect: dict[str, Any] | None) -> int | None:
-    """Read the newest history version number off the current (v0) envelope.
+def _newest_logical_version(aspect: dict[str, Any] | None) -> int | None:
+    """Read the logical next version number off the current (v0) envelope.
 
     ``SystemMetadata.version`` is documented as "the aspect version's number,
     however stored as a string", and is optional, so it may be absent, a string,
@@ -213,6 +213,19 @@ def _newest_retained_version(aspect: dict[str, Any] | None) -> int | None:
     else:
         return None
     return parsed if 1 <= parsed <= MAX_ASPECT_HISTORY_FROM_VERSION else None
+
+
+def _newest_retained_row(aspect: dict[str, Any] | None) -> int | None:
+    """Highest positive version that actually exists as a stored row.
+
+    ``systemMetadata.version`` on v0 reports the logical next version N, while the
+    demoted values occupy rows 1..N-1. Returns ``None`` when the anchor is
+    unreadable, and also when N < 2, because a single write leaves no positive row.
+    """
+    logical = _newest_logical_version(aspect)
+    if logical is None or logical < 2:
+        return None
+    return logical - 1
 
 
 def _pair_result(
@@ -435,15 +448,29 @@ def get_aspect_history(
             if include_current:
                 state.current = _format_aspect_version(0, aspect)
 
-            newest = _newest_retained_version(aspect)
+            # ``systemMetadata.version`` on v0 is the *logical next* version N, not
+            # the newest stored row. GMS writes the demoted value at its own
+            # version, so real history rows are 1..N-1 and v0 is the Nth value.
+            # Measured against DataHub Core 1.6: with N=4, versions 1..3 hold the
+            # first three writes and version 4 resolves to the same envelope as
+            # version 0. Anchoring at N would therefore make history[0] a
+            # duplicate of ``current``.
+            newest_row = _newest_retained_row(aspect)
             if from_version is not None:
                 state.from_version = (
-                    min(from_version, newest) if newest is not None else from_version
+                    min(from_version, newest_row)
+                    if newest_row is not None
+                    else from_version
                 )
                 state.anchor_source = ANCHOR_CALLER
-            elif newest is not None:
-                state.from_version = newest
+            elif newest_row is not None:
+                state.from_version = newest_row
                 state.anchor_source = ANCHOR_SYSTEM_METADATA
+            elif _newest_logical_version(aspect) is not None:
+                # A single write leaves only v0; there is no positive row to page.
+                state.anchor_source = ANCHOR_SYSTEM_METADATA
+                state.exhausted = True
+                continue
             else:
                 # Anchor unresolvable: scan upward from 1 within the probe budget.
                 state.from_version = 1

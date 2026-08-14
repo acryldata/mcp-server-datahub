@@ -55,15 +55,25 @@ def _response(body, *, status=200, error=None):
 
 
 def _serve_retained_versions(graph, *, retained, newest=None):
-    """Fake GMS that answers each aspect at the version it actually asked for.
+    """Fake GMS modelled on measured DataHub Core 1.6 behaviour.
 
-    Version retention prunes the *oldest* versions without renumbering, so the
-    retained window is an arbitrary set of version numbers rather than 1..N.
-    Serving straight from that set is what lets these tests observe paging
-    behaviour instead of assuming it: a mock that hands back sequential versions
-    from whatever the caller requested can never show a pruned prefix.
+    Two properties of the real version space, both measured rather than assumed,
+    and both invisible to a mock that echoes back whatever version was asked for:
+
+    1. Retention prunes the *oldest* versions without renumbering, so the retained
+       window is an arbitrary set rather than 1..N. Measured: after 26 writes the
+       stored rows were 6..25.
+    2. ``v0.systemMetadata.version`` reports the logical *next* version N, and a
+       read at version N resolves to the same envelope as version 0 rather than
+       returning empty. Measured on a clean dataset with 4 writes: v1..v3 held the
+       first three writes, v4 was byte-identical to v0, v5+ were empty.
+
+    ``newest`` is that logical N. Requests at N are therefore served the current
+    envelope, exactly as the server does, so a tool that anchors at N instead of
+    N-1 shows up here as a duplicate of ``current`` at ``history[0]``.
     """
     retained = set(retained)
+    newest_logical = int(newest) if newest is not None else None
 
     def post(url, **kwargs):
         body = []
@@ -74,7 +84,9 @@ def _serve_retained_versions(graph, *, retained, newest=None):
                 if aspect_name == "urn":
                     continue
                 version = int(spec["headers"]["If-Version-Match"])
-                if version == 0:
+                if version == 0 or version == newest_logical:
+                    # A read at the logical next version aliases to the current
+                    # envelope on a real server. Measured, see the docstring.
                     entity[aspect_name] = _aspect(
                         {"v": 0}, run_id="run-current", newest=newest
                     )
@@ -122,24 +134,55 @@ def test_pruned_prefix_window_is_reachable_newest_first(graph):
 
     Measured against a real DataHub Core 1.6 instance after writing
     datasetProperties 26 times: v0.systemMetadata.version was "26" and the
-    retained versions were 6..26, so a reader that starts at version 1 and stops
-    at the first empty version returns nothing while 21 versions are retained.
+    stored rows were 6..25, so a reader that starts at version 1 and stops at the
+    first empty version returns nothing while 20 versions are retained. Version 26
+    is not a row: it resolves to the same envelope as version 0.
     """
-    _serve_retained_versions(graph, retained=range(6, 27), newest="26")
+    _serve_retained_versions(graph, retained=range(6, 26), newest="26")
 
     result = _run(graph, URN_A, "datasetProperties", limit=10)
     item = result["results"][0]
 
-    assert _versions(item) == [26, 25, 24, 23, 22, 21, 20, 19, 18, 17]
+    assert _versions(item) == [25, 24, 23, 22, 21, 20, 19, 18, 17, 16]
     assert item["page"]["anchorSource"] == "systemMetadata"
-    assert item["page"]["fromVersion"] == 26
+    assert item["page"]["fromVersion"] == 25
     assert item["page"]["hasMore"] is True
-    assert item["page"]["nextFromVersion"] == 16
+    assert item["page"]["nextFromVersion"] == 15
+
+
+def test_history_never_duplicates_current(graph):
+    """The anchor must be the newest stored row, not the logical next version.
+
+    Measured on DataHub Core 1.6 with a clean 4-write dataset: v0.systemMetadata
+    .version was "4", versions 1..3 held the first three writes, and a read at
+    version 4 returned the same envelope as version 0. Anchoring at N therefore
+    makes history[0] a silent duplicate of current.
+    """
+    _serve_retained_versions(graph, retained={1, 2, 3}, newest="4")
+
+    item = _run(graph, URN_A, "datasetProperties", limit=10)["results"][0]
+
+    assert _versions(item) == [3, 2, 1]
+    assert item["page"]["fromVersion"] == 3
+    current_value = item["current"]["value"]
+    assert all(entry["value"] != current_value for entry in item["history"])
+
+
+def test_single_write_has_no_positive_row(graph):
+    """N < 2 means only v0 exists, so there is nothing to page and no cursor at 0."""
+    _serve_retained_versions(graph, retained=set(), newest="1")
+
+    item = _run(graph, URN_A, "datasetProperties", limit=10)["results"][0]
+
+    assert item["history"] == []
+    assert item["current"] is not None
+    assert item["page"]["hasMore"] is False
+    assert item["page"]["nextFromVersion"] is None
 
 
 def test_version_one_is_empty_but_history_is_still_returned(graph):
     """The exact shape of the reproduction: asking for v1 alone yields nothing."""
-    _serve_retained_versions(graph, retained=range(6, 27), newest="26")
+    _serve_retained_versions(graph, retained=range(6, 26), newest="26")
 
     empty = _run(graph, URN_A, "datasetProperties", from_version=1, limit=10)
     assert empty["results"][0]["history"] == []
@@ -150,7 +193,7 @@ def test_version_one_is_empty_but_history_is_still_returned(graph):
 
 def test_gap_inside_window_does_not_stop_paging(graph):
     """A hole inside the retained window must not be read as the end of history."""
-    retained = set(range(6, 27)) - {14}
+    retained = set(range(6, 26)) - {14}
     _serve_retained_versions(graph, retained=retained, newest="26")
 
     item = _run(graph, URN_A, "datasetProperties", limit=20)["results"][0]
@@ -213,7 +256,7 @@ def test_probe_budget_exhaustion_is_reported_as_more_available(graph):
 
 def test_include_current_false_still_resolves_history(graph):
     """v0 is still fetched for the anchor, just not emitted, and still counted."""
-    _serve_retained_versions(graph, retained=range(6, 27), newest="26")
+    _serve_retained_versions(graph, retained=range(6, 26), newest="26")
 
     result = _run(
         graph,
@@ -225,26 +268,26 @@ def test_include_current_false_still_resolves_history(graph):
     item = result["results"][0]
 
     assert item["current"] is None
-    assert _versions(item) == [26, 25, 24]
+    assert _versions(item) == [25, 24, 23]
     assert item["page"]["anchorSource"] == "systemMetadata"
     # 1 exists() probe + 1 v0 anchor read + 4 version reads (3 kept, 1 lookahead).
     assert result["batch"]["httpCalls"] == 6
 
 
 def test_from_version_is_clamped_to_newest_retained_version(graph):
-    _serve_retained_versions(graph, retained=range(6, 27), newest="26")
+    _serve_retained_versions(graph, retained=range(6, 26), newest="26")
 
     item = _run(graph, URN_A, "datasetProperties", from_version=999, limit=3)[
         "results"
     ][0]
 
     assert item["page"]["anchorSource"] == "caller"
-    assert item["page"]["fromVersion"] == 26
-    assert _versions(item) == [26, 25, 24]
+    assert item["page"]["fromVersion"] == 25
+    assert _versions(item) == [25, 24, 23]
 
 
 def test_from_version_pages_downward_from_the_cursor(graph):
-    _serve_retained_versions(graph, retained=range(6, 27), newest="26")
+    _serve_retained_versions(graph, retained=range(6, 26), newest="26")
 
     first = _run(graph, URN_A, "datasetProperties", limit=10)["results"][0]
     second = _run(
@@ -255,7 +298,7 @@ def test_from_version_pages_downward_from_the_cursor(graph):
         limit=10,
     )["results"][0]
 
-    assert _versions(second) == [16, 15, 14, 13, 12, 11, 10, 9, 8, 7]
+    assert _versions(second) == [15, 14, 13, 12, 11, 10, 9, 8, 7, 6]
     assert set(_versions(first)).isdisjoint(_versions(second))
 
 
@@ -348,14 +391,14 @@ def test_accepts_single_or_json_stringified_lists(graph, urns, aspects):
 
 
 def test_limit_and_paging_are_per_pair_with_honest_lookahead(graph):
-    _serve_retained_versions(graph, retained=range(6, 27), newest="26")
+    _serve_retained_versions(graph, retained=range(6, 26), newest="26")
 
     result = _run(graph, [URN_A, URN_B], "datasetProperties", limit=1)
 
     for item in result["results"]:
-        assert _versions(item) == [26]
+        assert _versions(item) == [25]
         assert item["page"]["hasMore"] is True
-        assert item["page"]["nextFromVersion"] == 25
+        assert item["page"]["nextFromVersion"] == 24
         assert item["page"]["requestedLimit"] == 1
 
 
