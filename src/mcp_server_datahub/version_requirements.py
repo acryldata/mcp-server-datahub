@@ -256,10 +256,16 @@ def filter_tools_by_version(tools: Sequence[T]) -> list[T]:
         else:
             deployment = "cloud" if is_cloud else "oss"
             min_ver = req.cloud_min if is_cloud else req.oss_min
-            logger.info(
-                f"Filtering out tool '{tool_name}': server {deployment} "
-                f"version {server_version} does not meet minimum {min_ver}"
-            )
+            if min_ver is None:
+                logger.info(
+                    f"Filtering out tool '{tool_name}': not available on "
+                    f"{deployment} deployments"
+                )
+            else:
+                logger.info(
+                    f"Filtering out tool '{tool_name}': server {deployment} "
+                    f"version {server_version} does not meet minimum {min_ver}"
+                )
 
     return filtered
 
