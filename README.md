@@ -297,6 +297,25 @@ Example:
 }
 ```
 
+`list_schema_fields` is paginated. A successful first response is not
+necessarily the complete schema: continue while `remainingCount` is greater
+than zero. Advance by the number of fields actually returned, not by the
+requested limit, because the response token budget can shorten a page:
+
+```text
+offset = 0
+all_fields = []
+
+do:
+    page = list_schema_fields(urn=dataset_urn, limit=100, offset=offset)
+    all_fields.extend(page.fields)
+    offset = page.offset + page.returned
+while page.remainingCount > 0
+```
+
+This pattern also terminates safely if an offset is already beyond the last
+field: the tool returns an empty page with `remainingCount: 0`.
+
 #### 3.2 Fetch Lineage (optional)
 
 **Tool:** `get_lineage`  
