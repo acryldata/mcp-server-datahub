@@ -519,6 +519,7 @@ fragment entityPreview on Entity {
         properties {
             name
             description
+            externalUrl
             customProperties {
                 key
                 value
