@@ -194,11 +194,13 @@ def update_description(
                 operation_name="getEntity",
             )
 
-            entity_data = result.get("entity", {})
+            # GraphQL returns an explicit null for an unset aspect, so `.get(key, {})`
+            # yields None rather than the default. Use `or {}` throughout.
+            entity_data = result.get("entity") or {}
             if column_path:
                 # Get column description
-                schema_metadata = entity_data.get("schemaMetadata", {})
-                fields = schema_metadata.get("fields", [])
+                schema_metadata = entity_data.get("schemaMetadata") or {}
+                fields = schema_metadata.get("fields") or []
                 for field in fields:
                     if field.get("fieldPath") == column_path:
                         existing_description = field.get("description", "")
@@ -206,13 +208,13 @@ def update_description(
             else:
                 # Get entity description
                 # Try editableProperties first (for Dataset, Container, etc.)
-                editable_props = entity_data.get("editableProperties", {})
-                existing_description = editable_props.get("description", "")
+                editable_props = entity_data.get("editableProperties") or {}
+                existing_description = editable_props.get("description") or ""
 
                 # If not found, try properties (for Tag, GlossaryTerm, etc.)
                 if not existing_description:
-                    properties = entity_data.get("properties", {})
-                    existing_description = properties.get("description", "")
+                    properties = entity_data.get("properties") or {}
+                    existing_description = properties.get("description") or ""
 
         except Exception as e:
             logger.warning(
