@@ -1,6 +1,10 @@
 .PHONY: setup clean format format-check lint lint-check test
 
-PY_FILES = src tests scripts
+# Formatted and linted with ruff.
+PY_FILES = src tests scripts examples
+# Type-checked with mypy. Excludes examples/, whose dependencies (langchain,
+# etc.) are intentionally not part of this project's dev environment.
+MYPY_FILES = src tests scripts
 
 # Setup development environment
 setup:
@@ -15,10 +19,10 @@ format-check:
 # Lint with ruff and mypy
 lint: format
 	uv run ruff check --fix $(PY_FILES)
-	uv run mypy $(PY_FILES)
+	uv run mypy $(MYPY_FILES)
 lint-check: format-check
 	uv run ruff check $(PY_FILES)
-	uv run mypy $(PY_FILES)
+	uv run mypy $(MYPY_FILES)
 
 # Run tests
 test:
