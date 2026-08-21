@@ -182,6 +182,10 @@ Retrieve the exact lineage paths between two assets or columns, including interm
 
 These tools allow modifying metadata in DataHub. They are enabled via the `TOOLS_IS_MUTATION_ENABLED=true` environment variable.
 
+`ensure_tag`
+
+Ensures a tag definition exists in DataHub before it is applied with `add_tags`. The operation is idempotent. Typical workflow: `ensure_tag` -> `add_tags`.
+
 `add_tags` / `remove_tags`
 
 Add or remove tags from entities or schema fields (columns). Supports bulk operations on multiple entities.

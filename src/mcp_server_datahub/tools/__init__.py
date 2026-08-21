@@ -13,7 +13,7 @@ from .structured_properties import (
     add_structured_properties,
     remove_structured_properties,
 )
-from .tags import add_tags, remove_tags
+from .tags import add_tags, ensure_tag, remove_tags
 from .terms import (
     add_glossary_terms,
     remove_glossary_terms,
@@ -25,6 +25,7 @@ __all__ = [
     "add_structured_properties",
     "add_tags",
     "enhanced_search",
+    "ensure_tag",
     "get_dataset_queries",
     "get_entities",
     "get_lineage",

@@ -92,7 +92,7 @@ from .tools.structured_properties import (
     add_structured_properties,
     remove_structured_properties,
 )
-from .tools.tags import add_tags, remove_tags
+from .tools.tags import add_tags, ensure_tag, remove_tags
 from .tools.terms import (
     add_glossary_terms,
     remove_glossary_terms,
@@ -232,6 +232,9 @@ def register_mutation_tools(mcp_instance: FastMCP, is_oss: bool = False) -> None
     if not enabled:
         return
 
+    _register_tool(
+        mcp_instance, "ensure_tag", ensure_tag, tags={ToolType.MUTATION.value}
+    )
     _register_tool(mcp_instance, "add_tags", add_tags, tags={ToolType.MUTATION.value})
     _register_tool(
         mcp_instance, "remove_tags", remove_tags, tags={ToolType.MUTATION.value}
