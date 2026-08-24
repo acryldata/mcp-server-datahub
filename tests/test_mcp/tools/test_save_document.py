@@ -302,6 +302,33 @@ class TestSaveDocument:
         assert result["urn"] == existing_urn
         assert "updated" in result["message"].lower()
 
+    def test_save_document_missing_urn_returns_not_found(self, mock_datahub_client):
+        """Test that updating a missing document fails without upserting."""
+        missing_urn = "urn:li:document:agent-insight-missing-abc123"
+        mock_datahub_client.entities.get.return_value = None
+
+        with patch(
+            "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
+            return_value=mock_datahub_client,
+        ):
+            result = save_document(
+                document_type="Insight",
+                title="Missing Document",
+                content="This must not be created.",
+                urn=missing_urn,
+            )
+
+        assert result == {
+            "success": False,
+            "urn": None,
+            "message": (
+                f"Document '{missing_urn}' was not found. "
+                "Provide no urn to create a new document."
+            ),
+            "author": None,
+        }
+        mock_datahub_client.entities.upsert.assert_not_called()
+
     def test_save_document_invalid_urn_format(self, mock_datahub_client):
         """Test that invalid URN format returns error."""
         with patch(
