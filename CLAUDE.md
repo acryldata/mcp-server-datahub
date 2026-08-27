@@ -14,14 +14,17 @@ A quick summary is below:
 
 - `make setup` - Set up development environment (requires uv)
 - `make lint` - Run ruff formatting, linting and type checking
-- `make test` - Run pytest tests (requires live DataHub instance)
+- `make test` - Run pytest tests (most run offline; only the integration tests need a live DataHub instance)
 - `make clean` - Clean up build artifacts
 
 ## Testing
 
 - Run all tests: `make test`
-- Single test file: `uv run pytest tests/test_mcp_server.py`
-- Tests require a live DataHub instance with proper authentication
+- Single test file: `uv run pytest tests/test_mcp/test_search_documents.py`
+- Most tests run offline against mocked GraphQL responses — no DataHub instance needed.
+- The integration tests in `tests/test_mcp_integration.py` require a live DataHub instance
+  with authentication (`DATAHUB_GMS_URL` / `DATAHUB_GMS_TOKEN`, or `~/.datahubenv`). They
+  skip automatically when no credentials are available.
 
 ## Development Setup
 
