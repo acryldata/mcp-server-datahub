@@ -622,3 +622,60 @@ class TestGetEntitiesRelatedDocuments:
                     == "Table2 Doc"
                 )
                 assert mock_gql.call_count == 4
+
+
+class TestGetEntitiesERModelRelationship:
+    """Tests for get_entities with ERModelRelationship URNs."""
+
+    async def test_er_model_relationship_properties_returned(self, mock_client):
+        """Properties from the ERModelRelationship fragment are passed through unchanged."""
+        urn = "urn:li:erModelRelationship:abc123"
+        er_model_response = {
+            "urn": urn,
+            "type": "ER_MODEL_RELATIONSHIP",
+            "properties": {
+                "name": "orders_to_customers",
+                "source": {
+                    "urn": "urn:li:dataset:(urn:li:dataPlatform:mssql,Orders,PROD)"
+                },
+                "destination": {
+                    "urn": "urn:li:dataset:(urn:li:dataPlatform:mssql,Customers,PROD)"
+                },
+                "relationshipFieldMappings": [
+                    {"sourceField": "customer_id", "destinationField": "id"}
+                ],
+                "cardinality": "MANY_TO_ONE",
+            },
+        }
+
+        with patch(
+            "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
+            return_value=mock_client,
+        ):
+            mock_client._graph.exists.return_value = True
+
+            with patch(
+                "datahub_integrations.mcp.graphql_helpers.execute_graphql"
+            ) as mock_gql:
+                mock_gql.side_effect = [
+                    {"entity": er_model_response},
+                    {"entity": {}},  # related documents call
+                ]
+
+                from datahub_integrations.mcp.mcp_server import get_entities
+
+                result = await async_background(get_entities)(urn)
+
+        assert result["urn"] == urn
+        props = result["properties"]
+        assert props["name"] == "orders_to_customers"
+        assert (
+            props["source"]["urn"]
+            == "urn:li:dataset:(urn:li:dataPlatform:mssql,Orders,PROD)"
+        )
+        assert (
+            props["destination"]["urn"]
+            == "urn:li:dataset:(urn:li:dataPlatform:mssql,Customers,PROD)"
+        )
+        assert props["relationshipFieldMappings"][0]["sourceField"] == "customer_id"
+        assert props["cardinality"] == "MANY_TO_ONE"
