@@ -125,6 +125,7 @@ def get_dataset_queries(
     """
     client = graphql_helpers.get_datahub_client()
 
+    dataset_urn = urn  # preserve dataset URN before potential schema field conversion
     urn = graphql_helpers.maybe_convert_to_schema_field_urn(urn, column)
 
     entities_filter = FilterDsl.custom_filter(
@@ -146,12 +147,32 @@ def get_dataset_queries(
         variables["input"]["source"] = source
 
     # Execute the GraphQL query
-    result = graphql_helpers.execute_graphql(
-        client._graph,
-        query=queries_gql,
-        variables=variables,
-        operation_name="listQueries",
-    )["listQueries"]
+    try:
+        result = graphql_helpers.execute_graphql(
+            client._graph,
+            query=queries_gql,
+            variables=variables,
+            operation_name="listQueries",
+        )["listQueries"]
+    except Exception as e:
+        # Older GMS (e.g. v0.13.1) uses datasetUrn instead of orFilters
+        if "orFilters" not in str(e):
+            raise
+        fallback_variables: dict = {
+            "input": {
+                "start": start,
+                "count": count,
+                "datasetUrn": dataset_urn,
+            }
+        }
+        if source is not None:
+            fallback_variables["input"]["source"] = source
+        result = graphql_helpers.execute_graphql(
+            client._graph,
+            query=queries_gql,
+            variables=fallback_variables,
+            operation_name="listQueries",
+        )["listQueries"]
 
     for query in result["queries"]:
         if query.get("subjects"):

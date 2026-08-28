@@ -102,7 +102,7 @@ query documentSemanticSearch(
       aggregations {
         value
         count
-        displayName
+        displayName  #[NEWER_GMS]
         entity {
           ...DocumentFacetEntityInfo
         }
