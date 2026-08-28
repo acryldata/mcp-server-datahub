@@ -71,6 +71,7 @@ from .tools.documents import grep_documents, search_documents
 from .tools.domains import remove_domains, set_domains
 from .tools.entities import get_entities, list_schema_fields
 from .tools.get_me import get_me
+from .tools.incidents import raise_incident
 from .tools.lineage import (  # noqa: F401 (re-exported for backward compat)
     AssetLineageAPI,
     AssetLineageDirective,
@@ -256,6 +257,9 @@ def register_mutation_tools(mcp_instance: FastMCP, is_oss: bool = False) -> None
     )
     _register_tool(
         mcp_instance, "remove_domains", remove_domains, tags={ToolType.MUTATION.value}
+    )
+    _register_tool(
+        mcp_instance, "raise_incident", raise_incident, tags={ToolType.MUTATION.value}
     )
     _register_tool(mcp_instance, "update_description", update_description)
     _register_tool(mcp_instance, "add_structured_properties", add_structured_properties)
