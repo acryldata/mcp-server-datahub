@@ -1,0 +1,63 @@
+# Dependabot configuration.
+#
+# Security alerts are raised without this file, but version updates are not:
+# before this existed, Dependabot only opened PRs for a handful of packages and
+# high-severity advisories (mcp, cryptography, starlette, aiohttp) accumulated
+# silently. Grouping keeps the routine churn to a few PRs a week while leaving
+# security updates ungrouped so they stay easy to review and backport.
+
+version: 2
+updates:
+  - package-ecosystem: "uv"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 10
+    groups:
+      # Keep the HTTP/auth stack together — these move as a unit and are the
+      # packages that carry most of the transport-layer advisories.
+      mcp-http-stack:
+        patterns:
+          - "mcp"
+          - "fastmcp"
+          - "starlette"
+          - "uvicorn"
+          - "python-multipart"
+          - "authlib"
+          - "pyjwt"
+      dev-dependencies:
+        dependency-type: "development"
+      runtime-dependencies:
+        dependency-type: "production"
+        exclude-patterns:
+          - "mcp"
+          - "fastmcp"
+          - "starlette"
+          - "uvicorn"
+          - "python-multipart"
+          - "authlib"
+          - "pyjwt"
+          # Tracks the DataHub release train. Excluded from the group so it
+          # gets its own PR and is reviewed on its own rather than buried.
+          - "acryl-datahub"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    groups:
+      docker:
+        patterns:
+          - "*"
