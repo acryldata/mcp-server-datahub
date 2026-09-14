@@ -67,6 +67,7 @@ jobs:
 
           container_id=$(docker run --detach \
             --env DATAHUB_GMS_URL=http://datahub.example \
+            --env DATAHUB_TELEMETRY_ENABLED=false \
             --env FASTMCP_PORT=8123 \
             --health-interval=1s \
             --publish 127.0.0.1:18123:8123 \
@@ -102,6 +103,7 @@ jobs:
           container_id=$(docker run --detach \
             --add-host host.docker.internal:host-gateway \
             --env DATAHUB_GMS_URL=http://host.docker.internal:18080 \
+            --env DATAHUB_TELEMETRY_ENABLED=false \
             --env FASTMCP_PORT=8124 \
             --publish 127.0.0.1:18124:8124 \
             mcp-server-datahub:test)
