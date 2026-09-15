@@ -19,9 +19,11 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Dict, List, Literal, Optional, Tuple
 
 if TYPE_CHECKING:
+    from datahub.sdk.entity import Entity
     from datahub.sdk.main_client import DataHubClient
 
 from datahub.cli.env_utils import get_boolean_env_variable
+from datahub.emitter.mcp import MetadataChangeProposalWrapper
 from datahub.metadata import schema_classes as models
 from datahub.metadata.urns import CorpUserUrn
 from datahub.sdk import Document
@@ -262,19 +264,48 @@ def _is_document_in_shared_folder(document_urn: str) -> Tuple[bool, Optional[str
         )
 
 
+def _ensure_folder_not_soft_deleted(
+    client: "DataHubClient", doc_urn: str, existing: "Entity"
+) -> None:
+    """Clear a soft-delete on a folder we are about to parent documents under.
+
+    Search excludes soft-deleted entities before the document visibility filters
+    are evaluated, so a removed folder takes its whole subtree out of the sidebar:
+    the children are not soft-deleted but a rootOnly query never returns them, and
+    their only route into the UI is a parent that no longer resolves. Folders that
+    predate this write carry no status aspect, so treat "absent" as needing the
+    explicit false — that also makes later calls short-circuit here.
+    """
+    status = existing._get_aspect(models.StatusClass)
+    if status is not None and not status.removed:
+        return
+
+    try:
+        client._graph.emit_mcp(
+            MetadataChangeProposalWrapper(
+                entityUrn=doc_urn,
+                aspect=models.StatusClass(removed=False),
+            )
+        )
+        logger.info(f"Cleared soft-delete on folder document: {doc_urn}")
+    except Exception as e:
+        logger.warning(f"Failed to clear soft-delete on folder {doc_urn}: {e}")
+
+
 def _ensure_document_exists(
     doc_id: str,
     title: str,
     description: str,
     parent_urn: Optional[str] = None,
 ) -> str:
-    """Ensure a document exists, creating it if necessary. Returns the URN."""
+    """Ensure a document exists and is visible, creating it if necessary. Returns the URN."""
     client = graphql_helpers.get_datahub_client()
     doc_urn = f"urn:li:document:{doc_id}"
 
     try:
         existing = client.entities.get(doc_urn)
         if existing is not None:
+            _ensure_folder_not_soft_deleted(client, doc_urn, existing)
             return doc_urn
     except Exception:
         pass
@@ -288,6 +319,7 @@ def _ensure_document_exists(
         parent_document=parent_urn,
         show_in_global_context=True,
     )
+    doc._set_aspect(models.StatusClass(removed=False))
 
     try:
         client.entities.upsert(doc)

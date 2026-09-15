@@ -2,9 +2,11 @@ import os
 from unittest.mock import Mock, patch
 
 import pytest
+from datahub.metadata import schema_classes as models
 
 from datahub_integrations.mcp.tools.save_document import (
     ROOT_PARENT_DOC_ID,
+    _ensure_document_exists,
     _generate_document_id,
     _get_parent_title,
     _get_root_parent_id,
@@ -663,6 +665,66 @@ class TestDocumentInSharedFolder:
 
         assert is_valid is False
         assert "has no document info" in error
+
+
+class TestFolderSoftDelete:
+    """Tests that the parent folder stays visible so children are never orphaned."""
+
+    def _ensure_root(self, client):
+        with patch(
+            "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
+            return_value=client,
+        ):
+            return _ensure_document_exists(
+                doc_id=ROOT_PARENT_DOC_ID,
+                title="Shared",
+                description="Contains shared documents.",
+            )
+
+    def test_soft_deleted_folder_is_restored(self, mock_datahub_client):
+        existing = Mock()
+        existing._get_aspect.return_value = models.StatusClass(removed=True)
+        mock_datahub_client.entities.get.return_value = existing
+
+        self._ensure_root(mock_datahub_client)
+
+        emitted = mock_datahub_client._graph.emit_mcp.call_args[0][0]
+        assert emitted.entityUrn == _get_root_parent_urn()
+        assert emitted.aspect == models.StatusClass(removed=False)
+        # Restoring must not rewrite documentInfo — that would clobber a renamed folder.
+        mock_datahub_client.entities.upsert.assert_not_called()
+
+    def test_visible_folder_is_left_alone(self, mock_datahub_client):
+        existing = Mock()
+        existing._get_aspect.return_value = models.StatusClass(removed=False)
+        mock_datahub_client.entities.get.return_value = existing
+
+        self._ensure_root(mock_datahub_client)
+
+        mock_datahub_client._graph.emit_mcp.assert_not_called()
+        mock_datahub_client.entities.upsert.assert_not_called()
+
+    def test_folder_without_status_aspect_is_pinned_visible(self, mock_datahub_client):
+        # Folders created before this write have no status aspect; they self-heal once.
+        existing = Mock()
+        existing._get_aspect.return_value = None
+        mock_datahub_client.entities.get.return_value = existing
+
+        self._ensure_root(mock_datahub_client)
+
+        emitted = mock_datahub_client._graph.emit_mcp.call_args[0][0]
+        assert emitted.aspect == models.StatusClass(removed=False)
+
+    def test_newly_created_folder_carries_visible_status(self, mock_datahub_client):
+        mock_datahub_client.entities.get.return_value = None
+        upserted = []
+        mock_datahub_client.entities.upsert = upserted.append
+
+        self._ensure_root(mock_datahub_client)
+
+        assert upserted[0]._get_aspect(models.StatusClass) == models.StatusClass(
+            removed=False
+        )
 
 
 class TestTopicsToTags:
