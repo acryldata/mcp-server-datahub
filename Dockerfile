@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
-FROM ghcr.io/astral-sh/uv:0.11.7 AS uv
-FROM python:3.11-slim AS builder
+FROM ghcr.io/astral-sh/uv:0.12.15 AS uv
+FROM python:3.14-slim AS builder
 
 ARG VERSION=0.0.0
 
@@ -29,7 +29,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --no-editable
 
 
-FROM python:3.11-slim AS runtime
+FROM python:3.14-slim AS runtime
 
 ARG VERSION=0.0.0
 ARG VCS_REF=unknown
