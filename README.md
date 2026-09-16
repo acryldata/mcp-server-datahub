@@ -248,6 +248,8 @@ Save standalone documents (insights, decisions, FAQs, notes) to DataHub's knowle
 | `SAVE_DOCUMENT_ORGANIZE_BY_USER` | `false` | Organize saved documents by user |
 | `SAVE_DOCUMENT_RESTRICT_UPDATES` | `true` | Only allow updating documents in the shared folder |
 | `TOOL_RESPONSE_TOKEN_LIMIT` | `80000` | Maximum tokens for tool responses |
+| `DESCRIPTION_LENGTH_LIMIT` | `5000` | Maximum characters for entity descriptions in tool responses |
+| `COLUMN_DESCRIPTION_LENGTH_LIMIT` | `120` | Maximum characters for schema field (column) descriptions in `get_entities` responses |
 | `ENTITY_SCHEMA_TOKEN_BUDGET` | `16000` | Token budget per entity for schema fields |
 | `DISABLE_NEWER_GMS_FIELD_DETECTION` | `false` | Disable adaptive GMS field detection |
 | `DATAHUB_MCP_DISABLE_DEFAULT_VIEW` | `false` | Disable automatic default view application |

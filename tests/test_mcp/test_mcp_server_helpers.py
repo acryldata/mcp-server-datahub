@@ -614,6 +614,22 @@ def test_description_length_limit_env_var() -> None:
     assert graphql_helpers.DESCRIPTION_LENGTH_HARD_LIMIT == 5000
 
 
+def test_column_description_length_limit_default() -> None:
+    """COLUMN_DESCRIPTION_LENGTH_LIMIT should default to 120."""
+    assert graphql_helpers.COLUMN_DESCRIPTION_LENGTH_LIMIT == 120
+
+
+def test_column_description_length_limit_env_var() -> None:
+    """COLUMN_DESCRIPTION_LENGTH_LIMIT env var should override the default at import time."""
+    with patch.dict(os.environ, {"COLUMN_DESCRIPTION_LENGTH_LIMIT": "500"}):
+        importlib.reload(graphql_helpers)
+        assert graphql_helpers.COLUMN_DESCRIPTION_LENGTH_LIMIT == 500
+
+    # Restore module to its default state (env var no longer set)
+    importlib.reload(graphql_helpers)
+    assert graphql_helpers.COLUMN_DESCRIPTION_LENGTH_LIMIT == 120
+
+
 def test_get_lineage_normalizes_null_string() -> None:
     """Test that get_lineage normalizes the string 'null' to None for the column parameter."""
     from datahub_integrations.mcp.mcp_server import get_lineage
@@ -841,7 +857,7 @@ class TestCleanSchemaFields:
         assert "__typename" not in field
 
     def test_truncates_long_descriptions(self) -> None:
-        """Test that field descriptions are truncated to 120 chars."""
+        """Test that field descriptions are truncated to COLUMN_DESCRIPTION_LENGTH_LIMIT (120 by default)."""
         long_desc = "x" * 200
         fields = [{"fieldPath": "field", "description": long_desc}]
 
@@ -849,6 +865,21 @@ class TestCleanSchemaFields:
 
         assert len(result[0]["description"]) == 120
         assert result[0]["description"] == long_desc[:120]
+
+    @patch(
+        "datahub_integrations.mcp.graphql_helpers.COLUMN_DESCRIPTION_LENGTH_LIMIT", 50
+    )
+    def test_truncates_descriptions_to_configured_limit(self) -> None:
+        """Test that description and editedDescription honor COLUMN_DESCRIPTION_LENGTH_LIMIT."""
+        long_desc = "x" * 200
+        long_edited = "y" * 200
+        fields = [{"fieldPath": "field", "description": long_desc}]
+        editable_map = {"field": {"description": long_edited}}
+
+        result = list(_clean_schema_fields(iter(fields), editable_map=editable_map))
+
+        assert result[0]["description"] == "x" * 50
+        assert result[0]["editedDescription"] == "y" * 50
 
     def test_omits_false_boolean_flags(self) -> None:
         """Test that isPartOfKey, isPartitioningKey, recursive are omitted when False."""

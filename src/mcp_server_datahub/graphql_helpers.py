@@ -42,6 +42,11 @@ GQL_DIR = pathlib.Path(__file__).parent / "gql"
 
 T = TypeVar("T")
 DESCRIPTION_LENGTH_HARD_LIMIT = int(os.getenv("DESCRIPTION_LENGTH_LIMIT", "5000"))
+# Max length for schema field (column) descriptions in get_entities responses.
+# Kept short by default since a dataset may have hundreds of columns.
+COLUMN_DESCRIPTION_LENGTH_LIMIT = int(
+    os.getenv("COLUMN_DESCRIPTION_LENGTH_LIMIT", "120")
+)
 QUERY_LENGTH_HARD_LIMIT = 5000
 DOCUMENT_CONTENT_CHAR_LIMIT = 8000
 
@@ -712,7 +717,7 @@ def _clean_schema_fields(
 
         # Add description if present (truncated)
         if description := f.get("description"):
-            field_dict["description"] = description[:120]
+            field_dict["description"] = description[:COLUMN_DESCRIPTION_LENGTH_LIMIT]
 
         # Add nullable if present (important for SQL NULL handling)
         if f.get("nullable") is not None:
@@ -772,8 +777,11 @@ def _clean_schema_fields(
             if editable_desc := editable.get("description"):
                 system_desc = field_dict.get("description", "")
                 # Only add if different (token optimization)
-                if editable_desc[:120] != system_desc:  # Compare truncated versions
-                    field_dict["editedDescription"] = editable_desc[:120]
+                truncated_editable_desc = editable_desc[
+                    :COLUMN_DESCRIPTION_LENGTH_LIMIT
+                ]
+                if truncated_editable_desc != system_desc:  # Compare truncated versions
+                    field_dict["editedDescription"] = truncated_editable_desc
 
             # Add editedTags if present and different
             if editable_tags := editable.get("tags"):
