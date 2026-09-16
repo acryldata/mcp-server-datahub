@@ -238,6 +238,34 @@ class TestListSchemaFields:
                 assert len(result["fields"]) == 50
                 assert result["remainingCount"] == 0  # No more fields
 
+    async def test_offset_beyond_schema_returns_zero_remaining(
+        self, mock_client, sample_dataset_with_schema
+    ):
+        """An offset past the last field returns an empty terminal page."""
+        urn = sample_dataset_with_schema["urn"]
+
+        with patch(
+            "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
+            return_value=mock_client,
+        ):
+            mock_client._graph.exists.return_value = True
+
+            with patch(
+                "datahub_integrations.mcp.graphql_helpers.execute_graphql"
+            ) as mock_gql:
+                mock_gql.return_value = {"entity": sample_dataset_with_schema}
+
+                from datahub_integrations.mcp.mcp_server import list_schema_fields
+
+                result = await async_background(list_schema_fields)(
+                    urn=urn, limit=100, offset=100
+                )
+
+                assert result["fields"] == []
+                assert result["returned"] == 0
+                assert result["remainingCount"] == 0
+                assert result["offset"] == 100
+
     async def test_works_without_keywords(
         self, mock_client, sample_dataset_with_schema
     ):
