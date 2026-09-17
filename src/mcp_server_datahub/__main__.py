@@ -10,11 +10,12 @@ from datahub.ingestion.graph.config import ClientMode, DatahubClientConfig
 from datahub.sdk.main_client import DataHubClient
 from datahub.telemetry import telemetry
 from fastmcp import FastMCP
-from fastmcp.server.auth import TokenVerifier
+from fastmcp.server.auth import AuthProvider, RemoteAuthProvider, TokenVerifier
 from fastmcp.server.auth.auth import AccessToken
 from fastmcp.server.dependencies import get_access_token
 from fastmcp.server.middleware import Middleware
 from fastmcp.server.middleware.logging import LoggingMiddleware
+from pydantic import AnyHttpUrl
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from typing_extensions import Literal
@@ -39,6 +40,9 @@ _AUTH_FAILURE_STATUS_RE = re.compile(
 _HTTP_CLIENT_CACHE_TTL_SECONDS = 300
 _HTTP_CLIENT_CACHE_MAX_SIZE = 1024
 _HTTP_MAX_CONCURRENT_VALIDATIONS = 8
+_OAUTH_AUTHORIZATION_SERVERS_ENV = "MCP_OAUTH_AUTHORIZATION_SERVERS"
+_OAUTH_BASE_URL_ENV = "MCP_OAUTH_BASE_URL"
+_OAUTH_SCOPES_ENV = "MCP_OAUTH_SCOPES"
 
 
 class _DataHubClientMiddleware(Middleware):
@@ -222,7 +226,7 @@ def _get_existing_app(mode: _AppMode) -> Optional[FastMCP]:
 def _configure_app(
     mode: _AppMode,
     client_middleware: Middleware,
-    auth: Optional[TokenVerifier] = None,
+    auth: Optional[AuthProvider] = None,
 ) -> FastMCP:
     global _app_mode
     existing_app = _get_existing_app(mode)
@@ -255,6 +259,46 @@ def create_local_app() -> FastMCP:
     return _configure_app("local", _DataHubClientMiddleware(client))
 
 
+def _split_env_list(name: str) -> list[str]:
+    return [
+        item.strip() for item in os.environ.get(name, "").split(",") if item.strip()
+    ]
+
+
+def _build_http_auth(token_verifier: _DataHubTokenVerifier) -> AuthProvider:
+    """Wrap the token verifier so it also advertises where tokens come from.
+
+    Without this, clients receive a bare ``WWW-Authenticate: Bearer`` challenge
+    and have no way to discover an authorization server, so they cannot start a
+    sign-in flow. Opt-in: unset, the server behaves exactly as before.
+    """
+
+    authorization_servers = _split_env_list(_OAUTH_AUTHORIZATION_SERVERS_ENV)
+    if not authorization_servers:
+        return token_verifier
+
+    base_url = os.environ.get(_OAUTH_BASE_URL_ENV)
+    if not base_url:
+        raise RuntimeError(
+            f"{_OAUTH_BASE_URL_ENV} is required when "
+            f"{_OAUTH_AUTHORIZATION_SERVERS_ENV} is set; it must be the public "
+            "base URL clients use to reach this server"
+        )
+
+    logger.info(
+        "Advertising OAuth protected-resource metadata for %s (authorization servers: %s)",
+        base_url,
+        ", ".join(authorization_servers),
+    )
+    return RemoteAuthProvider(
+        token_verifier=token_verifier,
+        authorization_servers=[AnyHttpUrl(url) for url in authorization_servers],
+        base_url=base_url,
+        scopes_supported=_split_env_list(_OAUTH_SCOPES_ENV) or None,
+        resource_name="DataHub MCP server",
+    )
+
+
 def create_http_app() -> FastMCP:
     """Create the shared HTTP app with per-request DataHub authentication."""
 
@@ -276,7 +320,7 @@ def create_http_app() -> FastMCP:
     return _configure_app(
         "http",
         _AuthenticatedDataHubClientMiddleware(token_verifier),
-        auth=token_verifier,
+        auth=_build_http_auth(token_verifier),
     )
 
 
