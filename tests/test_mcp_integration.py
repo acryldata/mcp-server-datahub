@@ -21,6 +21,10 @@ from mcp.types import TextContent
 from loguru import logger
 from mcp_server_datahub._telemetry import TelemetryMiddleware
 from mcp_server_datahub.mcp_server import mcp, register_all_tools, with_datahub_client
+from mcp_server_datahub.version_requirements import (
+    TOOL_VERSION_REQUIREMENTS,
+    _is_tool_compatible,
+)
 
 # Register tools with OSS-compatible descriptions for testing
 register_all_tools(is_oss=True)
@@ -1156,3 +1160,108 @@ async def test_get_lineage_paths_between_upstream(mcp_client: Client) -> None:
         if "No lineage" in str(e):
             pytest.skip("No upstream lineage path exists")
         raise
+
+
+_ASPECT_HISTORY_URN = (
+    "urn:li:dataset:(urn:li:dataPlatform:hive,mcp_server_aspect_history_fixture,PROD)"
+)
+_ASPECT_HISTORY_WRITES = 25
+
+
+def _require_disposable_instance() -> None:
+    """Only run write-based tests against a throwaway local quickstart.
+
+    The CI matrix also runs this suite against a real DataHub Cloud instance, and
+    nothing else in this file writes. Gating on a loopback GMS keeps the writes
+    confined to the quickstart the OSS legs stand up and throw away.
+    """
+    gms_url = os.environ.get("DATAHUB_GMS_URL", "")
+    host = gms_url.split("://")[-1].split(":")[0]
+    if host not in ("localhost", "127.0.0.1"):
+        pytest.skip("Write-based test runs only against a local quickstart")
+
+
+def _require_aspect_history_supported(client: DataHubClient) -> None:
+    """Skip when the live server predates get_aspect_history's version floor.
+
+    The tool is gated with @min_version because it depends on per-aspect
+    If-Version-Match on the v3 batchGet endpoint. The CI matrix stands up OSS
+    quickstarts below that floor, and call_tool -- unlike list_tools -- is not
+    version-filtered, so without this guard the tool would be exercised against a
+    server that cannot serve the seam. Reusing the tool's own requirement and the
+    production compatibility check keeps the skip in lockstep with the gate.
+    """
+    req = TOOL_VERSION_REQUIREMENTS.get("get_aspect_history")
+    config = client._graph.server_config
+    is_cloud = config.is_datahub_cloud
+    server_version = config.parsed_version or (0, 0, 0, 0)
+    if req is not None and not _is_tool_compatible(req, is_cloud, server_version):
+        deployment = "cloud" if is_cloud else "oss"
+        minimum = req.cloud_min if is_cloud else req.oss_min
+        pytest.skip(
+            f"get_aspect_history requires {deployment} >= {minimum}; "
+            f"server is {server_version}"
+        )
+
+
+@pytest.mark.anyio
+async def test_get_aspect_history_against_a_multi_version_aspect(
+    mcp_client: Client,
+) -> None:
+    """History must start one below v0's reported version, and never repeat it.
+
+    ``v0.systemMetadata.version`` reports the logical next version N while the
+    demoted values occupy rows 1..N-1, and a read at N resolves to the current
+    envelope rather than returning empty. An anchor placed at N therefore makes
+    ``history[0]`` a silent duplicate of ``current``. Only a real server shows
+    this: a fake that serves whatever version it is asked for cannot.
+    """
+    _require_disposable_instance()
+    client = DataHubClient.from_env()
+    _require_aspect_history_supported(client)
+    graph = client._graph
+
+    for i in range(1, _ASPECT_HISTORY_WRITES + 1):
+        response = graph._session.post(
+            f"{graph._gms_server}/openapi/v3/entity/dataset?async=false",
+            data=json.dumps(
+                [
+                    {
+                        "urn": _ASPECT_HISTORY_URN,
+                        "datasetProperties": {
+                            "value": {
+                                "name": "mcp_server_aspect_history_fixture",
+                                "description": f"revision {i}",
+                            }
+                        },
+                    }
+                ]
+            ),
+        )
+        response.raise_for_status()
+
+    result = await mcp_client.call_tool(
+        "get_aspect_history",
+        {
+            "urns": _ASPECT_HISTORY_URN,
+            "aspect_names": "datasetProperties",
+            "limit": 5,
+        },
+    )
+    data = _tool_result_data(result)
+    item = data["results"][0]
+
+    assert item["error"] is None
+    current_version = int(item["current"]["systemMetadata"]["version"])
+    # The suite runs twice against one quickstart, so the aspect may already
+    # carry versions from an earlier pass. Assert relationships, not a count.
+    assert current_version >= _ASPECT_HISTORY_WRITES
+
+    assert item["history"], "a repeatedly written aspect must expose history"
+    assert item["history"][0]["version"] == current_version - 1
+    assert item["history"][0]["value"] != item["current"]["value"]
+    assert item["page"]["fromVersion"] == current_version - 1
+    assert item["page"]["anchorSource"] == "systemMetadata"
+
+    versions = [entry["version"] for entry in item["history"]]
+    assert versions == sorted(versions, reverse=True)

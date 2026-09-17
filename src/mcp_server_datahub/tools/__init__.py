@@ -1,5 +1,6 @@
 """MCP tools for DataHub integrations."""
 
+from .aspect_history import get_aspect_history
 from .dataset_queries import get_dataset_queries
 from .descriptions import update_description
 from .documents import grep_documents, search_documents
@@ -25,6 +26,7 @@ __all__ = [
     "add_structured_properties",
     "add_tags",
     "enhanced_search",
+    "get_aspect_history",
     "get_dataset_queries",
     "get_entities",
     "get_lineage",

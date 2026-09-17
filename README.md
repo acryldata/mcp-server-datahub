@@ -170,6 +170,10 @@ Fetch real SQL queries referencing a dataset or column—manual or system-genera
 
 Fetch detailed metadata for one or more entities by URN; supports batch retrieval for efficient inspection of search results.
 
+`get_aspect_history`
+
+Retrieve the current value and a bounded, newest-first page of retained historical versions for one or more entity/aspect pairs, with per-version ingestion and audit provenance.
+
 `list_schema_fields`
 
 List schema fields for a dataset with keyword filtering and pagination, useful when search results truncate fields or when exploring large schemas.
