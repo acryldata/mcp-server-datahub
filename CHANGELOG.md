@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `FIELD_DESCRIPTION_LENGTH_LIMIT` (default `120`) makes the per-schema-field
+  description limit configurable. It also covers a field's edited description and
+  its deprecation note, which were hardcoded to the same 120 characters.
 - A non-root Docker image, Docker Compose configuration, public `GET /health`
   endpoint, and multi-architecture Docker Hub/GHCR release workflow.
 
