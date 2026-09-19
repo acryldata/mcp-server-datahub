@@ -556,14 +556,34 @@ def grep_documents(
       - content_length: Total length of document content (when start_offset is used)
     - total_matches: Total matches across all documents
     - documents_with_matches: Number of documents containing matches
+    - omitted: Accounting of requested URNs absent from results, by cause, so
+      callers can distinguish "document missing" from "document did not match":
+      - not_found: URNs that did not resolve to a readable document
+        (missing, unresolvable, or not a Document entity)
+      - empty: documents that resolved but have no text content
+      - offset_beyond_length: documents skipped because start_offset is at or
+        past the end of their content
+      - no_match: documents whose content contained zero pattern matches
+      Bounded by the input URN list; all lists are empty on a full-match call.
+      On the invalid-regex error return the lists are present but unpopulated.
+      Duplicate input URNs are not deduplicated: not_found preserves input
+      multiplicity, while per-document causes follow the response entities.
     """
     client = graphql_helpers.get_datahub_client()
+
+    omitted: Dict[str, List[str]] = {
+        "not_found": [],
+        "empty": [],
+        "offset_beyond_length": [],
+        "no_match": [],
+    }
 
     if not urns:
         return {
             "results": [],
             "total_matches": 0,
             "documents_with_matches": 0,
+            "omitted": omitted,
         }
 
     # Fetch document content via GraphQL
@@ -586,23 +606,38 @@ def grep_documents(
             "results": [],
             "total_matches": 0,
             "documents_with_matches": 0,
+            "omitted": omitted,
         }
 
     results = []
     total_matches = 0
     documents_with_matches = 0
+    resolved_urns = set()
 
     for entity in entities:
         if not entity:
             continue
 
         urn = entity.get("urn", "")
-        info = entity.get("info", {})
+        if not urn:
+            # An entity with no urn cannot be attributed to a requested urn;
+            # the request it answered will land in not_found instead.
+            continue
+        info = entity.get("info")
+        if not isinstance(info, dict):
+            # The entity resolved but carries no Document info fragment
+            # (wrong entity type, e.g. a Dataset urn): it is not a readable
+            # document, so leave the urn to not_found rather than
+            # misreporting it as an empty document.
+            continue
         title = info.get("title", "Untitled")
         contents = info.get("contents", {})
         text = contents.get("text", "") if contents else ""
 
+        resolved_urns.add(urn)
+
         if not text:
+            omitted["empty"].append(urn)
             continue
 
         # Store original length before applying offset
@@ -612,6 +647,7 @@ def grep_documents(
         if start_offset > 0:
             if start_offset >= len(text):
                 # Offset is beyond document length, skip this document
+                omitted["offset_beyond_length"].append(urn)
                 continue
             text = text[start_offset:]
 
@@ -648,6 +684,7 @@ def grep_documents(
                 )
 
         if doc_total_matches == 0:
+            omitted["no_match"].append(urn)
             continue
 
         documents_with_matches += 1
@@ -666,8 +703,13 @@ def grep_documents(
 
         results.append(result_entry)
 
+    # Requested URNs that never resolved to a readable document (null entry
+    # in the response, or absent from it entirely), in input order.
+    omitted["not_found"] = [u for u in urns if u not in resolved_urns]
+
     return {
         "results": results,
         "total_matches": total_matches,
         "documents_with_matches": documents_with_matches,
+        "omitted": omitted,
     }
