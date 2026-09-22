@@ -614,6 +614,33 @@ def test_description_length_limit_env_var() -> None:
     assert graphql_helpers.DESCRIPTION_LENGTH_HARD_LIMIT == 5000
 
 
+def test_query_length_limit_default() -> None:
+    """QUERY_LENGTH_HARD_LIMIT should default to 5000."""
+    assert graphql_helpers.QUERY_LENGTH_HARD_LIMIT == 5000
+
+
+def test_query_length_limit_env_var() -> None:
+    """QUERY_LENGTH_LIMIT env var should override the default at import time."""
+    with patch.dict(os.environ, {"QUERY_LENGTH_LIMIT": "20000"}):
+        importlib.reload(graphql_helpers)
+        assert graphql_helpers.QUERY_LENGTH_HARD_LIMIT == 20000
+
+    # Restore module to its default state (env var no longer set)
+    importlib.reload(graphql_helpers)
+    assert graphql_helpers.QUERY_LENGTH_HARD_LIMIT == 5000
+
+
+def test_truncate_query_honors_configured_limit() -> None:
+    """truncate_query should truncate using the configured limit, not a hardcoded one."""
+    long_query = "SELECT * FROM t " * 1000
+
+    with patch.object(graphql_helpers, "QUERY_LENGTH_HARD_LIMIT", 200):
+        result = truncate_query(long_query)
+
+    assert len(result) == 200
+    assert result.endswith("... [truncated]")
+
+
 def test_get_lineage_normalizes_null_string() -> None:
     """Test that get_lineage normalizes the string 'null' to None for the column parameter."""
     from datahub_integrations.mcp.mcp_server import get_lineage
