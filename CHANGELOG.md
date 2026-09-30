@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `get_entities` and `get_dataset_queries` now return `customProperties` and `origin`
+  for Query entities, so structured key/value metadata attached to a query is visible
+  to agents.
+- `get_entities` now returns `customProperties`, `structuredProperties` and `ownership`
+  for every entity type whose GraphQL type supports them. Previously these were
+  missing for Dashboard, Chart, Container, Domain, DataProduct, GlossaryTerm,
+  GlossaryNode, CorpUser, CorpGroup, Tag and the ML entities. DataProduct also
+  gains `tags` and `glossaryTerms`.
 - A non-root Docker image, Docker Compose configuration, public `GET /health`
   endpoint, and multi-architecture Docker Hub/GHCR release workflow.
 
