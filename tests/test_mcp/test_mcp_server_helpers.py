@@ -510,6 +510,176 @@ def test_clean_get_entities_response_with_schema_metadata() -> None:
     assert result == expected_result
 
 
+def test_clean_get_entities_response_field_structured_properties() -> None:
+    """Field structured properties are opt-in and flattened to qualifiedName -> value."""
+    raw_response = {
+        "urn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics_db.raw_schema.users,PROD)",
+        "schemaMetadata": {
+            "fields": [
+                {
+                    "fieldPath": "margin_pct",
+                    "type": "NUMBER",
+                    "schemaFieldEntity": {
+                        "structuredProperties": {
+                            "properties": [
+                                {
+                                    "structuredProperty": {
+                                        "urn": "urn:li:structuredProperty:ai_context.instructions",
+                                        "definition": {
+                                            "qualifiedName": "ai_context.instructions"
+                                        },
+                                    },
+                                    "values": [
+                                        {
+                                            "stringValue": "Percentage points, do not sum."
+                                        }
+                                    ],
+                                },
+                                {
+                                    "structuredProperty": {
+                                        "urn": "urn:li:structuredProperty:ai_context.synonyms",
+                                        "definition": {
+                                            "qualifiedName": "ai_context.synonyms"
+                                        },
+                                    },
+                                    "values": [
+                                        {"stringValue": "margin"},
+                                        {"stringValue": "contribution"},
+                                    ],
+                                },
+                            ]
+                        }
+                    },
+                },
+                {
+                    "fieldPath": "user_id",
+                    "type": "STRING",
+                    "schemaFieldEntity": {"structuredProperties": {"properties": []}},
+                },
+            ]
+        },
+    }
+
+    # Default (get_entities): properties are omitted to keep responses small
+    default_result = clean_get_entities_response(raw_response)
+    assert default_result["schemaMetadata"]["fields"] == [
+        {"fieldPath": "margin_pct", "type": "NUMBER"},
+        {"fieldPath": "user_id", "type": "STRING"},
+    ]
+
+    # Opt-in (list_schema_fields): properties are included
+    opted_in_result = clean_get_entities_response(
+        raw_response, include_structured_properties=True
+    )
+    fields = {f["fieldPath"]: f for f in opted_in_result["schemaMetadata"]["fields"]}
+    assert fields["margin_pct"]["structuredProperties"] == {
+        "ai_context.instructions": "Percentage points, do not sum.",
+        "ai_context.synonyms": ["margin", "contribution"],
+    }
+    assert "structuredProperties" not in fields["user_id"]
+
+
+def test_extract_structured_properties_truncates_and_skips_empty() -> None:
+    """Long values are truncated; unnamed or valueless properties are skipped."""
+    with patch.object(graphql_helpers, "FIELD_STRUCTURED_PROPERTY_CHAR_LIMIT", 20):
+        extracted = graphql_helpers.extract_structured_properties(
+            {
+                "structuredProperties": {
+                    "properties": [
+                        {
+                            "structuredProperty": {
+                                "definition": {
+                                    "qualifiedName": "ai_context.instructions"
+                                }
+                            },
+                            "values": [{"stringValue": "a" * 100}],
+                        },
+                        {
+                            "structuredProperty": {
+                                "definition": {"qualifiedName": "retention_days"}
+                            },
+                            "values": [{"numberValue": 30}],
+                        },
+                        {
+                            "structuredProperty": {
+                                "definition": {"qualifiedName": "steward"}
+                            },
+                            "values": [],
+                            "valueEntities": [{"urn": "urn:li:corpuser:jdoe"}],
+                        },
+                        {
+                            "structuredProperty": {
+                                "definition": {"qualifiedName": "empty"}
+                            },
+                            "values": [],
+                        },
+                        {"values": [{"stringValue": "no property definition"}]},
+                    ]
+                }
+            }
+        )
+
+    assert extracted == {
+        "ai_context.instructions": "a" * 17 + "...",
+        "retention_days": 30,
+        "steward": "urn:li:corpuser:jdoe",
+    }
+    assert graphql_helpers.extract_structured_properties({}) == {}
+
+
+def test_extract_structured_properties_tolerates_sparse_responses() -> None:
+    """Absent, null or unknown-typed values degrade to no properties, not an error.
+
+    Older GMS versions may not populate the aspect at all, and the schema allows
+    null items in `values: [PropertyValue]!` and `valueEntities: [Entity]`.
+    """
+    for schema_field_entity in [
+        {},
+        {"deprecation": {"deprecated": False}},
+        {"structuredProperties": None},
+        {"structuredProperties": {"properties": None}},
+        {"structuredProperties": {"properties": []}},
+        # Null items inside the value lists
+        {
+            "structuredProperties": {
+                "properties": [
+                    {
+                        "structuredProperty": {"definition": {"qualifiedName": "x"}},
+                        "values": [None],
+                        "valueEntities": [None],
+                    }
+                ]
+            }
+        },
+        # Value type the server does not expose through this fragment
+        {
+            "structuredProperties": {
+                "properties": [
+                    {
+                        "structuredProperty": {"definition": {"qualifiedName": "x"}},
+                        "values": [{"__typename": "DateValue"}],
+                    }
+                ]
+            }
+        },
+    ]:
+        assert graphql_helpers.extract_structured_properties(schema_field_entity) == {}
+
+    # A null item next to a real one keeps the real value
+    assert graphql_helpers.extract_structured_properties(
+        {
+            "structuredProperties": {
+                "properties": [
+                    {
+                        "structuredProperty": {"definition": {"qualifiedName": "x"}},
+                        "values": [None, {"stringValue": "kept"}],
+                    }
+                ]
+            }
+        }
+    ) == {"x": "kept"}
+
+
 def test_truncate_query_long() -> None:
     """Test that long queries are truncated correctly."""
     with patch.object(graphql_helpers, "QUERY_LENGTH_HARD_LIMIT", 50):

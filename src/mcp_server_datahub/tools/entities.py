@@ -147,6 +147,8 @@ def list_schema_fields(
 
     Useful when schema fields were truncated in search results (schemaFieldsTruncated present)
     and you need to explore specific columns. Supports pagination for large schemas.
+    Unlike get_entities, each returned field also carries its curated structured properties
+    (e.g. ai_context.*) when they are set.
 
     Args:
         urn: Dataset URN
@@ -154,7 +156,8 @@ def list_schema_fields(
                  - Single keyword: Treated as one keyword (NOT split on whitespace). Use for field names or exact phrases.
                  - Multiple keywords: Multiple keywords, matches any (OR logic).
                  - None or empty list: Returns all fields in priority order (same as get_entities).
-                 Matches against fieldPath, description, label, tags, and glossary terms.
+                 Matches against fieldPath, description, label, tags, glossary terms, and
+                 structured property values.
                  Matching fields are returned first, sorted by match count.
         limit: Maximum number of fields to return (default: 100)
         offset: Number of fields to skip for pagination (default: 0)
@@ -259,6 +262,7 @@ def list_schema_fields(
             3. label
             4. tag names
             5. glossary term names
+            6. structured property values (e.g. ai_context.instructions)
 
             Example:
                 keywords = ["email", "user"]
@@ -298,6 +302,15 @@ def list_schema_fields(
                         ]
                     )
 
+            # Add curated structured property values (e.g. ai_context.instructions)
+            if schema_field_entity := field.get("schemaFieldEntity"):
+                searchable_texts.extend(
+                    str(value)
+                    for value in graphql_helpers.extract_structured_properties(
+                        schema_field_entity
+                    ).values()
+                )
+
             # Count keyword coverage: +1 for each (keyword, text) pair that matches
             # Note: Substring matching, case-insensitive
             return sum(
@@ -330,6 +343,7 @@ def list_schema_fields(
         sort_fn=sort_fn,
         offset=offset,
         limit=limit,
+        include_structured_properties=True,
     )
 
     # Extract the cleaned fields and metadata
