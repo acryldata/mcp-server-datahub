@@ -97,6 +97,11 @@ FILTER SYNTAX (SQL-like WHERE clause):
 
     SUPPORTED FILTER FIELDS:
     - entity_type: dataset, dashboard, chart, corp_user, corp_group, dataProduct, etc.
+      ("report" is not a valid entity_type -- the visual report/dashboard object from
+      BI tools like PowerBI, Tableau, and Looker is entity_type = dashboard, but the
+      underlying semantic model/view feeding it (e.g. a PowerBI dataset, Looker
+      Explore/View, Tableau data source) is typically its own entity_type = dataset;
+      search both if one comes up empty)
     - entity_subtype (or subtype): Table, View, Model, etc.
     - platform: snowflake, bigquery, looker, tableau, etc.
     - domain: full URN required, e.g. urn:li:domain:marketing
