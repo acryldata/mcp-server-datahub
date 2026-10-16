@@ -1,14 +1,22 @@
 """Structured property management tools for DataHub MCP server."""
 
 import logging
-from typing import Dict, List, Union
+from typing import Annotated, Dict, List, Union
 
 from datahub.sdk.main_client import DataHubClient
+from pydantic import WithJsonSchema
 
 from .. import graphql_helpers
 from ..version_requirements import min_version
 
 logger = logging.getLogger(__name__)
+
+# `int` stays in the runtime union so integer inputs are not coerced to float, but the
+# schema says `["string", "number"]`: JSON Schema's `number` already covers integers, and
+# the default three-branch `anyOf` is rejected by some providers (see _schema_types).
+StructuredPropertyValue = Annotated[
+    Union[str, float, int], WithJsonSchema({"type": ["string", "number"]})
+]
 
 
 def _validate_and_fetch_structured_property(
@@ -191,7 +199,7 @@ def _validate_property_value(
 
 @min_version(cloud="0.3.16", oss="1.4.0")
 def add_structured_properties(
-    property_values: Dict[str, List[Union[str, float, int]]],
+    property_values: Dict[str, List[StructuredPropertyValue]],
     entity_urns: List[str],
 ) -> dict:
     """Add structured properties with values to multiple DataHub entities.
