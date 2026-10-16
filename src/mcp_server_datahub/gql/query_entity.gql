@@ -12,6 +12,14 @@ query GetQueryEntity($urn: String!) {
           value
           language
         }
+        customProperties {
+          key
+          value
+        }
+        origin {
+          urn
+          type
+        }
         lastModified {
           actor
         }

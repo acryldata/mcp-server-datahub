@@ -225,3 +225,45 @@ def test_get_entities_query_urn_edge_cases(mock_client):
         call_kwargs = mock_gql.call_args_list[0][1]
         assert call_kwargs["operation_name"] == "GetQueryEntity"
         assert result["urn"] == test_urn
+
+
+def test_get_entities_query_returns_custom_properties(mock_client):
+    """Custom properties on a Query entity are passed through to the tool result."""
+
+    query_urn = "urn:li:query:with-custom-props"
+
+    mock_response = {
+        "entity": {
+            "urn": query_urn,
+            "type": "QUERY",
+            "properties": {
+                "name": "Agent Query",
+                "source": "SYSTEM",
+                "statement": {"value": "SELECT 1", "language": "SQL"},
+                "customProperties": [
+                    {"key": "agent_intent", "value": "daily_revenue"},
+                    {"key": "owner_team", "value": "finance"},
+                ],
+            },
+            "platform": {"urn": "urn:li:dataPlatform:trino", "name": "trino"},
+        }
+    }
+
+    mock_client._graph.exists.return_value = True
+    mock_client._graph.url_for = lambda x: f"https://example.com/{x}"
+
+    with patch(
+        "datahub_integrations.mcp.graphql_helpers.execute_graphql",
+        side_effect=[mock_response, {"entity": {}}],
+    ) as mock_gql:
+        with with_datahub_client(mock_client):
+            result = get_entities(query_urn)
+
+    # The GraphQL document sent to the server must request customProperties
+    sent_query = mock_gql.call_args_list[0][1]["query"]
+    assert "customProperties" in sent_query
+
+    assert result["properties"]["customProperties"] == [
+        {"key": "agent_intent", "value": "daily_revenue"},
+        {"key": "owner_team", "value": "finance"},
+    ]
