@@ -56,11 +56,13 @@ make lint
 
 ### Run tests
 
-The test suite is currently very simplistic, and requires a live DataHub instance.
-
 ```bash
 make test
 ```
+
+Most of the suite runs offline against mocked GraphQL responses and needs no DataHub
+instance. The integration tests in `tests/test_mcp_integration.py` do require a live
+DataHub and credentials — they skip automatically when none are configured.
 
 ## Publishing
 

@@ -170,6 +170,10 @@ Fetch real SQL queries referencing a dataset or column—manual or system-genera
 
 Fetch detailed metadata for one or more entities by URN; supports batch retrieval for efficient inspection of search results.
 
+`get_aspect_history`
+
+Retrieve the current value and a bounded, newest-first page of retained historical versions for one or more entity/aspect pairs, with per-version ingestion and audit provenance.
+
 `list_schema_fields`
 
 List schema fields for a dataset with keyword filtering and pagination, useful when search results truncate fields or when exploring large schemas.
@@ -243,13 +247,15 @@ Save standalone documents (insights, decisions, FAQs, notes) to DataHub's knowle
 | `TOOLS_IS_MUTATION_ENABLED` | `false` | Enable mutation tools (add/remove tags, owners, etc.) |
 | `TOOLS_IS_USER_ENABLED` | `false` | Enable user tools (get_me) |
 | `DATAHUB_MCP_DOCUMENT_TOOLS_DISABLED` | `false` | Completely disable document tools |
-| `SAVE_DOCUMENT_TOOL_ENABLED` | `true` | Enable/disable the save_document tool |
+| `SAVE_DOCUMENT_TOOL_ENABLED` | `true` | Enable or disable `save_document`. The tool is registered only when `TOOLS_IS_MUTATION_ENABLED=true`. |
 | `SAVE_DOCUMENT_PARENT_TITLE` | `Shared` | Title for the parent folder of saved documents |
 | `SAVE_DOCUMENT_ORGANIZE_BY_USER` | `false` | Organize saved documents by user |
 | `SAVE_DOCUMENT_RESTRICT_UPDATES` | `true` | Only allow updating documents in the shared folder |
 | `TOOL_RESPONSE_TOKEN_LIMIT` | `80000` | Maximum tokens for tool responses |
 | `QUERY_LENGTH_LIMIT` | `5000` | Maximum characters for SQL query statements and view definitions in tool responses |
 | `ENTITY_SCHEMA_TOKEN_BUDGET` | `16000` | Token budget per entity for schema fields |
+| `DESCRIPTION_LENGTH_LIMIT` | `5000` | Maximum characters for an entity-level description |
+| `FIELD_DESCRIPTION_LENGTH_LIMIT` | `120` | Maximum characters for a schema field's description, edited description and deprecation note |
 | `DISABLE_NEWER_GMS_FIELD_DETECTION` | `false` | Disable adaptive GMS field detection |
 | `DATAHUB_MCP_DISABLE_DEFAULT_VIEW` | `false` | Disable automatic default view application |
 | `SEMANTIC_SEARCH_ENABLED` | `false` | Enable semantic (AI-powered) search |
@@ -297,6 +303,25 @@ Example:
   "urn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,mydb.public.adoptions,PROD)"
 }
 ```
+
+`list_schema_fields` is paginated. A successful first response is not
+necessarily the complete schema: continue while `remainingCount` is greater
+than zero. Advance by the number of fields actually returned, not by the
+requested limit, because the response token budget can shorten a page:
+
+```text
+offset = 0
+all_fields = []
+
+do:
+    page = list_schema_fields(urn=dataset_urn, limit=100, offset=offset)
+    all_fields.extend(page.fields)
+    offset = page.offset + page.returned
+while page.remainingCount > 0
+```
+
+This pattern also terminates safely if an offset is already beyond the last
+field: the tool returns an empty page with `remainingCount: 0`.
 
 #### 3.2 Fetch Lineage (optional)
 

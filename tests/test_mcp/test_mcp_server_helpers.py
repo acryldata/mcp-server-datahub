@@ -614,6 +614,22 @@ def test_description_length_limit_env_var() -> None:
     assert graphql_helpers.DESCRIPTION_LENGTH_HARD_LIMIT == 5000
 
 
+def test_field_description_length_limit_default() -> None:
+    """FIELD_DESCRIPTION_LENGTH_HARD_LIMIT should default to the historical 120."""
+    assert graphql_helpers.FIELD_DESCRIPTION_LENGTH_HARD_LIMIT == 120
+
+
+def test_field_description_length_limit_env_var() -> None:
+    """FIELD_DESCRIPTION_LENGTH_LIMIT env var should override the default at import time."""
+    with patch.dict(os.environ, {"FIELD_DESCRIPTION_LENGTH_LIMIT": "500"}):
+        importlib.reload(graphql_helpers)
+        assert graphql_helpers.FIELD_DESCRIPTION_LENGTH_HARD_LIMIT == 500
+
+    # Restore module to its default state (env var no longer set)
+    importlib.reload(graphql_helpers)
+    assert graphql_helpers.FIELD_DESCRIPTION_LENGTH_HARD_LIMIT == 120
+
+
 def test_query_length_limit_default() -> None:
     """QUERY_LENGTH_HARD_LIMIT should default to 5000."""
     assert graphql_helpers.QUERY_LENGTH_HARD_LIMIT == 5000
@@ -877,6 +893,16 @@ class TestCleanSchemaFields:
         assert len(result[0]["description"]) == 120
         assert result[0]["description"] == long_desc[:120]
 
+    def test_description_limit_is_configurable(self) -> None:
+        """Test that the field description limit honours the configured value."""
+        long_desc = "x" * 200
+        fields = [{"fieldPath": "field", "description": long_desc}]
+
+        with patch.object(graphql_helpers, "FIELD_DESCRIPTION_LENGTH_HARD_LIMIT", 500):
+            result = list(_clean_schema_fields(iter(fields), editable_map={}))
+
+        assert result[0]["description"] == long_desc
+
     def test_omits_false_boolean_flags(self) -> None:
         """Test that isPartOfKey, isPartitioningKey, recursive are omitted when False."""
         fields = [
@@ -1040,6 +1066,23 @@ class TestCleanSchemaFields:
         result = list(_clean_schema_fields(iter(fields), editable_map={}))
 
         assert len(result[0]["deprecated"]["note"]) == 120
+
+    def test_deprecation_note_limit_is_configurable(self) -> None:
+        """Test that deprecation notes honour the configured field description limit."""
+        long_note = "x" * 200
+        fields = [
+            {
+                "fieldPath": "field",
+                "schemaFieldEntity": {
+                    "deprecation": {"deprecated": True, "note": long_note}
+                },
+            }
+        ]
+
+        with patch.object(graphql_helpers, "FIELD_DESCRIPTION_LENGTH_HARD_LIMIT", 500):
+            result = list(_clean_schema_fields(iter(fields), editable_map={}))
+
+        assert result[0]["deprecated"]["note"] == long_note
 
     def test_returns_iterator(self) -> None:
         """Test that function returns an iterator, not a list."""
@@ -1328,6 +1371,40 @@ class TestEditableSchemaMetadataMerging:
         field = result["schemaMetadata"]["fields"][0]
         assert field["description"] == "System description"
         assert field["editedDescription"] == "User-friendly email field"[:120]
+
+    def test_edited_description_compared_at_the_configured_limit(self) -> None:
+        """Test that the edited/system comparison uses the configured limit.
+
+        The two descriptions are identical for the first 120 characters and differ
+        only after that, so the edit is invisible at the default limit and visible
+        once the limit is raised.
+        """
+        system_desc = "x" * 130
+        edited_desc = "x" * 120 + "y" * 10
+
+        def raw_response() -> dict:
+            return {
+                "urn": "urn:li:dataset:test",
+                "schemaMetadata": {
+                    "fields": [{"fieldPath": "email", "description": system_desc}]
+                },
+                "editableSchemaMetadata": {
+                    "editableSchemaFieldInfo": [
+                        {"fieldPath": "email", "description": edited_desc}
+                    ]
+                },
+            }
+
+        field = clean_get_entities_response(raw_response())["schemaMetadata"]["fields"][
+            0
+        ]
+        assert "editedDescription" not in field
+
+        with patch.object(graphql_helpers, "FIELD_DESCRIPTION_LENGTH_HARD_LIMIT", 500):
+            field = clean_get_entities_response(raw_response())["schemaMetadata"][
+                "fields"
+            ][0]
+        assert field["editedDescription"] == edited_desc
 
     def test_merged_fields_include_edited_tags(self) -> None:
         """Test that edited tags are merged into schema fields."""
