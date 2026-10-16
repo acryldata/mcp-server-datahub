@@ -27,6 +27,7 @@ class AssetLineageDirective(BaseModel):
     max_hops: int
     extra_filters: Optional[Filter]
     max_results: int
+    offset: int = 0
 
 
 class AssetLineageAPI:
@@ -66,7 +67,7 @@ class AssetLineageAPI:
         variables = {
             "urn": asset_lineage_directive.urn,
             "query": query or "*",
-            "start": 0,
+            "start": asset_lineage_directive.offset,
             "count": asset_lineage_directive.max_results,
             "types": types,
             "orFilters": compiled_filters,
@@ -285,6 +286,7 @@ def get_lineage(
         max_hops=max_hops,
         extra_filters=parsed_filter,
         max_results=max_results,
+        offset=offset,
     )
     lineage = lineage_api.get_lineage(asset_lineage_directive, query=query)
     graphql_helpers.inject_urls_for_urns(
@@ -298,23 +300,12 @@ def get_lineage(
     # Apply offset, entity-level truncation, and cleaning to upstreams/downstreams
     for direction in ["upstreams", "downstreams"]:
         if direction_results := lineage.get(direction):
-            if search_results := direction_results.get("searchResults"):
+            search_results = direction_results.get("searchResults") or []
+            total_available = direction_results.get("total", len(search_results))
+            if search_results:
                 # Extract lineageColumns from paths for column-level lineage
                 search_results = _extract_lineage_columns_from_paths(search_results)
                 direction_results["searchResults"] = search_results
-
-                total_available = len(search_results)
-
-                # Apply offset (skip first N entities)
-                if offset >= total_available:
-                    direction_results["searchResults"] = []
-                    direction_results["offset"] = offset
-                    direction_results["returned"] = 0
-                    direction_results["hasMore"] = False
-                    continue
-
-                # Skip offset and apply token budget using generic helper
-                results_after_offset = search_results[offset:]
 
                 # Lambda to clean entity in place and return it for token counting
                 def get_cleaned_entity(result_item: dict) -> dict:
@@ -326,7 +317,7 @@ def get_lineage(
                 # Get results within budget (entities cleaned in place, degree preserved)
                 selected_results = list(
                     graphql_helpers.select_results_within_budget(
-                        results=iter(results_after_offset),
+                        results=iter(search_results),
                         fetch_entity=get_cleaned_entity,
                         max_results=max_results,
                     )
@@ -340,13 +331,18 @@ def get_lineage(
                     offset + len(selected_results)
                 ) < total_available
 
-                if len(selected_results) < len(results_after_offset):
+                if len(selected_results) < len(search_results):
                     direction_results["truncatedDueToTokenBudget"] = True
 
                 logger.info(
                     f"get_lineage {direction}: Returned {len(selected_results)}/{total_available} entities "
                     f"(offset={offset}, hasMore={direction_results['hasMore']})"
                 )
+            else:
+                direction_results["searchResults"] = []
+                direction_results["offset"] = offset
+                direction_results["returned"] = 0
+                direction_results["hasMore"] = offset < total_available
 
     # Add metadata for column-level lineage responses
     if is_column_level_lineage:
