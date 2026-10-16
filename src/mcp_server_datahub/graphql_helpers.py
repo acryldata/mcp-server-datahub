@@ -401,6 +401,82 @@ def _is_field_validation_error(error_msg: str) -> bool:
     )
 
 
+def _strip_to_operation(query: str, operation_name: str) -> str:
+    """Extract a single operation and its required fragment definitions from a multi-operation document.
+
+    Older GMS versions (e.g. v0.13.1) reject multi-operation GraphQL documents
+    even when operationName is provided, and also reject unused fragments.
+    This function strips the document down to just the requested operation plus
+    only the fragment definitions it transitively depends on.
+    """
+    # Quick check: if only one operation, nothing to do
+    op_count = len(
+        re.findall(r"^(?:query|mutation|subscription)\s", query, re.MULTILINE)
+    )
+    if op_count <= 1:
+        return query
+
+    lines = query.splitlines(keepends=True)
+    op_pattern = re.compile(r"^(fragment|query|mutation|subscription)\s+(\w+)")
+
+    # Parse all top-level definitions with their line ranges
+    definitions: list[tuple[int, int, str, str]] = []  # (start, end, kind, name)
+    i = 0
+    while i < len(lines):
+        m = op_pattern.match(lines[i])
+        if m:
+            kind, name = m.group(1), m.group(2)
+            start = i
+            depth = 0
+            for j in range(i, len(lines)):
+                depth += lines[j].count("{") - lines[j].count("}")
+                if depth == 0 and j > start:
+                    definitions.append((start, j, kind, name))
+                    i = j + 1
+                    break
+            else:
+                i += 1
+        else:
+            i += 1
+
+    # Build fragment body index for dependency tracing
+    fragment_bodies: dict[str, str] = {}
+    for start, end, kind, name in definitions:
+        if kind == "fragment":
+            fragment_bodies[name] = "".join(lines[start : end + 1])
+
+    # Find the target operation body
+    target_body = ""
+    for start, end, kind, name in definitions:
+        if name == operation_name and kind != "fragment":
+            target_body = "".join(lines[start : end + 1])
+            break
+
+    if not target_body:
+        return query  # operation not found, return as-is
+
+    # Transitively collect all fragment names referenced by the target operation
+    def collect_fragments(body: str, collected: set[str]) -> None:
+        for ref in re.findall(r"\.\.\.\s*(\w+)", body):
+            if ref not in collected and ref in fragment_bodies:
+                collected.add(ref)
+                collect_fragments(fragment_bodies[ref], collected)
+
+    needed: set[str] = set()
+    collect_fragments(target_body, needed)
+
+    # Assemble: needed fragments + target operation
+    parts: list[str] = []
+    for start, end, kind, name in definitions:
+        if (kind == "fragment" and name in needed) or (
+            kind != "fragment" and name == operation_name
+        ):
+            parts.append("".join(lines[start : end + 1]))
+            parts.append("\n")
+
+    return "".join(parts) if parts else query
+
+
 def execute_graphql(
     graph: DataHubGraph,
     *,
@@ -449,6 +525,11 @@ def execute_graphql(
         f"GraphQL query for {operation_name or 'query'}:\n{query}\nVariables: {variables}"
     )
 
+    # Older GMS versions (e.g. v0.13.1) reject multi-operation documents even
+    # when operationName is provided. Strip down to a single operation if needed.
+    if operation_name:
+        query = _strip_to_operation(query, operation_name)
+
     try:
         # Execute the GraphQL query
         result = graph.execute_graphql(
@@ -481,6 +562,9 @@ def execute_graphql(
                     fallback_query = _disable_cloud_fields(fallback_query)
                 # Disable newer GMS fields for fallback
                 fallback_query = _disable_newer_gms_fields(fallback_query)
+                # Strip to single operation for older GMS that rejects multi-op documents
+                if operation_name:
+                    fallback_query = _strip_to_operation(fallback_query, operation_name)
 
                 logger.debug(
                     f"Retry {operation_name or 'query'} with NEWER_GMS fields disabled: "

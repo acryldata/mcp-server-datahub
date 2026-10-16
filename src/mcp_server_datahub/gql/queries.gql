@@ -34,11 +34,11 @@ fragment query on QueryEntity {
         name
       }
     }
-    schemaField {
-      urn
-      type
-      fieldPath
-    }
+    schemaField {            #[NEWER_GMS]
+      urn                    #[NEWER_GMS]
+      type                   #[NEWER_GMS]
+      fieldPath              #[NEWER_GMS]
+    }                        #[NEWER_GMS]
   }
 }
 
