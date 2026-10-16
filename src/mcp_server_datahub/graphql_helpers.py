@@ -49,7 +49,8 @@ DESCRIPTION_LENGTH_HARD_LIMIT = int(os.getenv("DESCRIPTION_LENGTH_LIMIT", "5000"
 FIELD_DESCRIPTION_LENGTH_HARD_LIMIT = int(
     os.getenv("FIELD_DESCRIPTION_LENGTH_LIMIT", "120")
 )
-QUERY_LENGTH_HARD_LIMIT = 5000
+# Max length for SQL query statements and view definitions in tool responses.
+QUERY_LENGTH_HARD_LIMIT = int(os.getenv("QUERY_LENGTH_LIMIT", "5000"))
 DOCUMENT_CONTENT_CHAR_LIMIT = 8000
 
 # Maximum token count for tool responses to prevent context window issues
