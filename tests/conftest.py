@@ -119,6 +119,7 @@ if using_oss:
     domains_module = sys.modules["mcp_server_datahub.tools.domains"]
     get_me_module = sys.modules["mcp_server_datahub.tools.get_me"]
     owners_module = sys.modules["mcp_server_datahub.tools.owners"]
+    profiles_module = sys.modules["mcp_server_datahub.tools.profiles"]
     save_document_module = sys.modules["mcp_server_datahub.tools.save_document"]
     structured_properties_module = sys.modules[
         "mcp_server_datahub.tools.structured_properties"
@@ -141,6 +142,7 @@ if using_oss:
     tools_module.get_me = get_me_module  # type: ignore[attr-defined]
     tools_module.lineage = lineage_module  # type: ignore[attr-defined]
     tools_module.owners = owners_module  # type: ignore[attr-defined]
+    tools_module.profiles = profiles_module  # type: ignore[attr-defined]
     tools_module.save_document = save_document_module  # type: ignore[attr-defined]
     tools_module.search = search_module  # type: ignore[attr-defined]
     tools_module.structured_properties = structured_properties_module  # type: ignore[attr-defined]
@@ -158,6 +160,7 @@ if using_oss:
     sys.modules["datahub_integrations.mcp.tools.get_me"] = get_me_module
     sys.modules["datahub_integrations.mcp.tools.lineage"] = lineage_module
     sys.modules["datahub_integrations.mcp.tools.owners"] = owners_module
+    sys.modules["datahub_integrations.mcp.tools.profiles"] = profiles_module
     sys.modules["datahub_integrations.mcp.tools.save_document"] = save_document_module
     sys.modules["datahub_integrations.mcp.tools.search"] = search_module
     sys.modules["datahub_integrations.mcp.tools.structured_properties"] = (
