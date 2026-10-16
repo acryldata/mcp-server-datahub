@@ -53,6 +53,13 @@ TOOL_RESPONSE_TOKEN_LIMIT = int(os.getenv("TOOL_RESPONSE_TOKEN_LIMIT", 80000))
 # Assumes ~5 entities per response: 80K total / 5 = 16K per entity
 ENTITY_SCHEMA_TOKEN_BUDGET = int(os.getenv("ENTITY_SCHEMA_TOKEN_BUDGET", "16000"))
 
+# Max characters per structured property value on a schema field.
+# Curated properties (e.g. ai_context.instructions) carry agent guidance and are
+# only emitted by callers that paginate and respect the token budget.
+FIELD_STRUCTURED_PROPERTY_CHAR_LIMIT = int(
+    os.getenv("FIELD_STRUCTURED_PROPERTY_CHAR_LIMIT", "1000")
+)
+
 
 def select_results_within_budget(
     results: Iterator[T],
@@ -677,8 +684,58 @@ def _sort_fields_by_priority(fields: List[dict]) -> Iterator[dict]:
         yield field
 
 
+def extract_structured_properties(schema_field_entity: dict) -> Dict[str, Any]:
+    """
+    Flatten a SchemaFieldEntity's structured properties into {qualifiedName: value}.
+
+    Structured properties live on the schemaField entity, not on schemaMetadata.fields.
+    They are already requested by entity_details.gql but were previously dropped during
+    response cleaning. Values are truncated to keep curated long-form guidance bounded.
+
+    Args:
+        schema_field_entity: The schemaFieldEntity sub-object of a schema field
+
+    Returns:
+        Map of property qualified name (or URN as fallback) to its value. Single-valued
+        properties are unwrapped, multi-valued ones stay lists. Empty if none are set.
+    """
+    properties = (schema_field_entity.get("structuredProperties") or {}).get(
+        "properties"
+    ) or []
+
+    extracted: Dict[str, Any] = {}
+    for prop in properties:
+        structured_property = prop.get("structuredProperty") or {}
+        definition = structured_property.get("definition") or {}
+        name = definition.get("qualifiedName") or structured_property.get("urn")
+        if not name:
+            continue
+
+        values: List[Any] = []
+        for value in prop.get("values") or []:
+            if (string_value := value.get("stringValue")) is not None:
+                values.append(
+                    truncate_with_ellipsis(
+                        string_value, FIELD_STRUCTURED_PROPERTY_CHAR_LIMIT
+                    )
+                )
+            elif (number_value := value.get("numberValue")) is not None:
+                values.append(number_value)
+        for value_entity in prop.get("valueEntities") or []:
+            if value_entity_urn := value_entity.get("urn"):
+                values.append(value_entity_urn)
+
+        if not values:
+            continue
+        extracted[name] = values[0] if len(values) == 1 else values
+
+    return extracted
+
+
 def _clean_schema_fields(
-    sorted_fields: Iterator[dict], editable_map: dict[str, dict]
+    sorted_fields: Iterator[dict],
+    editable_map: dict[str, dict],
+    include_structured_properties: bool = False,
 ) -> Iterator[dict]:
     """
     Clean and normalize schema fields for response.
@@ -693,6 +750,9 @@ def _clean_schema_fields(
     Args:
         sorted_fields: Iterator of fields in priority order
         editable_map: Map of fieldPath -> editable field data for merging
+        include_structured_properties: Whether to emit curated structured properties
+            (e.g. ai_context.*) per field. Off by default because the values can be
+            long; callers that paginate and budget tokens opt in.
 
     Yields:
         Cleaned field dicts with merged editable data (generator for memory efficiency)
@@ -742,6 +802,13 @@ def _clean_schema_fields(
                         "deprecated": True,
                         "note": deprecation.get("note", "")[:120],  # Truncate note
                     }
+
+            # Add curated structured properties (e.g. ai_context.*) when requested
+            if include_structured_properties:
+                if structured_properties := extract_structured_properties(
+                    schema_field_entity
+                ):
+                    field_dict["structuredProperties"] = structured_properties
 
         # Add tags if present (keep minimal info for classification context)
         if tags := f.get("tags"):
@@ -812,6 +879,7 @@ def clean_get_entities_response(
     sort_fn: Optional[Callable[[List[dict]], Iterator[dict]]] = None,
     offset: int = 0,
     limit: Optional[int] = None,
+    include_structured_properties: bool = False,
 ) -> dict:
     """
     Clean and optimize entity responses for LLM consumption.
@@ -843,6 +911,8 @@ def clean_get_entities_response(
                  Should take a list of field dicts and return an iterator of sorted fields.
         offset: Number of fields to skip after sorting (default: 0)
         limit: Maximum number of fields to include after offset (default: None = unlimited)
+        include_structured_properties: Include curated per-field structured properties
+                 (e.g. ai_context.*) in the cleaned fields (default: False)
 
     Returns:
         Cleaned entity dict optimized for LLM consumption
@@ -873,7 +943,9 @@ def clean_get_entities_response(
             # Sort fields using custom function or default priority sorting
             sort_function = sort_fn if sort_fn is not None else _sort_fields_by_priority
             sorted_fields = sort_function(fields)
-            cleaned_fields = _clean_schema_fields(sorted_fields, editable_map)
+            cleaned_fields = _clean_schema_fields(
+                sorted_fields, editable_map, include_structured_properties
+            )
 
             # Apply offset, limit, and token budget to select fields
             selected_fields: list[dict] = []

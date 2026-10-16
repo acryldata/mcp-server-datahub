@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `list_schema_fields` now returns curated structured properties (e.g.
+  `ai_context.*`) for each schema field, so column-scoped properties written via
+  `add_structured_properties` can be read back through the MCP server instead of
+  requiring raw GraphQL. Keyword filtering matches against those values as well.
+  `get_entities` responses are unchanged; the per-value character cap is
+  configurable via `FIELD_STRUCTURED_PROPERTY_CHAR_LIMIT` (default 1000).
 - A non-root Docker image, Docker Compose configuration, public `GET /health`
   endpoint, and multi-architecture Docker Hub/GHCR release workflow.
 
