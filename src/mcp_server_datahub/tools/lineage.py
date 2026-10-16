@@ -27,6 +27,7 @@ class AssetLineageDirective(BaseModel):
     max_hops: int
     extra_filters: Optional[Filter]
     max_results: int
+    skip_cache: bool = False
 
 
 class AssetLineageAPI:
@@ -70,7 +71,13 @@ class AssetLineageAPI:
             "count": asset_lineage_directive.max_results,
             "types": types,
             "orFilters": compiled_filters,
-            "searchFlags": {"skipHighlighting": True, "maxAggValues": 3},
+            "searchFlags": {
+                "skipHighlighting": True,
+                "maxAggValues": 3,
+                # Only send skipCache when asked. Bypassing the lineage search
+                # cache is slower, so routine exploration keeps the default.
+                **({"skipCache": True} if asset_lineage_directive.skip_cache else {}),
+            },
         }
         if asset_lineage_directive.upstream:
             result["upstreams"] = graphql_helpers.clean_gql_response(
@@ -226,6 +233,7 @@ def get_lineage(
     max_hops: int = 1,
     max_results: int = 30,
     offset: int = 0,
+    skip_cache: bool = False,
 ) -> dict:
     """Get upstream or downstream lineage for any entity, including datasets, schemaFields, dashboards, charts, etc.
 
@@ -265,6 +273,13 @@ def get_lineage(
     - User asks "is X affected?" -> Use query to filter for X specifically
     - Large lineage (>30 items) -> Keep count=30, use facets for aggregation
     - Need complete list -> Increase count only if total <=100
+
+    SKIP_CACHE PARAMETER - Bypass the lineage search cache:
+    - Default: False, which serves cached results and is right for exploration
+    - skip_cache=True re-reads lineage instead of trusting the cache
+    - Use before acting on lineage, for example opening a pull request or
+      writing metadata, where a stale edge would produce a wrong decision
+    - Slower, so prefer the default for routine questions
     """
     # Normalize column parameter: Some LLMs pass the string "null" instead of JSON null.
     # Note: This means columns literally named "null" cannot be queried.
@@ -285,6 +300,7 @@ def get_lineage(
         max_hops=max_hops,
         extra_filters=parsed_filter,
         max_results=max_results,
+        skip_cache=skip_cache,
     )
     lineage = lineage_api.get_lineage(asset_lineage_directive, query=query)
     graphql_helpers.inject_urls_for_urns(
