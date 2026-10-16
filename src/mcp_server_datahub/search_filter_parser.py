@@ -28,8 +28,6 @@ Known limitations:
     - Field names that collide with SQL keywords (``in``, ``not``, ``and``,
       ``or``) cannot be used as field names.  No real DataHub fields have
       these names.
-    - ``platform IN ()`` (empty IN list) produces a confusing parse error
-      rather than a clear message.
     - ``status`` only accepts a single value (NOT_SOFT_DELETED, ALL, or
       ONLY_SOFT_DELETED) because ``RemovedStatusFilter`` is an enum.
     - LIKE / CONTAINS operators are not supported; fall back to the JSON
@@ -410,7 +408,17 @@ class _Parser:
             return F.custom_filter(field, self._COMPARISON_OPS[op_token.type], [value])
         elif self._peek().type == _TokenType.IN:
             self._advance()  # consume IN
-            self._expect(_TokenType.LPAREN)
+            lparen = self._expect(_TokenType.LPAREN)
+            if self._peek().type == _TokenType.RPAREN:
+                # Reached by a caller that interpolated a list which turned out
+                # to be empty. The generic "expected value, got )" is accurate
+                # and tells them nothing about what to do instead.
+                raise ValueError(
+                    f"Empty IN list for field {field!r} at position {lparen.pos}: "
+                    f"IN needs at least one value. An empty list usually means the "
+                    f"values were computed and came back empty — drop the condition "
+                    f"rather than sending it, since IN () cannot match anything."
+                )
             values = [self._expect_value().value]
             while self._peek().type == _TokenType.COMMA:
                 self._advance()  # consume comma
