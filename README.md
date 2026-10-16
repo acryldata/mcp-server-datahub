@@ -110,6 +110,35 @@ Authorization: Bearer <datahub-personal-access-token>
 Tokens are accepted only in the `Authorization` header; query-string tokens
 such as `?access_token=...` are rejected.
 
+#### OAuth sign-in (optional)
+
+By default the server validates whatever bearer token a client sends but does
+not say where tokens come from, so each user has to obtain a DataHub personal
+access token by hand and paste it into their client.
+
+If DataHub is configured to trust an external identity provider (see
+[external OAuth providers](https://docs.datahub.com/docs/authentication/external-oauth-providers)),
+point the server at the same issuer and it will advertise OAuth metadata.
+MCP clients that implement the authorization spec then run the sign-in flow
+themselves:
+
+```bash
+DATAHUB_GMS_URL=https://your-datahub.example \
+MCP_OAUTH_AUTHORIZATION_SERVERS=https://idp.example/realms/main \
+MCP_OAUTH_BASE_URL=https://mcp.example \
+  mcp-server-datahub-http
+```
+
+This serves `/.well-known/oauth-protected-resource/mcp` and adds a
+`resource_metadata` parameter to the `401` challenge. Token validation is
+unchanged - the same per-request DataHub check still applies - so this only
+affects how clients discover where to authenticate.
+
+The server does not register clients. Use your identity provider's own
+mechanism, such as a pre-registered client or client ID metadata documents.
+
+When `MCP_OAUTH_AUTHORIZATION_SERVERS` is unset, behaviour is unchanged.
+
 DataHub must have `METADATA_SERVICE_AUTH_ENABLED=true` to establish caller
 identity. When upstream auth is disabled, GMS may return a synthetic,
 non-existent actor for arbitrary bearer values; the MCP server cannot correct
@@ -238,6 +267,9 @@ Save standalone documents (insights, decisions, FAQs, notes) to DataHub's knowle
 |----------|---------|-------------|
 | `DATAHUB_GMS_URL` | none | DataHub server URL. Required in HTTP mode; stdio can also load it from `~/.datahubenv`. |
 | `DATAHUB_GMS_TOKEN` | none | Legacy stdio/SSE credential. HTTP mode refuses to start when this shared credential is set. |
+| `MCP_OAUTH_AUTHORIZATION_SERVERS` | none | Comma-separated issuer URLs. When set, HTTP mode advertises OAuth protected-resource metadata (RFC 9728) so MCP clients can sign in instead of being handed a token. |
+| `MCP_OAUTH_BASE_URL` | none | Public base URL clients use to reach this server. Required when `MCP_OAUTH_AUTHORIZATION_SERVERS` is set. |
+| `MCP_OAUTH_SCOPES` | none | Comma-separated scopes advertised in the metadata document. |
 | `FASTMCP_HOST` | FastMCP default (`127.0.0.1`); image default (`0.0.0.0`) | HTTP/SSE bind address. |
 | `FASTMCP_PORT` | `8000` | HTTP/SSE listen port; also used by the image health check. |
 | `TOOLS_IS_MUTATION_ENABLED` | `false` | Enable mutation tools (add/remove tags, owners, etc.) |
