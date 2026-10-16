@@ -182,6 +182,12 @@ def list_schema_fields(
         list_schema_fields(urn="urn:li:dataset:(...)", limit=100, offset=0)   # First 100
         list_schema_fields(urn="urn:li:dataset:(...)", limit=100, offset=100) # Next 100
 
+        # Robust continuation (returned can be smaller than limit when the token budget is reached)
+        page = list_schema_fields(urn="urn:li:dataset:(...)", limit=100, offset=0)
+        next_offset = page["offset"] + page["returned"]
+        if page["remainingCount"] > 0:
+            list_schema_fields(urn="urn:li:dataset:(...)", limit=100, offset=next_offset)
+
         # Combine filtering + pagination
         list_schema_fields(urn="urn:li:dataset:(...)", keywords=["user"], limit=50, offset=0)
     """
@@ -332,7 +338,9 @@ def list_schema_fields(
 
     # Calculate how many fields remain after what we returned
     # This accounts for both pagination and token budget constraints
-    remaining_count = total_fields - offset - len(cleaned_fields)
+    # An offset beyond the end is a valid empty page. Keep the public count
+    # non-negative so callers can reliably stop at remainingCount == 0.
+    remaining_count = max(0, total_fields - offset - len(cleaned_fields))
 
     return {
         "urn": urn,
