@@ -10,6 +10,7 @@ from json_repair import repair_json
 from .. import graphql_helpers
 from ..openapi_client import VersionedAspectPair, VersionedOpenApiClient
 from ..version_requirements import min_version, read_only
+from ._schema_types import StrListArg
 
 ASPECT_HISTORY_ALLOWLIST = frozenset(
     {
@@ -301,8 +302,8 @@ def _fit_results_to_budget(
 @read_only
 @min_version(cloud="0.3.16", oss="1.4.0")
 def get_aspect_history(
-    urns: list[str] | str,
-    aspect_names: list[str] | str,
+    urns: StrListArg,
+    aspect_names: StrListArg,
     from_version: int | None = None,
     limit: int = 10,
     include_current: bool = True,
@@ -312,8 +313,8 @@ def get_aspect_history(
     ``aspect_names`` applies to every URN; the arguments are not zipped. Each pair
     independently returns up to ``limit`` versions, newest first, so the default
     call answers "the last N changes". Version 0 is the current value, returned
-    separately and not counted against ``limit``. Both URN and aspect arguments
-    accept one string, a list, or a JSON-stringified list.
+    separately and not counted against ``limit``. Pass both URNs and aspect names as
+    lists, even for a single value.
 
     Paging walks *downward* from an anchor resolved per pair. By default the anchor
     is the newest retained version, read from the current aspect's

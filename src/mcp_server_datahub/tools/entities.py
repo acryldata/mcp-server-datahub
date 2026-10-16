@@ -9,6 +9,7 @@ from loguru import logger
 
 from .. import graphql_helpers
 from ..version_requirements import read_only
+from ._schema_types import StrListArg
 
 entity_details_fragment_gql = (
     graphql_helpers.GQL_DIR / "entity_details.gql"
@@ -18,16 +19,15 @@ related_documents_gql = (graphql_helpers.GQL_DIR / "related_documents.gql").read
 
 
 @read_only
-def get_entities(urns: List[str] | str) -> List[dict] | dict:
+def get_entities(urns: StrListArg) -> List[dict] | dict:
     """Get detailed information about one or more entities by their DataHub URNs.
 
     IMPORTANT: Pass an array of URNs to retrieve multiple entities in a single call - this is much
     more efficient than calling this tool multiple times. When examining search results, always pass
     an array with the top 3-10 result URNs to compare and find the best match.
 
-    Accepts an array of URNs or a single URN. Supports all entity types including datasets,
-    assertions, incidents, dashboards, charts, users, groups, and more. The response fields vary
-    based on the entity type.
+    Supports all entity types including datasets, assertions, incidents, dashboards, charts,
+    users, groups, and more. The response fields vary based on the entity type.
     """
     client = graphql_helpers.get_datahub_client()
 
