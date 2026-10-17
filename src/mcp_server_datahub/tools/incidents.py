@@ -126,7 +126,10 @@ def get_incidents(
         Dictionary with:
         - success: True
         - data: {start, count, total, incidents: [...]} where each incident has
-          urn, incidentType, customType, title, description, priority, status, assignees
+          urn, incidentType, customType, title, description, priority,
+          incidentStatus, assignees. If data.truncatedDueToTokenBudget is true, the
+          page was cut short to fit the response size limit; continue from
+          start + count.
         - message: Summary string
 
     Examples:
@@ -162,7 +165,11 @@ def get_incidents(
     if not incidents_result.get("total") and not client._graph.exists(entity_urn):
         raise ItemNotFoundError(f"Entity {entity_urn} not found")
 
-    incidents = incidents_result.get("incidents") or []
+    incidents = graphql_helpers.clean_gql_response(
+        incidents_result.get("incidents") or []
+    )
+    graphql_helpers.truncate_descriptions(incidents)
+
     try:
         incident_config = SUB_ENTITY_CONFIGS["incident"]
         frontend_base_url: str = client._graph.frontend_base_url
@@ -174,12 +181,22 @@ def get_incidents(
     except Exception:
         logger.warning("Could not inject incident URLs", exc_info=True)
 
-    data = {
+    selected = list(
+        graphql_helpers.select_results_within_budget(
+            results=iter(incidents),
+            fetch_entity=lambda incident: incident,
+            max_results=len(incidents),
+        )
+    )
+
+    data: dict[str, Any] = {
         "start": incidents_result.get("start", start),
-        "count": incidents_result.get("count", len(incidents)),
+        "count": len(selected),
         "total": incidents_result.get("total", len(incidents)),
-        "incidents": graphql_helpers.clean_gql_response(incidents),
+        "incidents": selected,
     }
+    if len(selected) < len(incidents):
+        data["truncatedDueToTokenBudget"] = True
     return {
         "success": True,
         "data": data,

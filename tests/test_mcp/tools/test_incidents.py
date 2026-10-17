@@ -26,13 +26,17 @@ def mock_datahub_client():
     return mock_client
 
 
-def _incident_entity(state: str = "ACTIVE") -> dict:
+def _incident_entity(
+    state: str = "ACTIVE",
+    urn: str = INCIDENT_URN,
+    description: str = "Upstream load stopped.",
+) -> dict:
     return {
-        "urn": INCIDENT_URN,
+        "urn": urn,
         "incidentType": "FRESHNESS",
         "customType": None,
         "title": "orders table is stale",
-        "description": "Upstream load stopped.",
+        "description": description,
         "priority": "CRITICAL",
         "startedAt": 1700000000000,
         "created": {"time": 1700000000000, "actor": "urn:li:corpuser:datahub"},
@@ -43,6 +47,21 @@ def _incident_entity(state: str = "ACTIVE") -> dict:
             "lastUpdated": {"time": 1700000000000, "actor": "urn:li:corpuser:datahub"},
         },
         "assignees": [],
+    }
+
+
+def _entity_response(incidents: list) -> dict:
+    return {
+        "entity": {
+            "urn": DATASET_URN,
+            "type": "DATASET",
+            "incidents": {
+                "start": 0,
+                "count": len(incidents),
+                "total": len(incidents),
+                "incidents": incidents,
+            },
+        }
     }
 
 
@@ -140,6 +159,70 @@ class TestGetIncidents:
         ):
             with pytest.raises(ItemNotFoundError, match="Entity .* not found"):
                 get_incidents(entity_urn=DATASET_URN)
+
+    def test_get_incidents_token_budget_truncation(self, mock_datahub_client):
+        incidents = [
+            _incident_entity(urn=f"urn:li:incident:test-{i}") for i in range(10)
+        ]
+        mock_datahub_client._graph.execute_graphql.return_value = _entity_response(
+            incidents
+        )
+
+        def fake_budget(results, fetch_entity, max_results):
+            for i, r in enumerate(results):
+                if i >= 3:
+                    break
+                yield r
+
+        with (
+            patch(
+                "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
+                return_value=mock_datahub_client,
+            ),
+            patch(
+                "datahub_integrations.mcp.graphql_helpers.select_results_within_budget",
+                side_effect=fake_budget,
+            ),
+        ):
+            result = get_incidents(entity_urn=DATASET_URN)
+
+        assert result["success"] is True
+        assert result["data"]["total"] == 10
+        assert result["data"]["count"] == 3
+        assert len(result["data"]["incidents"]) == 3
+        assert result["data"]["truncatedDueToTokenBudget"] is True
+
+    def test_get_incidents_no_truncation_flag_when_within_budget(
+        self, mock_datahub_client
+    ):
+        mock_datahub_client._graph.execute_graphql.return_value = _entity_response(
+            [_incident_entity()]
+        )
+
+        with patch(
+            "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
+            return_value=mock_datahub_client,
+        ):
+            result = get_incidents(entity_urn=DATASET_URN)
+
+        assert result["data"]["count"] == 1
+        assert "truncatedDueToTokenBudget" not in result["data"]
+
+    def test_get_incidents_truncates_long_descriptions(self, mock_datahub_client):
+        long_description = "x" * 100_000
+        mock_datahub_client._graph.execute_graphql.return_value = _entity_response(
+            [_incident_entity(description=long_description)]
+        )
+
+        with patch(
+            "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
+            return_value=mock_datahub_client,
+        ):
+            result = get_incidents(entity_urn=DATASET_URN)
+
+        description = result["data"]["incidents"][0]["description"]
+        assert len(description) < len(long_description)
+        assert description.endswith("...")
 
     def test_get_incidents_empty_urn(self, mock_datahub_client):
         with pytest.raises(ValueError, match="entity_urn cannot be empty"):
