@@ -1,13 +1,10 @@
-"""Incident management tools for the DataHub MCP server.
+"""Incident management tools for DataHub MCP server.
 
-Destination: src/mcp_server_datahub/tools/incidents.py in acryldata/mcp-server-datahub.
-House style per docs/research/mcp-server-pr-brief.md; GraphQL shapes verified by live
-introspection + execution against DataHub OSS v1.5.0.6 (docs/research/gate-a-results.md):
-- IncidentType enum includes FIELD (docs' COLUMN is wrong)
-- priority is an IncidentPriority enum, not an int
-- updateIncidentStatus takes IncidentStatusInput (NOT UpdateIncidentStatusInput,
-  which also exists in the schema and causes a VariableTypeMismatch)
-- raiseIncident rejects mlModel resource urns on OSS v1.5 (documented in docstring)
+Notes on the incident GraphQL schema:
+- Field-level incidents use the IncidentType value FIELD. There is no COLUMN value.
+- updateIncidentStatus takes IncidentStatusInput. The schema also has a similarly
+  named UpdateIncidentStatusInput, which this mutation rejects with a
+  VariableTypeMismatch.
 """
 
 import logging
