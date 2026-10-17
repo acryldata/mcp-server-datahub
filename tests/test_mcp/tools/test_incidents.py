@@ -3,6 +3,7 @@
 from unittest.mock import Mock, patch
 
 import pytest
+from datahub.errors import ItemNotFoundError
 
 from datahub_integrations.mcp.tools.incidents import (
     get_incidents,
@@ -20,6 +21,7 @@ def mock_datahub_client():
     mock_client = Mock()
     mock_graph = Mock()
     mock_client._graph = mock_graph
+    mock_graph.exists.return_value = True
     mock_graph.frontend_base_url = "https://datahub.example.com"
     return mock_client
 
@@ -75,6 +77,7 @@ class TestGetIncidents:
         ]
         assert variables["urn"] == DATASET_URN
         assert variables["state"] == "ACTIVE"
+        mock_datahub_client._graph.exists.assert_not_called()
 
     def test_get_incidents_empty(self, mock_datahub_client):
         mock_datahub_client._graph.execute_graphql.return_value = {
@@ -94,6 +97,7 @@ class TestGetIncidents:
         assert result["success"] is True
         assert result["data"]["total"] == 0
         assert result["data"]["incidents"] == []
+        mock_datahub_client._graph.exists.assert_called_once_with(DATASET_URN)
 
     def test_get_incidents_unsupported_entity(self, mock_datahub_client):
         """Entities without an incidents field (e.g. a tag) raise a clear error."""
@@ -107,6 +111,35 @@ class TestGetIncidents:
         ):
             with pytest.raises(ValueError, match="does not support incidents"):
                 get_incidents(entity_urn="urn:li:tag:pii")
+
+    def test_get_incidents_unknown_urn_not_found(self, mock_datahub_client):
+        """An unknown urn comes back as a stub entity with no incidents."""
+        mock_datahub_client._graph.execute_graphql.return_value = {
+            "entity": {
+                "urn": DATASET_URN,
+                "type": "DATASET",
+                "incidents": {"start": 0, "count": 0, "total": 0, "incidents": []},
+            }
+        }
+        mock_datahub_client._graph.exists.return_value = False
+
+        with patch(
+            "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
+            return_value=mock_datahub_client,
+        ):
+            with pytest.raises(ItemNotFoundError, match="Entity .* not found"):
+                get_incidents(entity_urn=DATASET_URN)
+
+    def test_get_incidents_entity_not_found(self, mock_datahub_client):
+        """A null entity (e.g. an unknown entity type) is reported as not found."""
+        mock_datahub_client._graph.execute_graphql.return_value = {"entity": None}
+
+        with patch(
+            "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
+            return_value=mock_datahub_client,
+        ):
+            with pytest.raises(ItemNotFoundError, match="Entity .* not found"):
+                get_incidents(entity_urn=DATASET_URN)
 
     def test_get_incidents_empty_urn(self, mock_datahub_client):
         with pytest.raises(ValueError, match="entity_urn cannot be empty"):

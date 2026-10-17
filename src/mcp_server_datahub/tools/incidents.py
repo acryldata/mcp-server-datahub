@@ -10,6 +10,8 @@ Notes on the incident GraphQL schema:
 import logging
 from typing import Any, List, Literal, Optional
 
+from datahub.errors import ItemNotFoundError
+
 from .. import graphql_helpers
 from ..sub_entity_urls import SUB_ENTITY_CONFIGS, make_sub_entity_url
 from ..version_requirements import min_version, read_only
@@ -146,13 +148,19 @@ def get_incidents(
         variables={"urn": entity_urn, "state": state, "start": start, "count": count},
         operation_name="getEntityIncidents",
     )
-    entity = result.get("entity") or {}
+    entity = result.get("entity")
+    if entity is None:
+        raise ItemNotFoundError(f"Entity {entity_urn} not found")
     incidents_result = entity.get("incidents")
     if incidents_result is None:
         raise ValueError(
             f"Entity {entity_urn} does not support incidents "
             f"(type: {entity.get('type', 'unknown')})"
         )
+    # entity(urn:) returns a stub for an unknown urn, so an empty result needs an
+    # existence check to tell "no incidents" apart from "no such entity".
+    if not incidents_result.get("total") and not client._graph.exists(entity_urn):
+        raise ItemNotFoundError(f"Entity {entity_urn} not found")
 
     incidents = incidents_result.get("incidents") or []
     try:
