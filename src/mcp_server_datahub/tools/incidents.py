@@ -116,6 +116,8 @@ def get_incidents(
     schema changes, operational issues) directly on the affected asset, so both humans
     and agents see them where they look for the data.
 
+    Incidents raised on a schema field (schemaField urn) can't be listed with this tool.
+
     Args:
         entity_urn: URN of the entity whose incidents to fetch.
         state: Filter by incident state ("ACTIVE" or "RESOLVED"). Pass null for all.
