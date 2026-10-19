@@ -2,8 +2,10 @@
 
 Several OpenAI-compatible inference endpoints reject the whole tool list when one
 parameter is, e.g., ``anyOf: [{"type": "array"}, {"type": "string"}]``, so every request
-fails with a 422 before any tool runs (acryldata/mcp-server-datahub#173). The nullable
-idiom ``anyOf: [T, {"type": "null"}]`` is widely accepted and is allowed here.
+fails with a 422 before any tool runs (acryldata/mcp-server-datahub#173). Gemini accepts
+only a single ``type`` (#98), so the array form ``{"type": ["string", "number"]}`` is
+rejected too. The nullable idiom (``anyOf: [T, {"type": "null"}]`` or
+``{"type": [T, "null"]}``) is widely accepted and is allowed here.
 
 The invariants are asserted over every registered tool rather than a list of names, so
 a union or an uncoerced list parameter added later fails here. The rest check that
@@ -19,9 +21,14 @@ from unittest.mock import patch
 
 import pytest
 from fastmcp import FastMCP
-from pydantic import TypeAdapter
+from pydantic import TypeAdapter, ValidationError
 
-from datahub_integrations.mcp.arg_validation import StrListOrStr, coerce_str_list
+from datahub_integrations.mcp.arg_validation import (
+    OptionalStrList,
+    StrList,
+    StrListOrStr,
+    coerce_str_list,
+)
 
 from datahub_integrations.mcp.fastmcp_helpers import list_mcp_tools_sync
 from datahub_integrations.mcp.mcp_server import (
@@ -67,8 +74,12 @@ def _full_server() -> FastMCP:
 
 
 def _multi_type_unions(node: Any, path: str) -> Iterator[str]:
-    """Yield the path of every anyOf/oneOf whose non-null branches differ in type."""
+    """Yield the path of every anyOf/oneOf whose non-null branches differ in type, and of
+    every ``type`` array naming more than one non-null type."""
     if isinstance(node, dict):
+        declared = node.get("type")
+        if isinstance(declared, list) and len(set(declared) - {"null"}) > 1:
+            yield f"{path}.type: {json.dumps(declared)}"
         for key in ("anyOf", "oneOf"):
             branches = node.get(key)
             if isinstance(branches, list):
@@ -133,12 +144,30 @@ def test_every_list_parameter_accepts_a_string() -> None:
         ('"a"', ['"a"']),
         # Malformed JSON is not repaired; it is treated as a single value.
         ('["a",', ['["a",']),
+        # "No value" spellings: omitted for an optional param, rejected for a required one.
+        ("", None),
+        ("   ", None),
+        ("null", None),
+        (" null ", None),
+        ("[]", []),
         (["a", "b"], ["a", "b"]),
         (None, None),
     ],
 )
 def test_coerce_str_list(sent: Any, expected: Optional[list]) -> None:
     assert coerce_str_list(sent) == expected
+
+
+def test_null_string_is_omitted_for_optional_and_rejected_for_required() -> None:
+    optional = TypeAdapter(OptionalStrList)
+    required = TypeAdapter(StrList)
+
+    assert optional.validate_python("null") is None
+    assert optional.validate_python("") is None
+    with pytest.raises(ValidationError):
+        required.validate_python("null")
+    with pytest.raises(ValidationError):
+        required.validate_python("")
 
 
 def test_str_list_or_str_publishes_an_array_but_passes_a_string_through() -> None:
@@ -154,7 +183,7 @@ def test_str_list_or_str_publishes_an_array_but_passes_a_string_through() -> Non
 def test_structured_property_value_keeps_integers_as_integers() -> None:
     adapter = TypeAdapter(StructuredPropertyValue)
 
-    assert adapter.json_schema() == {"type": ["string", "number"]}
+    assert adapter.json_schema() == {"type": "string"}
     assert type(adapter.validate_python(90)) is int
     assert type(adapter.validate_python(0.95)) is float
     assert adapter.validate_python("HIGH") == "HIGH"

@@ -12,11 +12,12 @@ from ..version_requirements import min_version
 
 logger = logging.getLogger(__name__)
 
-# `int` stays in the runtime union so integer inputs are not coerced to float, but the
-# schema says `["string", "number"]`: JSON Schema's `number` already covers integers, and
-# the default three-branch `anyOf` is rejected by some providers (see _schema_types).
+# Published as a plain string: some providers reject a multi-type `anyOf`, and Gemini
+# accepts only a single `type`, so `{"type": ["string", "number"]}` is not safe either
+# (see arg_validation). Numbers still work: _validate_property_value parses numeric
+# strings for numeric properties, and the runtime union keeps accepting int and float.
 StructuredPropertyValue = Annotated[
-    Union[str, float, int], WithJsonSchema({"type": ["string", "number"]})
+    Union[str, float, int], WithJsonSchema({"type": "string"})
 ]
 
 
@@ -210,6 +211,7 @@ def add_structured_properties(
 
     Args:
         property_values: Dictionary mapping structured property URNs to lists of values.
+                        Values are strings; pass numbers as numeric strings ("0.95").
                         Example: {
                             "urn:li:structuredProperty:io.acryl.privacy.retentionTime": ["90"],
                             "urn:li:structuredProperty:io.acryl.common.businessCriticality": ["HIGH"]
@@ -231,7 +233,7 @@ def add_structured_properties(
         # Add numeric property
         add_structured_properties(
             property_values={
-                "urn:li:structuredProperty:io.acryl.dataQuality.scoreThreshold": [0.95]
+                "urn:li:structuredProperty:io.acryl.dataQuality.scoreThreshold": ["0.95"]
             },
             entity_urns=[
                 "urn:li:dataset:(urn:li:dataPlatform:snowflake,db.schema.verified_data,PROD)"

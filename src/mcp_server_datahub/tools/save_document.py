@@ -28,7 +28,7 @@ from datahub.metadata import schema_classes as models
 from datahub.metadata.urns import CorpUserUrn
 from datahub.sdk import Document
 
-from ..arg_validation import StrList
+from ..arg_validation import OptionalStrList
 from .. import graphql_helpers
 from ..version_requirements import min_version
 
@@ -415,9 +415,9 @@ def save_document(
     title: str,
     content: str,
     urn: Optional[str] = None,
-    topics: Optional[StrList] = None,
-    related_documents: Optional[StrList] = None,
-    related_assets: Optional[StrList] = None,
+    topics: OptionalStrList = None,
+    related_documents: OptionalStrList = None,
+    related_assets: OptionalStrList = None,
 ) -> dict:
     """Save or update a STANDALONE document in DataHub's knowledge base. Once saved,
     a document will be visible to all users of DataHub and to Ask DataHub AI assistant.

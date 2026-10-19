@@ -7,7 +7,7 @@ from datahub.errors import ItemNotFoundError
 from json_repair import repair_json
 from loguru import logger
 
-from ..arg_validation import StrList, StrListOrStr
+from ..arg_validation import OptionalStrList, StrListOrStr
 from .. import graphql_helpers
 from ..version_requirements import read_only
 
@@ -139,7 +139,7 @@ def get_entities(urns: StrListOrStr) -> List[dict] | dict:
 @read_only
 def list_schema_fields(
     urn: str,
-    keywords: Optional[StrList] = None,
+    keywords: OptionalStrList = None,
     limit: int = 100,
     offset: int = 0,
 ) -> dict:

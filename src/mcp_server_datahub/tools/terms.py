@@ -5,7 +5,7 @@ from typing import List, Literal, Optional
 
 from datahub.sdk.main_client import DataHubClient
 
-from ..arg_validation import NullableItemStrList, StrList
+from ..arg_validation import OptionalNullableItemStrList, StrList
 from .. import graphql_helpers
 from ..version_requirements import min_version
 
@@ -167,7 +167,7 @@ def _batch_modify_glossary_terms(
 def add_glossary_terms(
     term_urns: StrList,
     entity_urns: StrList,
-    column_paths: Optional[NullableItemStrList] = None,
+    column_paths: OptionalNullableItemStrList = None,
 ) -> dict:
     """Add one or more glossary terms (terms) to multiple DataHub entities or their columns (e.g., schema fields).
 
@@ -227,7 +227,7 @@ def add_glossary_terms(
 def remove_glossary_terms(
     term_urns: StrList,
     entity_urns: StrList,
-    column_paths: Optional[NullableItemStrList] = None,
+    column_paths: OptionalNullableItemStrList = None,
 ) -> dict:
     """Remove one or more glossary terms (terms) from multiple DataHub entities or their column_paths (e.g., schema fields).
 
