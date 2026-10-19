@@ -87,6 +87,12 @@ if using_oss:
     mcp_module.fastmcp_helpers = fastmcp_helpers  # type: ignore[attr-defined]
     sys.modules["datahub_integrations.mcp.fastmcp_helpers"] = fastmcp_helpers
 
+    # Import and expose arg_validation
+    from mcp_server_datahub import arg_validation
+
+    mcp_module.arg_validation = arg_validation  # type: ignore[attr-defined]
+    sys.modules["datahub_integrations.mcp.arg_validation"] = arg_validation
+
     # Import and expose sub_entity_urls
     from mcp_server_datahub import sub_entity_urls
 

@@ -16,7 +16,7 @@ import os
 import re
 import uuid
 from datetime import datetime
-from typing import TYPE_CHECKING, Dict, List, Literal, Optional, Tuple
+from typing import TYPE_CHECKING, Dict, Literal, Optional, Tuple
 
 if TYPE_CHECKING:
     from datahub.sdk.entity import Entity
@@ -28,6 +28,7 @@ from datahub.metadata import schema_classes as models
 from datahub.metadata.urns import CorpUserUrn
 from datahub.sdk import Document
 
+from ..arg_validation import OptionalStrList
 from .. import graphql_helpers
 from ..version_requirements import min_version
 
@@ -414,9 +415,9 @@ def save_document(
     title: str,
     content: str,
     urn: Optional[str] = None,
-    topics: Optional[List[str]] = None,
-    related_documents: Optional[List[str]] = None,
-    related_assets: Optional[List[str]] = None,
+    topics: OptionalStrList = None,
+    related_documents: OptionalStrList = None,
+    related_assets: OptionalStrList = None,
 ) -> dict:
     """Save or update a STANDALONE document in DataHub's knowledge base. Once saved,
     a document will be visible to all users of DataHub and to Ask DataHub AI assistant.
