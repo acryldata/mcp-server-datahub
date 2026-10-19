@@ -13,8 +13,9 @@ import string
 import threading
 from enum import Enum
 from typing import (
-    Awaitable,
+    Any,
     Callable,
+    Coroutine,
     List,
     Optional,
     ParamSpec,
@@ -131,7 +132,7 @@ DATA_QUALITY_TOOLS = [
 
 # See https://github.com/jlowin/fastmcp/issues/864#issuecomment-3103678258
 # for why we need to wrap sync functions with asyncify.
-def async_background(fn: Callable[_P, _R]) -> Callable[_P, Awaitable[_R]]:
+def async_background(fn: Callable[_P, _R]) -> Callable[_P, Coroutine[Any, Any, _R]]:
     if inspect.iscoroutinefunction(fn):
         raise RuntimeError("async_background can only be used on non-async functions")
 
