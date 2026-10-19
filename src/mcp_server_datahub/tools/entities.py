@@ -7,9 +7,9 @@ from datahub.errors import ItemNotFoundError
 from json_repair import repair_json
 from loguru import logger
 
+from ..arg_validation import StrList, StrListOrStr
 from .. import graphql_helpers
 from ..version_requirements import read_only
-from ._schema_types import StrListArg
 
 entity_details_fragment_gql = (
     graphql_helpers.GQL_DIR / "entity_details.gql"
@@ -19,7 +19,7 @@ related_documents_gql = (graphql_helpers.GQL_DIR / "related_documents.gql").read
 
 
 @read_only
-def get_entities(urns: StrListArg) -> List[dict] | dict:
+def get_entities(urns: StrListOrStr) -> List[dict] | dict:
     """Get detailed information about one or more entities by their DataHub URNs.
 
     IMPORTANT: Pass an array of URNs to retrieve multiple entities in a single call - this is much
@@ -139,7 +139,7 @@ def get_entities(urns: StrListArg) -> List[dict] | dict:
 @read_only
 def list_schema_fields(
     urn: str,
-    keywords: Optional[List[str]] = None,
+    keywords: Optional[StrList] = None,
     limit: int = 100,
     offset: int = 0,
 ) -> dict:

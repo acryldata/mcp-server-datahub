@@ -6,6 +6,7 @@ from typing import Annotated, Dict, List, Union
 from datahub.sdk.main_client import DataHubClient
 from pydantic import WithJsonSchema
 
+from ..arg_validation import StrList
 from .. import graphql_helpers
 from ..version_requirements import min_version
 
@@ -200,7 +201,7 @@ def _validate_property_value(
 @min_version(cloud="0.3.16", oss="1.4.0")
 def add_structured_properties(
     property_values: Dict[str, List[StructuredPropertyValue]],
-    entity_urns: List[str],
+    entity_urns: StrList,
 ) -> dict:
     """Add structured properties with values to multiple DataHub entities.
 
@@ -342,8 +343,8 @@ def add_structured_properties(
 
 @min_version(cloud="0.3.16", oss="1.4.0")
 def remove_structured_properties(
-    property_urns: List[str],
-    entity_urns: List[str],
+    property_urns: StrList,
+    entity_urns: StrList,
 ) -> dict:
     """Remove structured properties from multiple DataHub entities.
 

@@ -7,6 +7,7 @@ from typing import Annotated, List, Literal, Optional, Union
 from datahub.sdk.main_client import DataHubClient
 from pydantic import WithJsonSchema
 
+from ..arg_validation import StrList
 from .. import graphql_helpers
 from ..version_requirements import min_version
 
@@ -311,8 +312,8 @@ def _batch_modify_owners(
 
 @min_version(cloud="0.3.16", oss="1.4.0")
 def add_owners(
-    owner_urns: List[str],
-    entity_urns: List[str],
+    owner_urns: StrList,
+    entity_urns: StrList,
     ownership_type: OwnershipTypeInput,
 ) -> dict:
     """Add one or more owners to multiple DataHub entities.
@@ -378,8 +379,8 @@ def add_owners(
 
 @min_version(cloud="0.3.16", oss="1.4.0")
 def remove_owners(
-    owner_urns: List[str],
-    entity_urns: List[str],
+    owner_urns: StrList,
+    entity_urns: StrList,
     ownership_type: Optional[OwnershipTypeInput] = None,
 ) -> dict:
     """Remove one or more owners from multiple DataHub entities.

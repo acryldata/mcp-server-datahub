@@ -5,18 +5,23 @@ parameter is, e.g., ``anyOf: [{"type": "array"}, {"type": "string"}]``, so every
 fails with a 422 before any tool runs (acryldata/mcp-server-datahub#173). The nullable
 idiom ``anyOf: [T, {"type": "null"}]`` is widely accepted and is allowed here.
 
-The first test asserts the invariant over every registered tool rather than a list of
-names, so a union added later fails here. The rest check that narrowing the schema did
-not narrow what the tools accept at runtime.
+The invariants are asserted over every registered tool rather than a list of names, so
+a union or an uncoerced list parameter added later fails here. The rest check that
+narrowing the schema did not narrow what the tools accept at runtime.
 """
 
+import inspect
 import json
 import os
-from typing import Any, Iterator
+import typing
+from typing import Any, Iterator, Optional
 from unittest.mock import patch
 
+import pytest
 from fastmcp import FastMCP
 from pydantic import TypeAdapter
+
+from datahub_integrations.mcp.arg_validation import StrListOrStr, coerce_str_list
 
 from datahub_integrations.mcp.fastmcp_helpers import list_mcp_tools_sync
 from datahub_integrations.mcp.mcp_server import (
@@ -25,7 +30,6 @@ from datahub_integrations.mcp.mcp_server import (
     register_search_tools,
     register_user_tools,
 )
-from datahub_integrations.mcp.tools.entities import StrListArg
 from datahub_integrations.mcp.tools.structured_properties import (
     StructuredPropertyValue,
 )
@@ -36,6 +40,15 @@ ALL_TOOL_GATES = {
     "TOOLS_IS_USER_ENABLED": "true",
     "DATA_QUALITY_TOOLS_ENABLED": "true",
     "SAVE_DOCUMENT_TOOL_ENABLED": "true",
+}
+
+# List parameters whose tool body must see a bare string as-is, so they use
+# StrListOrStr instead of StrList. get_entities returns a single dict for a bare URN;
+# get_aspect_history runs its own bounded normalization.
+PASSTHROUGH_LIST_PARAMS = {
+    ("get_entities", "urns"),
+    ("get_aspect_history", "urns"),
+    ("get_aspect_history", "aspect_names"),
 }
 
 
@@ -88,8 +101,48 @@ def test_no_tool_parameter_is_a_multi_type_union() -> None:
     )
 
 
-def test_str_list_arg_publishes_an_array_but_still_accepts_a_string() -> None:
-    adapter = TypeAdapter(StrListArg)
+def test_every_list_parameter_accepts_a_string() -> None:
+    """Clients often send a list as a bare or JSON-stringified string; none is rejected."""
+    checked = 0
+    for tool in list_mcp_tools_sync(_full_server()):
+        hints = typing.get_type_hints(inspect.unwrap(tool.fn), include_extras=True)
+        for name, schema in tool.parameters.get("properties", {}).items():
+            if not any(b.get("type") == "array" for b in schema.get("anyOf", [schema])):
+                continue
+            checked += 1
+            adapter = TypeAdapter(hints[name])
+            if (tool.name, name) in PASSTHROUGH_LIST_PARAMS:
+                assert adapter.validate_python("a") == "a"
+            else:
+                assert adapter.validate_python("a") == ["a"], f"{tool.name}.{name}"
+                assert adapter.validate_python('["a", "b"]') == ["a", "b"], (
+                    f"{tool.name}.{name}"
+                )
+
+    assert checked > len(PASSTHROUGH_LIST_PARAMS), "no list parameters found"
+
+
+@pytest.mark.parametrize(
+    ("sent", "expected"),
+    [
+        ("a", ["a"]),
+        ("  urn:li:tag:pii  ", ["urn:li:tag:pii"]),
+        ('["a", "b"]', ["a", "b"]),
+        (' ["a"] ', ["a"]),
+        # A JSON value that is not an array is a single value, kept verbatim.
+        ('"a"', ['"a"']),
+        # Malformed JSON is not repaired; it is treated as a single value.
+        ('["a",', ['["a",']),
+        (["a", "b"], ["a", "b"]),
+        (None, None),
+    ],
+)
+def test_coerce_str_list(sent: Any, expected: Optional[list]) -> None:
+    assert coerce_str_list(sent) == expected
+
+
+def test_str_list_or_str_publishes_an_array_but_passes_a_string_through() -> None:
+    adapter = TypeAdapter(StrListOrStr)
 
     assert adapter.json_schema() == {"type": "array", "items": {"type": "string"}}
     # get_entities returns a single dict for a bare URN, so the string must reach the

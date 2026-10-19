@@ -7,6 +7,7 @@ import re2  # type: ignore[import-untyped]
 from datahub.utilities.perf_timer import PerfTimer
 from loguru import logger
 
+from ..arg_validation import StrList
 from .. import graphql_helpers
 from ..version_requirements import min_version, read_only
 
@@ -487,7 +488,7 @@ def _search_documents_impl(
 @read_only
 @min_version(cloud="0.3.16", oss="1.4.0")
 def grep_documents(
-    urns: List[str],
+    urns: StrList,
     pattern: str,
     context_chars: int = 200,
     max_matches_per_doc: int = 5,

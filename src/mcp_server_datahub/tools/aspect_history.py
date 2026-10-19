@@ -7,10 +7,10 @@ from typing import Any
 from datahub.metadata.urns import Urn
 from json_repair import repair_json
 
+from ..arg_validation import StrListOrStr
 from .. import graphql_helpers
 from ..openapi_client import VersionedAspectPair, VersionedOpenApiClient
 from ..version_requirements import min_version, read_only
-from ._schema_types import StrListArg
 
 ASPECT_HISTORY_ALLOWLIST = frozenset(
     {
@@ -302,8 +302,8 @@ def _fit_results_to_budget(
 @read_only
 @min_version(cloud="0.3.16", oss="1.4.0")
 def get_aspect_history(
-    urns: StrListArg,
-    aspect_names: StrListArg,
+    urns: StrListOrStr,
+    aspect_names: StrListOrStr,
     from_version: int | None = None,
     limit: int = 10,
     include_current: bool = True,
