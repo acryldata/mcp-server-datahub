@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Incident tools. `get_incidents` lists the incidents on a dataset, dashboard,
+  chart, dataFlow or dataJob and is enabled by `DATA_QUALITY_TOOLS_ENABLED`.
+  `raise_incident` and `update_incident_status` raise, update and resolve
+  incidents and are enabled by `TOOLS_IS_MUTATION_ENABLED`. All three require
+  DataHub Cloud 0.3.16+ or OSS 1.4.0+.
 - `FIELD_DESCRIPTION_LENGTH_LIMIT` (default `120`) makes the per-schema-field
   description limit configurable. It also covers a field's edited description and
   its deprecation note, which were hardcoded to the same 120 characters.
