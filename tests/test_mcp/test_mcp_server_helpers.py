@@ -604,8 +604,12 @@ def test_extract_structured_properties_truncates_and_skips_empty() -> None:
                             "structuredProperty": {
                                 "definition": {"qualifiedName": "steward"}
                             },
-                            "values": [],
-                            "valueEntities": [{"urn": "urn:li:corpuser:jdoe"}],
+                            # Real GMS shape for a URN-valued property: the URN appears
+                            # in both `values` (as a stringValue) and `valueEntities`.
+                            "values": [{"stringValue": "urn:li:corpuser:jdoe"}],
+                            "valueEntities": [
+                                {"urn": "urn:li:corpuser:jdoe", "type": "CORP_USER"}
+                            ],
                         },
                         {
                             "structuredProperty": {
@@ -678,6 +682,87 @@ def test_extract_structured_properties_tolerates_sparse_responses() -> None:
             }
         }
     ) == {"x": "kept"}
+
+
+def test_extract_structured_properties_urn_values_not_duplicated() -> None:
+    """URN-valued properties come back once, not duplicated.
+
+    GMS echoes a URN-valued property into both `values` (as a stringValue) and
+    `valueEntities`. The extractor must not append both.
+    """
+    both = graphql_helpers.extract_structured_properties(
+        {
+            "structuredProperties": {
+                "properties": [
+                    {
+                        "structuredProperty": {
+                            "definition": {"qualifiedName": "steward"}
+                        },
+                        "values": [{"stringValue": "urn:li:corpuser:jdoe"}],
+                        "valueEntities": [
+                            {"urn": "urn:li:corpuser:jdoe", "type": "CORP_USER"}
+                        ],
+                    }
+                ]
+            }
+        }
+    )
+    assert both == {"steward": "urn:li:corpuser:jdoe"}
+
+    # valueEntities is used as a fallback only when `values` is empty.
+    fallback = graphql_helpers.extract_structured_properties(
+        {
+            "structuredProperties": {
+                "properties": [
+                    {
+                        "structuredProperty": {
+                            "definition": {"qualifiedName": "steward"}
+                        },
+                        "values": [],
+                        "valueEntities": [{"urn": "urn:li:corpuser:jdoe"}],
+                    }
+                ]
+            }
+        }
+    )
+    assert fallback == {"steward": "urn:li:corpuser:jdoe"}
+
+
+def test_extract_structured_properties_untruncated_for_scoring() -> None:
+    """truncate=False returns raw values and uncapped value counts."""
+    with (
+        patch.object(graphql_helpers, "FIELD_STRUCTURED_PROPERTY_CHAR_LIMIT", 10),
+        patch.object(graphql_helpers, "FIELD_STRUCTURED_PROPERTY_MAX_VALUES", 2),
+    ):
+        entity = {
+            "structuredProperties": {
+                "properties": [
+                    {
+                        "structuredProperty": {
+                            "definition": {"qualifiedName": "ai_context.instructions"}
+                        },
+                        "values": [{"stringValue": "x" * 100}],
+                    },
+                    {
+                        "structuredProperty": {
+                            "definition": {"qualifiedName": "tags"}
+                        },
+                        "values": [
+                            {"stringValue": "a"},
+                            {"stringValue": "b"},
+                            {"stringValue": "c"},
+                        ],
+                    },
+                ]
+            }
+        }
+        truncated = graphql_helpers.extract_structured_properties(entity)
+        assert truncated["ai_context.instructions"] == "x" * 7 + "..."
+        assert truncated["tags"] == ["a", "b"]
+
+        raw = graphql_helpers.extract_structured_properties(entity, truncate=False)
+        assert raw["ai_context.instructions"] == "x" * 100
+        assert raw["tags"] == ["a", "b", "c"]
 
 
 def test_truncate_query_long() -> None:

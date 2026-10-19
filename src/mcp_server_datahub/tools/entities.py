@@ -1,7 +1,7 @@
 """Entity retrieval tools for DataHub MCP server."""
 
 import json
-from typing import Callable, Iterator, List, Optional
+from typing import Callable, Dict, Iterator, List, Optional
 
 from datahub.errors import ItemNotFoundError
 from json_repair import repair_json
@@ -147,7 +147,7 @@ def list_schema_fields(
 
     Useful when schema fields were truncated in search results (schemaFieldsTruncated present)
     and you need to explore specific columns. Supports pagination for large schemas.
-    Unlike get_entities, each returned field also carries its curated structured properties
+    Unlike get_entities, each returned field also carries its structured properties
     (e.g. ai_context.*) when they are set.
 
     Args:
@@ -246,6 +246,12 @@ def list_schema_fields(
     matching_count = None
 
     if keywords_lower:
+        # Cache keyword scores so each field's structured-property extraction runs
+        # once. Keyed by fieldPath (not id()) because matching_count scores the raw
+        # response fields while the sort scores the rebuilt copies from
+        # clean_gql_response, so the two passes see different dict objects.
+        score_cache: Dict[object, int] = {}
+
         # Helper function to score a field by keyword matches
         def score_field_by_keywords(field: dict) -> int:
             """
@@ -276,6 +282,10 @@ def list_schema_fields(
             Returns:
                 Integer score (0 = no matches, higher = more coverage)
             """
+            cache_key = field.get("fieldPath") or id(field)
+            if (cached := score_cache.get(cache_key)) is not None:
+                return cached
+
             searchable_texts = [
                 field.get("fieldPath", ""),
                 field.get("description", ""),
@@ -302,23 +312,26 @@ def list_schema_fields(
                         ]
                     )
 
-            # Add curated structured property values (e.g. ai_context.instructions)
+            # Add structured property values (e.g. ai_context.instructions). Score on
+            # the raw (untruncated) values so a keyword past the char limit still matches.
             if schema_field_entity := field.get("schemaFieldEntity"):
                 searchable_texts.extend(
                     str(value)
                     for value in graphql_helpers.extract_structured_properties(
-                        schema_field_entity
+                        schema_field_entity, truncate=False
                     ).values()
                 )
 
             # Count keyword coverage: +1 for each (keyword, text) pair that matches
             # Note: Substring matching, case-insensitive
-            return sum(
+            score = sum(
                 1
                 for kw in keywords_lower
                 for text in searchable_texts
                 if text and kw in text.lower()
             )
+            score_cache[cache_key] = score
+            return score
 
         # Pre-compute matching count (need all fields for this)
         fields_for_counting = (result.get("schemaMetadata") or {}).get("fields", [])

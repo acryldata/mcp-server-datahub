@@ -12,12 +12,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `FIELD_DESCRIPTION_LENGTH_LIMIT` (default `120`) makes the per-schema-field
   description limit configurable. It also covers a field's edited description and
   its deprecation note, which were hardcoded to the same 120 characters.
-- `list_schema_fields` now returns curated structured properties (e.g.
-  `ai_context.*`) for each schema field, so column-scoped properties written via
+- `list_schema_fields` now returns structured properties (e.g. `ai_context.*`)
+  for each schema field, so column-scoped properties written via
   `add_structured_properties` can be read back through the MCP server instead of
   requiring raw GraphQL. Keyword filtering matches against those values as well.
   `get_entities` responses are unchanged; the per-value character cap is
-  configurable via `FIELD_STRUCTURED_PROPERTY_CHAR_LIMIT` (default 1000).
+  configurable via `FIELD_STRUCTURED_PROPERTY_CHAR_LIMIT` (default 1000) and the
+  per-property value count via `FIELD_STRUCTURED_PROPERTY_MAX_VALUES` (default 25).
 - A non-root Docker image, Docker Compose configuration, public `GET /health`
   endpoint, and multi-architecture Docker Hub/GHCR release workflow.
 

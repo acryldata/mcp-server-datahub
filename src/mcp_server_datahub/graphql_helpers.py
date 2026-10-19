@@ -61,10 +61,17 @@ TOOL_RESPONSE_TOKEN_LIMIT = int(os.getenv("TOOL_RESPONSE_TOKEN_LIMIT", 80000))
 ENTITY_SCHEMA_TOKEN_BUDGET = int(os.getenv("ENTITY_SCHEMA_TOKEN_BUDGET", "16000"))
 
 # Max characters per structured property value on a schema field.
-# Curated properties (e.g. ai_context.instructions) carry agent guidance and are
-# only emitted by callers that paginate and respect the token budget.
+# Structured properties (e.g. ai_context.instructions) can carry long agent guidance
+# and are only emitted by callers that paginate and respect the token budget.
 FIELD_STRUCTURED_PROPERTY_CHAR_LIMIT = int(
     os.getenv("FIELD_STRUCTURED_PROPERTY_CHAR_LIMIT", "1000")
+)
+
+# Max number of values emitted per multi-valued structured property on a schema field.
+# Bounds the response for properties with many values (the char limit only bounds the
+# length of each individual value).
+FIELD_STRUCTURED_PROPERTY_MAX_VALUES = int(
+    os.getenv("FIELD_STRUCTURED_PROPERTY_MAX_VALUES", "25")
 )
 
 
@@ -691,16 +698,24 @@ def _sort_fields_by_priority(fields: List[dict]) -> Iterator[dict]:
         yield field
 
 
-def extract_structured_properties(schema_field_entity: dict) -> Dict[str, Any]:
+def extract_structured_properties(
+    schema_field_entity: dict, truncate: bool = True
+) -> Dict[str, Any]:
     """
     Flatten a SchemaFieldEntity's structured properties into {qualifiedName: value}.
 
     Structured properties live on the schemaField entity, not on schemaMetadata.fields.
     They are already requested by entity_details.gql but were previously dropped during
-    response cleaning. Values are truncated to keep curated long-form guidance bounded.
+    response cleaning. All structured properties set on the field are returned (the
+    fragment does not fetch visibility settings, so hidden properties are included too).
 
     Args:
         schema_field_entity: The schemaFieldEntity sub-object of a schema field
+        truncate: When True, each value is truncated to
+            FIELD_STRUCTURED_PROPERTY_CHAR_LIMIT and the value count to
+            FIELD_STRUCTURED_PROPERTY_MAX_VALUES, to keep long-form guidance bounded in
+            responses. Pass False when the raw values are needed (e.g. keyword scoring),
+            so matches past the char limit are not missed.
 
     Returns:
         Map of property qualified name (or URN as fallback) to its value. Single-valued
@@ -720,8 +735,8 @@ def extract_structured_properties(schema_field_entity: dict) -> Dict[str, Any]:
 
         values: List[Any] = []
         for value in prop.get("values") or []:
-            # values is [PropertyValue]! and valueEntities is [Entity]: both allow
-            # null items, e.g. when a value entity cannot be resolved.
+            # values is [PropertyValue]! and allows null items, e.g. when a value
+            # entity cannot be resolved.
             if not value:
                 continue
             if (string_value := value.get("stringValue")) is not None:
@@ -729,17 +744,26 @@ def extract_structured_properties(schema_field_entity: dict) -> Dict[str, Any]:
                     truncate_with_ellipsis(
                         string_value, FIELD_STRUCTURED_PROPERTY_CHAR_LIMIT
                     )
+                    if truncate
+                    else string_value
                 )
             elif (number_value := value.get("numberValue")) is not None:
                 values.append(number_value)
-        for value_entity in prop.get("valueEntities") or []:
-            if not value_entity:
-                continue
-            if value_entity_urn := value_entity.get("urn"):
-                values.append(value_entity_urn)
+
+        # valueEntities is a fallback only: GMS echoes a URN-valued property into both
+        # `values` (as a stringValue) and `valueEntities`, so reading both would
+        # duplicate the value. Use it only when `values` yielded nothing.
+        if not values:
+            for value_entity in prop.get("valueEntities") or []:
+                if not value_entity:
+                    continue
+                if value_entity_urn := value_entity.get("urn"):
+                    values.append(value_entity_urn)
 
         if not values:
             continue
+        if truncate and len(values) > FIELD_STRUCTURED_PROPERTY_MAX_VALUES:
+            values = values[:FIELD_STRUCTURED_PROPERTY_MAX_VALUES]
         extracted[name] = values[0] if len(values) == 1 else values
 
     return extracted
@@ -763,7 +787,7 @@ def _clean_schema_fields(
     Args:
         sorted_fields: Iterator of fields in priority order
         editable_map: Map of fieldPath -> editable field data for merging
-        include_structured_properties: Whether to emit curated structured properties
+        include_structured_properties: Whether to emit structured properties
             (e.g. ai_context.*) per field. Off by default because the values can be
             long; callers that paginate and budget tokens opt in.
 
@@ -820,7 +844,7 @@ def _clean_schema_fields(
                         ],
                     }
 
-            # Add curated structured properties (e.g. ai_context.*) when requested
+            # Add structured properties (e.g. ai_context.*) when requested
             if include_structured_properties:
                 if structured_properties := extract_structured_properties(
                     schema_field_entity
@@ -931,7 +955,7 @@ def clean_get_entities_response(
                  Should take a list of field dicts and return an iterator of sorted fields.
         offset: Number of fields to skip after sorting (default: 0)
         limit: Maximum number of fields to include after offset (default: None = unlimited)
-        include_structured_properties: Include curated per-field structured properties
+        include_structured_properties: Include per-field structured properties
                  (e.g. ai_context.*) in the cleaned fields (default: False)
 
     Returns:
