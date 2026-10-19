@@ -13,11 +13,35 @@ from pydantic import BaseModel
 
 from .. import graphql_helpers
 from ..search_filter_parser import FILTER_DOCS
+from ..search_flags import SearchFlagsOverride
 from ..version_requirements import read_only
 
 entity_details_fragment_gql = (
     graphql_helpers.GQL_DIR / "entity_details.gql"
 ).read_text()
+
+_DEFAULT_LINEAGE_SEARCH_FLAGS: Dict[str, Any] = {
+    "skipHighlighting": True,
+    "maxAggValues": 3,
+}
+
+
+def _injected_search_flags() -> SearchFlagsOverride:
+    """The SearchFlagsOverride injected into this request's ToolContext, if any.
+
+    Resolved once in each tool function, the way ViewPreference is, and passed
+    down. Without a request context nothing can have been injected, so the
+    defaults apply.
+    """
+    try:
+        ctx = graphql_helpers.get_mcp_context()
+    except LookupError:
+        # The tools fetch their client from the context first, so this is only
+        # reached by callers that patch get_datahub_client, as some tests do.
+        return SearchFlagsOverride()
+    override = ctx.tool_context.get(SearchFlagsOverride, SearchFlagsOverride())
+    assert override is not None  # default guarantees non-None
+    return override
 
 
 class AssetLineageDirective(BaseModel):
@@ -30,8 +54,13 @@ class AssetLineageDirective(BaseModel):
 
 
 class AssetLineageAPI:
-    def __init__(self, graph: DataHubGraph) -> None:
+    def __init__(
+        self,
+        graph: DataHubGraph,
+        search_flags: Optional[SearchFlagsOverride] = None,
+    ) -> None:
         self.graph = graph
+        self.search_flags = search_flags or SearchFlagsOverride()
 
     def get_degree_filter(self, max_hops: int) -> Filter:
         """
@@ -70,7 +99,7 @@ class AssetLineageAPI:
             "count": asset_lineage_directive.max_results,
             "types": types,
             "orFilters": compiled_filters,
-            "searchFlags": {"skipHighlighting": True, "maxAggValues": 3},
+            "searchFlags": self.search_flags.apply(_DEFAULT_LINEAGE_SEARCH_FLAGS),
         }
         if asset_lineage_directive.upstream:
             result["upstreams"] = graphql_helpers.clean_gql_response(
@@ -275,7 +304,7 @@ def get_lineage(
     client = graphql_helpers.get_datahub_client()
     parsed_filter = graphql_helpers.parse_filter_input(filter)
 
-    lineage_api = AssetLineageAPI(client._graph)
+    lineage_api = AssetLineageAPI(client._graph, search_flags=_injected_search_flags())
 
     urn = graphql_helpers.maybe_convert_to_schema_field_urn(urn, column)
     asset_lineage_directive = AssetLineageDirective(
@@ -419,6 +448,7 @@ def _find_upstream_lineage_path(
     source_column: Optional[str],
     target_column: Optional[str],
     semantic_direction: Literal["upstream", "downstream"],
+    search_flags: Optional[SearchFlagsOverride] = None,
 ) -> dict:
     """
     Internal helper to find upstream lineage path.
@@ -442,9 +472,10 @@ def _find_upstream_lineage_path(
         source_column: Original source column (for response metadata)
         target_column: Original target column (for response metadata)
         semantic_direction: User's requested direction (for metadata, not query direction)
+        search_flags: Override merged over the lineage query's default searchFlags
     """
     # Get lineage with paths using the API directly (always upstream)
-    lineage_api = AssetLineageAPI(client._graph)
+    lineage_api = AssetLineageAPI(client._graph, search_flags=search_flags)
     asset_lineage_directive = AssetLineageDirective(
         urn=query_urn,
         upstream=True,  # Always upstream
@@ -552,6 +583,7 @@ def _find_lineage_path(
     source_column: Optional[str],
     target_column: Optional[str],
     direction: Literal["upstream", "downstream"],
+    search_flags: Optional[SearchFlagsOverride] = None,
 ) -> dict:
     """
     Internal helper to find lineage path in a specific direction.
@@ -576,6 +608,7 @@ def _find_lineage_path(
             source_column=source_column,
             target_column=target_column,
             semantic_direction=direction,
+            search_flags=search_flags,
         )
 
         # Reverse paths to show source → target order
@@ -601,6 +634,7 @@ def _find_lineage_path(
             source_column=source_column,
             target_column=target_column,
             semantic_direction=direction,
+            search_flags=search_flags,
         )
 
 
@@ -676,6 +710,7 @@ def get_lineage_paths_between(
         )
 
     client = graphql_helpers.get_datahub_client()
+    search_flags = _injected_search_flags()
 
     # Convert to schema field URN if column specified
     query_urn = graphql_helpers.maybe_convert_to_schema_field_urn(
@@ -698,6 +733,7 @@ def get_lineage_paths_between(
                 source_column=source_column,
                 target_column=target_column,
                 direction="downstream",
+                search_flags=search_flags,
             )
             result["metadata"]["direction"] = "auto-discovered-downstream"
             result["metadata"]["note"] = (
@@ -716,6 +752,7 @@ def get_lineage_paths_between(
                     source_column=source_column,
                     target_column=target_column,
                     direction="upstream",
+                    search_flags=search_flags,
                 )
                 result["metadata"]["direction"] = "auto-discovered-upstream"
                 result["metadata"]["note"] = (
@@ -742,4 +779,5 @@ def get_lineage_paths_between(
             source_column=source_column,
             target_column=target_column,
             direction=direction,
+            search_flags=search_flags,
         )

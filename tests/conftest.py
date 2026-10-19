@@ -81,6 +81,12 @@ if using_oss:
     mcp_module.view_preference = view_preference  # type: ignore[attr-defined]
     sys.modules["datahub_integrations.mcp.view_preference"] = view_preference
 
+    # Import and expose search_flags
+    from mcp_server_datahub import search_flags
+
+    mcp_module.search_flags = search_flags  # type: ignore[attr-defined]
+    sys.modules["datahub_integrations.mcp.search_flags"] = search_flags
+
     # Import and expose fastmcp_helpers
     from mcp_server_datahub import fastmcp_helpers
 
