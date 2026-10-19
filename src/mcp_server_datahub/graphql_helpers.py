@@ -169,6 +169,11 @@ def truncate_with_ellipsis(text: str, max_length: int, suffix: str = "...") -> s
     if not text or len(text) <= max_length:
         return text
 
+    # A limit too small to fit the suffix gets a hard cut. Without this, a negative
+    # slice index would keep almost all of the text.
+    if max_length <= len(suffix):
+        return text[: max(max_length, 0)]
+
     # Account for suffix length
     actual_max = max_length - len(suffix)
     return text[:actual_max] + suffix

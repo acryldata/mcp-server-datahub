@@ -657,6 +657,17 @@ def test_truncate_query_honors_configured_limit() -> None:
     assert result.endswith("... [truncated]")
 
 
+@pytest.mark.parametrize("limit", [-1, 0, 5, 15])
+def test_truncate_query_limit_smaller_than_suffix(limit: int) -> None:
+    """A limit at or below the suffix length must not return (almost) the whole query."""
+    long_query = "SELECT * FROM t " * 1000
+
+    with patch.object(graphql_helpers, "QUERY_LENGTH_HARD_LIMIT", limit):
+        result = truncate_query(long_query)
+
+    assert result == long_query[: max(limit, 0)]
+
+
 def test_get_lineage_normalizes_null_string() -> None:
     """Test that get_lineage normalizes the string 'null' to None for the column parameter."""
     from datahub_integrations.mcp.mcp_server import get_lineage
