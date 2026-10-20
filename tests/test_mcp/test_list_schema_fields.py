@@ -528,7 +528,9 @@ class TestListSchemaFields:
                                         "qualifiedName": "ai_context.instructions"
                                     }
                                 },
-                                "values": [{"stringValue": f"guidance text for {path}"}],
+                                "values": [
+                                    {"stringValue": f"guidance text for {path}"}
+                                ],
                             }
                         ]
                     }

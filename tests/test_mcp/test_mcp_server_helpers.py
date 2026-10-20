@@ -744,9 +744,7 @@ def test_extract_structured_properties_untruncated_for_scoring() -> None:
                         "values": [{"stringValue": "x" * 100}],
                     },
                     {
-                        "structuredProperty": {
-                            "definition": {"qualifiedName": "tags"}
-                        },
+                        "structuredProperty": {"definition": {"qualifiedName": "tags"}},
                         "values": [
                             {"stringValue": "a"},
                             {"stringValue": "b"},
