@@ -42,7 +42,15 @@ GQL_DIR = pathlib.Path(__file__).parent / "gql"
 
 T = TypeVar("T")
 DESCRIPTION_LENGTH_HARD_LIMIT = int(os.getenv("DESCRIPTION_LENGTH_LIMIT", "5000"))
-QUERY_LENGTH_HARD_LIMIT = 5000
+
+# Per-schema-field limit, applied to a field's description, its edited description
+# and its deprecation note. Separate from DESCRIPTION_LENGTH_HARD_LIMIT because a
+# response can carry hundreds of fields, so the per-field budget is much smaller.
+FIELD_DESCRIPTION_LENGTH_HARD_LIMIT = int(
+    os.getenv("FIELD_DESCRIPTION_LENGTH_LIMIT", "120")
+)
+# Max length for SQL query statements and view definitions in tool responses.
+QUERY_LENGTH_HARD_LIMIT = int(os.getenv("QUERY_LENGTH_LIMIT", "5000"))
 DOCUMENT_CONTENT_CHAR_LIMIT = 8000
 
 # Maximum token count for tool responses to prevent context window issues
@@ -160,6 +168,11 @@ def truncate_with_ellipsis(text: str, max_length: int, suffix: str = "...") -> s
     """Truncate text to max_length and add suffix if truncated."""
     if not text or len(text) <= max_length:
         return text
+
+    # A limit too small to fit the suffix gets a hard cut. Without this, a negative
+    # slice index would keep almost all of the text.
+    if max_length <= len(suffix):
+        return text[: max(max_length, 0)]
 
     # Account for suffix length
     actual_max = max_length - len(suffix)
@@ -712,7 +725,9 @@ def _clean_schema_fields(
 
         # Add description if present (truncated)
         if description := f.get("description"):
-            field_dict["description"] = description[:120]
+            field_dict["description"] = description[
+                :FIELD_DESCRIPTION_LENGTH_HARD_LIMIT
+            ]
 
         # Add nullable if present (important for SQL NULL handling)
         if f.get("nullable") is not None:
@@ -740,7 +755,9 @@ def _clean_schema_fields(
                 if deprecation.get("deprecated"):
                     field_dict["deprecated"] = {
                         "deprecated": True,
-                        "note": deprecation.get("note", "")[:120],  # Truncate note
+                        "note": deprecation.get("note", "")[
+                            :FIELD_DESCRIPTION_LENGTH_HARD_LIMIT
+                        ],
                     }
 
         # Add tags if present (keep minimal info for classification context)
@@ -772,8 +789,11 @@ def _clean_schema_fields(
             if editable_desc := editable.get("description"):
                 system_desc = field_dict.get("description", "")
                 # Only add if different (token optimization)
-                if editable_desc[:120] != system_desc:  # Compare truncated versions
-                    field_dict["editedDescription"] = editable_desc[:120]
+                truncated_editable_desc = editable_desc[
+                    :FIELD_DESCRIPTION_LENGTH_HARD_LIMIT
+                ]
+                if truncated_editable_desc != system_desc:  # Compare truncated versions
+                    field_dict["editedDescription"] = truncated_editable_desc
 
             # Add editedTags if present and different
             if editable_tags := editable.get("tags"):

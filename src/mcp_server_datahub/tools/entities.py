@@ -7,6 +7,7 @@ from datahub.errors import ItemNotFoundError
 from json_repair import repair_json
 from loguru import logger
 
+from ..arg_validation import OptionalStrList, StrListOrStr
 from .. import graphql_helpers
 from ..version_requirements import read_only
 
@@ -18,16 +19,15 @@ related_documents_gql = (graphql_helpers.GQL_DIR / "related_documents.gql").read
 
 
 @read_only
-def get_entities(urns: List[str] | str) -> List[dict] | dict:
+def get_entities(urns: StrListOrStr) -> List[dict] | dict:
     """Get detailed information about one or more entities by their DataHub URNs.
 
     IMPORTANT: Pass an array of URNs to retrieve multiple entities in a single call - this is much
     more efficient than calling this tool multiple times. When examining search results, always pass
     an array with the top 3-10 result URNs to compare and find the best match.
 
-    Accepts an array of URNs or a single URN. Supports all entity types including datasets,
-    assertions, incidents, dashboards, charts, users, groups, and more. The response fields vary
-    based on the entity type.
+    Supports all entity types including datasets, assertions, incidents, dashboards, charts,
+    users, groups, and more. The response fields vary based on the entity type.
     """
     client = graphql_helpers.get_datahub_client()
 
@@ -139,7 +139,7 @@ def get_entities(urns: List[str] | str) -> List[dict] | dict:
 @read_only
 def list_schema_fields(
     urn: str,
-    keywords: Optional[List[str]] = None,
+    keywords: OptionalStrList = None,
     limit: int = 100,
     offset: int = 0,
 ) -> dict:
@@ -181,6 +181,12 @@ def list_schema_fields(
         # Pagination through all fields
         list_schema_fields(urn="urn:li:dataset:(...)", limit=100, offset=0)   # First 100
         list_schema_fields(urn="urn:li:dataset:(...)", limit=100, offset=100) # Next 100
+
+        # Robust continuation (returned can be smaller than limit when the token budget is reached)
+        page = list_schema_fields(urn="urn:li:dataset:(...)", limit=100, offset=0)
+        next_offset = page["offset"] + page["returned"]
+        if page["remainingCount"] > 0:
+            list_schema_fields(urn="urn:li:dataset:(...)", limit=100, offset=next_offset)
 
         # Combine filtering + pagination
         list_schema_fields(urn="urn:li:dataset:(...)", keywords=["user"], limit=50, offset=0)
@@ -302,7 +308,7 @@ def list_schema_fields(
             )
 
         # Pre-compute matching count (need all fields for this)
-        fields_for_counting = result.get("schemaMetadata", {}).get("fields", [])
+        fields_for_counting = (result.get("schemaMetadata") or {}).get("fields", [])
         matching_count = sum(
             1 for field in fields_for_counting if score_field_by_keywords(field) > 0
         )
@@ -332,7 +338,9 @@ def list_schema_fields(
 
     # Calculate how many fields remain after what we returned
     # This accounts for both pagination and token budget constraints
-    remaining_count = total_fields - offset - len(cleaned_fields)
+    # An offset beyond the end is a valid empty page. Keep the public count
+    # non-negative so callers can reliably stop at remainingCount == 0.
+    remaining_count = max(0, total_fields - offset - len(cleaned_fields))
 
     return {
         "urn": urn,

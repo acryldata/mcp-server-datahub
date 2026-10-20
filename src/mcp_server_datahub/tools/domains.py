@@ -1,10 +1,10 @@
 """Domain management tools for DataHub MCP server."""
 
 import logging
-from typing import List
 
 from datahub.sdk.main_client import DataHubClient
 
+from ..arg_validation import StrList
 from .. import graphql_helpers
 from ..version_requirements import min_version
 
@@ -63,7 +63,7 @@ def _validate_domain_urn(client: DataHubClient, domain_urn: str) -> None:
 @min_version(cloud="0.3.16", oss="1.4.0")
 def set_domains(
     domain_urn: str,
-    entity_urns: List[str],
+    entity_urns: StrList,
 ) -> dict:
     """Set domain for multiple DataHub entities.
 
@@ -156,7 +156,7 @@ def set_domains(
 
 @min_version(cloud="0.3.16", oss="1.4.0")
 def remove_domains(
-    entity_urns: List[str],
+    entity_urns: StrList,
 ) -> dict:
     """Remove domain assignment from multiple DataHub entities.
 

@@ -2,10 +2,12 @@
 
 import logging
 from enum import Enum
-from typing import List, Literal, Optional, Union
+from typing import Annotated, List, Literal, Optional, Union
 
 from datahub.sdk.main_client import DataHubClient
+from pydantic import WithJsonSchema
 
+from ..arg_validation import StrList
 from .. import graphql_helpers
 from ..version_requirements import min_version
 
@@ -26,7 +28,12 @@ class OwnershipType(str, Enum):
         return f"{OWNERSHIP_TYPE_URN_PREFIX}{self.value}"
 
 
-OwnershipTypeInput = Union[OwnershipType, str]
+# Published as a plain string: the enum branch of `anyOf: [enum, string]` constrains
+# nothing, since the open branch accepts any string anyway. The built-in names are listed
+# in the tool docstrings, and _resolve_ownership_type_urn maps them to the enum.
+OwnershipTypeInput = Annotated[
+    Union[OwnershipType, str], WithJsonSchema({"type": "string"})
+]
 
 
 def _resolve_ownership_type_urn(
@@ -305,8 +312,8 @@ def _batch_modify_owners(
 
 @min_version(cloud="0.3.16", oss="1.4.0")
 def add_owners(
-    owner_urns: List[str],
-    entity_urns: List[str],
+    owner_urns: StrList,
+    entity_urns: StrList,
     ownership_type: OwnershipTypeInput,
 ) -> dict:
     """Add one or more owners to multiple DataHub entities.
@@ -372,8 +379,8 @@ def add_owners(
 
 @min_version(cloud="0.3.16", oss="1.4.0")
 def remove_owners(
-    owner_urns: List[str],
-    entity_urns: List[str],
+    owner_urns: StrList,
+    entity_urns: StrList,
     ownership_type: Optional[OwnershipTypeInput] = None,
 ) -> dict:
     """Remove one or more owners from multiple DataHub entities.

@@ -783,6 +783,22 @@ fragment entityPreview on Entity {
             ...nonRecursiveDataFlowFields
         }
         jobId
+        inputOutput {
+            inputDatasets {
+                urn
+                type
+                properties {
+                    name
+                }
+            }
+            outputDatasets {
+                urn
+                type
+                properties {
+                    name
+                }
+            }
+        }
         ownership {
             ...ownershipFields
         }

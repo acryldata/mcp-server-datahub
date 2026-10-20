@@ -242,6 +242,24 @@ class TestFilterToolsByVersion:
         result = filter_tools_by_version(mock_tools)
         assert not any(t.name == "search_documents" for t in result)
 
+    @patch("datahub_integrations.mcp.version_requirements.logger.info")
+    @patch("datahub_integrations.mcp.version_requirements._get_server_version_info")
+    def test_deployment_only_tool_logs_unavailable_deployment(
+        self, mock_version_info, mock_log_info, mock_tools, mock_client
+    ):
+        """An absent deployment minimum is not a version shortfall."""
+        TOOL_VERSION_REQUIREMENTS["search_documents"] = VersionRequirement(
+            cloud_min=(0, 3, 16, 0)
+        )
+        mock_version_info.return_value = (False, (1, 6, 0, 0))
+
+        filter_tools_by_version(mock_tools)
+
+        message = mock_log_info.call_args.args[0]
+        assert message == (
+            "Filtering out tool 'search_documents': not available on oss deployments"
+        )
+
     def test_error_fails_open(self, mock_tools):
         """On error fetching server version (e.g., no client), return all tools."""
         TOOL_VERSION_REQUIREMENTS["add_tags"] = VersionRequirement(

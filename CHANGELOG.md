@@ -17,6 +17,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   missing for Dashboard, Chart, Container, Domain, DataProduct, GlossaryTerm,
   GlossaryNode, CorpUser, CorpGroup, Tag and the ML entities. DataProduct also
   gains `tags` and `glossaryTerms`.
+- `FIELD_DESCRIPTION_LENGTH_LIMIT` (default `120`) makes the per-schema-field
+  description limit configurable. It also covers a field's edited description and
+  its deprecation note, which were hardcoded to the same 120 characters.
 - A non-root Docker image, Docker Compose configuration, public `GET /health`
   endpoint, and multi-architecture Docker Hub/GHCR release workflow.
 
@@ -26,6 +29,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `mcp-server-datahub-http` entry point and requires each MCP client to provide
   its own DataHub bearer token. `DATAHUB_GMS_TOKEN` remains supported by the
   local stdio and SSE transports; HTTP refuses to start when it is set.
+- The minimum `acryl-datahub` version is now `1.7.0.6` (was `1.3.1.7`). If you
+  pin an older `acryl-datahub` alongside this package, you must upgrade it.
+
+### Fixed
+
+- Tool calls no longer stall for about 54 seconds when the telemetry endpoint is
+  unreachable. `acryl-datahub` 1.7.0.6 sends telemetry from a background worker
+  instead of on the calling thread.
 
 ### Security
 

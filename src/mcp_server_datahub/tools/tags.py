@@ -5,6 +5,7 @@ from typing import List, Literal, Optional
 
 from datahub.sdk.main_client import DataHubClient
 
+from ..arg_validation import OptionalNullableItemStrList, StrList
 from .. import graphql_helpers
 from ..version_requirements import min_version
 
@@ -164,9 +165,9 @@ def _batch_modify_tags(
 
 @min_version(cloud="0.3.16", oss="1.4.0")
 def add_tags(
-    tag_urns: List[str],
-    entity_urns: List[str],
-    column_paths: Optional[List[Optional[str]]] = None,
+    tag_urns: StrList,
+    entity_urns: StrList,
+    column_paths: OptionalNullableItemStrList = None,
 ) -> dict:
     """Add one or more tags to multiple DataHub entities or their columns (e.g., schema fields).
 
@@ -225,9 +226,9 @@ def add_tags(
 
 @min_version(cloud="0.3.16", oss="1.4.0")
 def remove_tags(
-    tag_urns: List[str],
-    entity_urns: List[str],
-    column_paths: Optional[List[Optional[str]]] = None,
+    tag_urns: StrList,
+    entity_urns: StrList,
+    column_paths: OptionalNullableItemStrList = None,
 ) -> dict:
     """Remove one or more tags from multiple DataHub entities or their column_paths (e.g., schema fields).
 
