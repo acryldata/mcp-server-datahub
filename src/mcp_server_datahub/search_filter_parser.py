@@ -108,6 +108,10 @@ FILTER SYNTAX (SQL-like WHERE clause):
     - hasActiveIncidents: true or false (whether the entity has active incidents)
     - hasFailingAssertions: true or false (whether the entity has failing assertions)
     - columnCount: number of columns (from dataset profiling)
+    - source: dataset URN that is the FK (source) side of an ER model relationship
+    - destination: dataset URN that is the PK (destination) side of an ER model relationship
+      (use either or both together to find all ERModelRelationship entities touching a dataset,
+      e.g. entity_type = erModelRelationship AND source = "urn:li:dataset:(...)")
 
     IMPORTANT: Domain, container, tag, glossary_term, and owner filters require
     full URN format (urn:li:...). Search with entity_type = domain first to find
@@ -123,7 +127,7 @@ FILTER SYNTAX (SQL-like WHERE clause):
     (e.g. "Published", "Certified"). Use get_entities on the structured property URN
     to check definition.allowedValues and match the exact casing.
 
-    Values containing special characters (spaces, =, parentheses) must be quoted:
+    Values containing special characters (spaces, =, parentheses, commas) must be quoted:
       tag = "urn:li:tag:my tag"
       customProperties = "key=value"\
 """
