@@ -14,6 +14,14 @@ fragment query on QueryEntity {
       value
       language
     }
+    customProperties {
+      key
+      value
+    }
+    origin {
+      urn
+      type
+    }
     # created {
     #   time
     #   actor

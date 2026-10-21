@@ -585,10 +585,19 @@ fragment entityPreview on Entity {
             displayName
             email
             title
+            customProperties {
+                key
+                value
+            }
         }
         editableProperties {
             displayName
             title
+        }
+        structuredProperties {
+            properties {
+                ...structuredPropertiesFields
+            }
         }
     }
     ... on CorpGroup {
@@ -596,6 +605,14 @@ fragment entityPreview on Entity {
         properties {
             displayName
             description
+        }
+        ownership {
+            ...ownershipFields
+        }
+        structuredProperties {
+            properties {
+                ...structuredPropertiesFields
+            }
         }
         memberCount: relationships(
             input: {
@@ -620,6 +637,10 @@ fragment entityPreview on Entity {
             access
             lastModified {
                 time
+            }
+            customProperties {
+                key
+                value
             }
         }
         ownership {
@@ -669,6 +690,10 @@ fragment entityPreview on Entity {
             access
             lastModified {
                 time
+            }
+            customProperties {
+                key
+                value
             }
         }
         ownership {
@@ -830,6 +855,11 @@ fragment entityPreview on Entity {
         ownership {
             ...ownershipFields
         }
+        structuredProperties {
+            properties {
+                ...structuredPropertiesFields
+            }
+        }
         deprecation {
             ...deprecationFields
         }
@@ -838,10 +868,28 @@ fragment entityPreview on Entity {
         properties {
             name
             description
+            customProperties {
+                key
+                value
+            }
+        }
+        ownership {
+            ...ownershipFields
+        }
+        structuredProperties {
+            properties {
+                ...structuredPropertiesFields
+            }
         }
     }
     ... on MLFeatureTable {
         name
+        properties {
+            customProperties {
+                key
+                value
+            }
+        }
         description
         featureTableProperties {
             description
@@ -875,6 +923,12 @@ fragment entityPreview on Entity {
     }
     ... on MLModel {
         name
+        properties {
+            customProperties {
+                key
+                value
+            }
+        }
         description
         origin
         ownership {
@@ -900,6 +954,12 @@ fragment entityPreview on Entity {
     }
     ... on MLFeature {
         name
+        properties {
+            customProperties {
+                key
+                value
+            }
+        }
         description
         ownership {
             ...ownershipFields
@@ -921,6 +981,12 @@ fragment entityPreview on Entity {
     }
     ... on MLModelGroup {
         name
+        properties {
+            customProperties {
+                key
+                value
+            }
+        }
         origin
         description
         ownership {
@@ -949,6 +1015,9 @@ fragment entityPreview on Entity {
             name
             description
         }
+        ownership {
+            ...ownershipFields
+        }
     }
     ... on StructuredPropertyEntity {
         definition {
@@ -965,6 +1034,14 @@ fragment entityPreview on Entity {
             name
             description
         }
+        ownership {
+            ...ownershipFields
+        }
+        structuredProperties {
+            properties {
+                ...structuredPropertiesFields
+            }
+        }
         parentDomains {
             ...parentDomainsFields
         }
@@ -978,6 +1055,24 @@ fragment entityPreview on Entity {
         properties {
             name
             description
+            customProperties {
+                key
+                value
+            }
+        }
+        ownership {
+            ...ownershipFields
+        }
+        structuredProperties {
+            properties {
+                ...structuredPropertiesFields
+            }
+        }
+        tags {
+            ...globalTagsFields
+        }
+        glossaryTerms {
+            ...glossaryTerms
         }
         entities(input: { start: 0, count: 20, query: "*" }) {
             total
@@ -1035,6 +1130,12 @@ fragment entityPreview on Entity {
     }
     ... on Container {
         ...entityDisplayNameFields
+        properties {
+            customProperties {
+                key
+                value
+            }
+        }
         subTypes {
             typeNames
         }

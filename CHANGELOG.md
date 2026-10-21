@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `get_entities` and `get_dataset_queries` now return `customProperties` and `origin`
+  for Query entities, so structured key/value metadata attached to a query is visible
+  to agents.
+- `get_entities` now returns `customProperties`, `structuredProperties` and `ownership`
+  for every entity type whose GraphQL type supports them. Previously these were
+  missing for Dashboard, Chart, Container, Domain, DataProduct, GlossaryTerm,
+  GlossaryNode, CorpUser, CorpGroup, Tag and the ML entities. DataProduct also
+  gains `tags` and `glossaryTerms`.
 - `FIELD_DESCRIPTION_LENGTH_LIMIT` (default `120`) makes the per-schema-field
   description limit configurable. It also covers a field's edited description and
   its deprecation note, which were hardcoded to the same 120 characters.
