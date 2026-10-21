@@ -9,10 +9,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `get_entities` and `get_dataset_queries` now return `customProperties` and `origin`
+  for Query entities, so structured key/value metadata attached to a query is visible
+  to agents.
+- `get_entities` now returns `customProperties`, `structuredProperties` and `ownership`
+  for every entity type whose GraphQL type supports them. Previously these were
+  missing for Dashboard, Chart, Container, Domain, DataProduct, GlossaryTerm,
+  GlossaryNode, CorpUser, CorpGroup, Tag and the ML entities. DataProduct also
+  gains `tags` and `glossaryTerms`.
 - `FIELD_DESCRIPTION_LENGTH_LIMIT` (default `120`) makes the per-schema-field
   description limit configurable. It also covers a field's edited description and
   its deprecation note, which were hardcoded to the same 120 characters.
 - `SearchFlagsOverride`, injected through `ToolContext` the way `ViewPreference` is, merges GraphQL `searchFlags` over a query's defaults for one request. The lineage tools (`get_lineage` and `get_lineage_paths_between`) honor it, so a caller running the tools can inject `SearchFlagsOverride({"skipCache": True})` to read lineage past DataHub's lineage search cache before acting on it. Other search tools do not consume it yet. No tool parameters change.
+- `list_schema_fields` now returns structured properties (e.g. `ai_context.*`)
+  for each schema field, so column-scoped properties written via
+  `add_structured_properties` can be read back through the MCP server instead of
+  requiring raw GraphQL. Keyword filtering matches against those values as well.
+  `get_entities` responses are unchanged; the per-value character cap is
+  configurable via `FIELD_STRUCTURED_PROPERTY_CHAR_LIMIT` (default 1000) and the
+  per-property value count via `FIELD_STRUCTURED_PROPERTY_MAX_VALUES` (default 25).
 - A non-root Docker image, Docker Compose configuration, public `GET /health`
   endpoint, and multi-architecture Docker Hub/GHCR release workflow.
 

@@ -504,3 +504,78 @@ class TestListSchemaFields:
                 field_paths = [f["fieldPath"] for f in result["fields"]]
                 assert "ssn" in field_paths
                 assert "address" in field_paths
+
+    async def test_structured_properties_scored_once_per_field(self, mock_client):
+        """Keyword scoring extracts structured properties once per field.
+
+        matching_count scores the raw response fields and the sort scores the
+        rebuilt copies from clean_gql_response, so the two passes see different dict
+        objects. The score cache is keyed by fieldPath (not id()) to still extract
+        each field's structured properties only once instead of twice.
+        """
+        from datahub_integrations.mcp import graphql_helpers as gh
+
+        def field(path: str) -> dict:
+            return {
+                "fieldPath": path,
+                "type": "STRING",
+                "schemaFieldEntity": {
+                    "structuredProperties": {
+                        "properties": [
+                            {
+                                "structuredProperty": {
+                                    "definition": {
+                                        "qualifiedName": "ai_context.instructions"
+                                    }
+                                },
+                                "values": [
+                                    {"stringValue": f"guidance text for {path}"}
+                                ],
+                            }
+                        ]
+                    }
+                },
+            }
+
+        dataset = {
+            "urn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,db.schema.t,PROD)",
+            "schemaMetadata": {
+                "fields": [field("user_id"), field("user_email"), field("order_id")],
+            },
+        }
+        num_fields = len(dataset["schemaMetadata"]["fields"])
+
+        real_extract = gh.extract_structured_properties
+        scoring_calls = 0
+
+        def counting_extract(schema_field_entity, truncate=True):
+            nonlocal scoring_calls
+            if truncate is False:  # the keyword-scoring call path
+                scoring_calls += 1
+            return real_extract(schema_field_entity, truncate=truncate)
+
+        with patch(
+            "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
+            return_value=mock_client,
+        ):
+            mock_client._graph.exists.return_value = True
+            with (
+                patch(
+                    "datahub_integrations.mcp.graphql_helpers.execute_graphql"
+                ) as mock_gql,
+                patch.object(
+                    gh, "extract_structured_properties", side_effect=counting_extract
+                ),
+            ):
+                mock_gql.return_value = {"entity": dataset}
+
+                from datahub_integrations.mcp.mcp_server import list_schema_fields
+
+                result = await async_background(list_schema_fields)(
+                    urn=dataset["urn"], keywords=["user"]
+                )
+
+        # Each field is scored exactly once despite scoring running for both
+        # matching_count and the sort (would be 2 * num_fields without the cache).
+        assert scoring_calls == num_fields
+        assert result["matchingCount"] == 2  # user_id, user_email
