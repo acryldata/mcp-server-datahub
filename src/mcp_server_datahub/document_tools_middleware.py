@@ -92,12 +92,18 @@ def _query_documents_exist_cached() -> bool:
         Exception: If the GraphQL query fails
     """
     # Import here to avoid circular imports at module load time
-    from .graphql_helpers import execute_graphql, get_datahub_client
+    from .graphql_helpers import _is_datahub_cloud, execute_graphql, get_datahub_client
     from .tools.documents import document_search_gql
 
     logger.debug("Document check cache miss, querying DataHub")
 
     client = get_datahub_client()
+
+    # Document search uses the Cloud-only 'Document' entity type — skip on non-cloud
+    # instances to avoid noisy validation errors (same pattern as getRelatedDocuments)
+    if not _is_datahub_cloud(client._graph):
+        logger.debug("Non-cloud instance detected, skipping document check")
+        return False
 
     # Execute a minimal search query to get total document count
     # We use count=1 (minimum valid value) and only care about the 'total' field
