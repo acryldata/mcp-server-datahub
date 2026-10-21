@@ -84,6 +84,7 @@ from .tools.lineage import (  # noqa: F401 (re-exported for backward compat)
     get_lineage_paths_between,
 )
 from .tools.owners import add_owners, remove_owners
+from .tools.profiles import get_dataset_profile
 from .tools.save_document import is_save_document_enabled, save_document
 from .tools.search import (  # noqa: F401 (re-exported for backward compat)
     _search_implementation,
@@ -396,6 +397,12 @@ def register_search_tools(mcp_instance: FastMCP, is_oss: bool = False) -> None:
         mcp_instance,
         "get_lineage_paths_between",
         get_lineage_paths_between,
+        tags={ToolType.SEARCH.value},
+    )
+    _register_tool(
+        mcp_instance,
+        "get_dataset_profile",
+        get_dataset_profile,
         tags={ToolType.SEARCH.value},
     )
     _register_tool(mcp_instance, "search_documents", search_documents)
