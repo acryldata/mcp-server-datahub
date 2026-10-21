@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `FIELD_DESCRIPTION_LENGTH_LIMIT` (default `120`) makes the per-schema-field
   description limit configurable. It also covers a field's edited description and
   its deprecation note, which were hardcoded to the same 120 characters.
+- `SearchFlagsOverride`, injected through `ToolContext` the way `ViewPreference` is, merges GraphQL `searchFlags` over a query's defaults for one request. The lineage tools (`get_lineage` and `get_lineage_paths_between`) honor it, so a caller running the tools can inject `SearchFlagsOverride({"skipCache": True})` to read lineage past DataHub's lineage search cache before acting on it. Other search tools do not consume it yet. No tool parameters change.
 - `list_schema_fields` now returns structured properties (e.g. `ai_context.*`)
   for each schema field, so column-scoped properties written via
   `add_structured_properties` can be read back through the MCP server instead of
