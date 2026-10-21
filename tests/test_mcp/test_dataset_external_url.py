@@ -48,7 +48,9 @@ def _balanced_block(document: str, opening: str, search_from: int = 0) -> str:
 
 def _dataset_properties_in_preview() -> str:
     """The body of Dataset.properties inside `fragment entityPreview`."""
-    preview = _balanced_block(ENTITY_DETAILS, f"fragment {PREVIEW_FRAGMENT} on Entity {{")
+    preview = _balanced_block(
+        ENTITY_DETAILS, f"fragment {PREVIEW_FRAGMENT} on Entity {{"
+    )
     dataset = _balanced_block(preview, "... on Dataset {")
     return _balanced_block(dataset, "properties {")
 
@@ -79,7 +81,9 @@ class TestDatasetExternalUrl:
         Asserted as a subset so adding externalUrl to a further type does not
         fail here, while removing it from Dataset does.
         """
-        preview = _balanced_block(ENTITY_DETAILS, f"fragment {PREVIEW_FRAGMENT} on Entity {{")
+        preview = _balanced_block(
+            ENTITY_DETAILS, f"fragment {PREVIEW_FRAGMENT} on Entity {{"
+        )
         exposing = set()
         cursor = 0
         while True:
