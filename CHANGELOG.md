@@ -43,7 +43,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - `get_entities` and `get_lineage` now return DataProcessInstance properties
-  (including `created` and `customProperties`), the latest run `state`, and
+  (including `created` and `customProperties`), a bounded run `state`, and
   `mlTrainingRunProperties`. Previously a training run or pipeline execution
   resolved to a bare URN with no timestamp.
 - Tool calls no longer stall for about 54 seconds when the telemetry endpoint is

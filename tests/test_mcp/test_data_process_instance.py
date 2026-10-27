@@ -54,7 +54,7 @@ class TestDataProcessInstancePreview:
         )
 
     def test_preview_requests_bounded_run_state(self) -> None:
-        """Latest run event, capped so lineage nodes do not dump full timeseries."""
+        """One run event, capped so lineage nodes do not dump full timeseries."""
         body = _preview_dpi_body()
         assert "state(limit: 1)" in body, (
             f"DataProcessInstance in fragment {PREVIEW_FRAGMENT} no longer "
@@ -80,3 +80,18 @@ class TestDataProcessInstancePreview:
         body = _balanced_block(display, "... on DataProcessInstance {")
         properties = _balanced_block(body, "properties {")
         assert "name" in properties
+
+    def test_platform_is_aliased_to_avoid_nullability_conflict(self) -> None:
+        """DataProcessInstance.platform is nullable; Dataset.platform is not.
+
+        Selecting both as `platform` makes graphql-java reject the whole
+        entityPreview fragment (FieldsConflict). The DataHub UI uses the
+        optionalPlatform alias for the same reason.
+        """
+        body = _preview_dpi_body()
+        assert "optionalPlatform: platform" in body, (
+            f"DataProcessInstance in fragment {PREVIEW_FRAGMENT} must alias "
+            "platform as optionalPlatform so get_entities does not fail schema "
+            "validation against Dataset.platform."
+        )
+        assert "\n        platform {" not in body

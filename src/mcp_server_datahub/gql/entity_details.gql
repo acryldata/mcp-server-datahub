@@ -892,7 +892,7 @@ fragment entityPreview on Entity {
         subTypes {
             typeNames
         }
-        platform {
+        optionalPlatform: platform {
             ...platformFields
         }
     }
