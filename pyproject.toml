@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "acryl-datahub>=1.7.0.6",
+    "anyio>=4.9.0",
     "asyncer>=0.0.8",
     "cachetools>=5.0.0",
     "fakeredis!=2.35.0",
@@ -20,7 +21,6 @@ license = "Apache-2.0"
 
 [dependency-groups]
 dev = [
-    "anyio>=4.9.0",
     "mypy>=1.15.0",
     "pytest>=8.3.5",
     "pytest-asyncio>=0.21.0,<1",

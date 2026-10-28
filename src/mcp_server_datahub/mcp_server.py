@@ -23,6 +23,7 @@ from typing import (
 )
 
 import asyncer
+from anyio.lowlevel import checkpoint_if_cancelled
 from datahub.cli.env_utils import get_boolean_env_variable
 from fastmcp import FastMCP
 from fastmcp.tools import Tool as FastMCPTool
@@ -146,6 +147,11 @@ def async_background(fn: Callable[_P, _R]) -> Callable[_P, Coroutine[Any, Any, _
                 f"Tool function {fn.__name__} failed with args={args}, kwargs={kwargs}"
             )
             raise
+        finally:
+            # asyncify shields the running worker from cancellation. Deliver any
+            # pending cancellation before MCP SDK v1 tries to respond again to
+            # a request already completed by notifications/cancelled (#262).
+            await checkpoint_if_cancelled()
 
     return wrapper
 
