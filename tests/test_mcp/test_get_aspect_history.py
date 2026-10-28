@@ -483,6 +483,155 @@ def test_oversized_value_returns_preview_instead_of_raw_value(graph):
     assert current["valueChars"] > history_module.MAX_ASPECT_VALUE_CHARS
     assert len(current["valuePreview"]) <= history_module.MAX_ASPECT_VALUE_CHARS
     assert "value" not in current
+    assert "compactLineage" not in current
+
+
+UPSTREAM_URN = "urn:li:dataset:(urn:li:dataPlatform:snowflake,raw.order_details,PROD)"
+
+
+def _field(dataset_urn, field_path):
+    return f"urn:li:schemaField:({dataset_urn},{field_path})"
+
+
+def _wide_lineage(columns):
+    """An upstreamLineage shaped like a wide BI model: one mapping per column."""
+    return {
+        "upstreams": [
+            {
+                "type": "TRANSFORMED",
+                "dataset": UPSTREAM_URN,
+                "auditStamp": {"time": 0, "actor": "urn:li:corpuser:datahub"},
+            }
+        ],
+        "fineGrainedLineages": [
+            {
+                "upstreamType": "FIELD_SET",
+                "upstreams": [_field(UPSTREAM_URN, f"col_{i}")],
+                "downstreamType": "FIELD",
+                "downstreams": [_field(URN_A, f"COL_{i}")],
+                "confidenceScore": 1.0,
+            }
+            for i in range(columns)
+        ],
+    }
+
+
+def _resolve(compact, ref):
+    dataset_index, field_path = ref
+    dataset = compact["datasets"][dataset_index]
+    return dataset if field_path is None else _field(dataset, field_path)
+
+
+def test_oversized_lineage_returns_every_column_mapping_compactly(graph):
+    lineage = _wide_lineage(200)
+    # A single write: only v0 exists, so the response is the current value alone.
+    graph._session.post.return_value = _response(
+        [_entity(URN_A, upstreamLineage=_aspect(lineage, newest="1"))]
+    )
+    result = _run(graph, URN_A, "upstreamLineage")
+    current = result["results"][0]["current"]
+    assert current["valueTruncated"] is True
+    assert current["valueChars"] > history_module.MAX_ASPECT_VALUE_CHARS
+
+    compact = current["compactLineage"]
+    assert compact["truncated"] is False
+    assert compact["datasets"] == [UPSTREAM_URN, URN_A]
+    assert compact["upstreams"] == [{"dataset": 0, "type": "TRANSFORMED"}]
+    assert compact["fineGrainedLineagesTotal"] == 200
+    assert len(compact["fineGrainedLineages"]) == 200
+    for original, edge in zip(
+        lineage["fineGrainedLineages"], compact["fineGrainedLineages"], strict=True
+    ):
+        assert [_resolve(compact, ref) for ref in edge["upstreams"]] == original[
+            "upstreams"
+        ]
+        assert [_resolve(compact, ref) for ref in edge["downstreams"]] == original[
+            "downstreams"
+        ]
+        assert edge["confidenceScore"] == 1.0
+    assert history_module._encoded_chars(compact) < current["valueChars"] / 2
+    assert result["batch"]["truncatedByResponseBudget"] is False
+
+
+def test_lineage_that_fits_returns_the_raw_value_only(graph):
+    graph._session.post.return_value = _response(
+        [_entity(URN_A, upstreamLineage=_aspect(_wide_lineage(3)))]
+    )
+    current = _run(graph, URN_A, "upstreamLineage")["results"][0]["current"]
+    assert current["valueTruncated"] is False
+    assert len(current["value"]["fineGrainedLineages"]) == 3
+    assert "compactLineage" not in current
+
+
+def test_compact_lineage_keeps_dataset_and_query_references(graph):
+    lineage = _wide_lineage(200)
+    query_urn = "urn:li:query:orders-model"
+    lineage["fineGrainedLineages"][0] = {
+        "upstreamType": "DATASET",
+        "upstreams": [UPSTREAM_URN],
+        "downstreamType": "FIELD",
+        "downstreams": [_field(URN_A, "[version=2.0].[type=struct].address.city")],
+        "transformOperation": "COALESCE",
+        "query": query_urn,
+    }
+    graph._session.post.return_value = _response(
+        [_entity(URN_A, upstreamLineage=_aspect(lineage))]
+    )
+    current = _run(graph, URN_A, "upstreamLineage")["results"][0]["current"]
+    edge = current["compactLineage"]["fineGrainedLineages"][0]
+    assert edge == {
+        "upstreams": [[0, None]],
+        "downstreams": [[1, "[version=2.0].[type=struct].address.city"]],
+        "transformOperation": "COALESCE",
+        "query": query_urn,
+    }
+
+
+def test_compact_lineage_cut_keeps_a_consistent_prefix(graph, monkeypatch):
+    lineage = _wide_lineage(200)
+    # Each mapping past the cut would have introduced a dataset of its own; none of
+    # them may leak into ``datasets``.
+    for i, edge in enumerate(lineage["fineGrainedLineages"][100:], start=100):
+        edge["upstreams"] = [
+            _field(f"urn:li:dataset:(urn:li:dataPlatform:s3,bucket/part_{i},PROD)", "x")
+        ]
+    monkeypatch.setattr(history_module, "MAX_COMPACT_LINEAGE_CHARS", 3_000)
+    graph._session.post.return_value = _response(
+        [_entity(URN_A, upstreamLineage=_aspect(lineage))]
+    )
+    current = _run(graph, URN_A, "upstreamLineage")["results"][0]["current"]
+    compact = current["compactLineage"]
+    returned = compact["fineGrainedLineages"]
+    assert compact["truncated"] is True
+    assert compact["fineGrainedLineagesTotal"] == 200
+    assert 0 < len(returned) < 200
+    referenced = {
+        ref[0] for edge in returned for ref in edge["upstreams"] + edge["downstreams"]
+    } | {upstream["dataset"] for upstream in compact["upstreams"]}
+    assert referenced == set(range(len(compact["datasets"])))
+    assert (
+        history_module._encoded_chars(compact["datasets"])
+        + history_module._encoded_chars(compact["upstreams"])
+        + history_module._encoded_chars(returned)
+        <= 3_000 + 100
+    )
+
+
+def test_historical_lineage_versions_are_compacted_too(graph):
+    lineage = _wide_lineage(200)
+    graph._session.post.side_effect = lambda url, **kwargs: _response(
+        [
+            _entity(
+                URN_A,
+                upstreamLineage=_aspect(lineage, newest="2"),
+            )
+        ]
+    )
+    item = _run(graph, URN_A, "upstreamLineage", limit=1, include_current=False)[
+        "results"
+    ][0]
+    assert _versions(item) == [1]
+    assert item["history"][0]["compactLineage"]["fineGrainedLineagesTotal"] == 200
 
 
 def test_global_budget_reports_dropped_pairs(graph, monkeypatch):
