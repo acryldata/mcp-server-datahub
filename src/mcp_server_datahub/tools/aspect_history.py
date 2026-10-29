@@ -171,20 +171,18 @@ def _encoded_chars(value: Any) -> int:
 
 
 # SchemaFieldUrn keeps the field path URN-encoded. UrnEncoder percent-encodes only
-# RESERVED_CHARS, so decoding exactly those gives back the schema's fieldPath, and
-# SchemaFieldUrn(parent, fieldPath) re-encodes it to the original URN.
-_URN_ENCODED_RESERVED = {
-    UrnEncoder.encode_char(char).upper(): char for char in RESERVED_CHARS
-}
+# RESERVED_CHARS, so decoding exactly those gives back the schema's fieldPath (the
+# web app's decodeSchemaField does the same), and SchemaFieldUrn(parent, fieldPath)
+# re-encodes it to the original URN.
+_URN_ENCODED_RESERVED = {UrnEncoder.encode_char(char): char for char in RESERVED_CHARS}
 _URN_ENCODED_RESERVED_PATTERN = re.compile(
-    "|".join(re.escape(encoded) for encoded in _URN_ENCODED_RESERVED),
-    re.IGNORECASE,
+    "|".join(re.escape(encoded) for encoded in _URN_ENCODED_RESERVED)
 )
 
 
 def _decode_field_path(field_path: str) -> str:
     return _URN_ENCODED_RESERVED_PATTERN.sub(
-        lambda match: _URN_ENCODED_RESERVED[match.group(0).upper()], field_path
+        lambda match: _URN_ENCODED_RESERVED[match.group(0)], field_path
     )
 
 
@@ -198,10 +196,11 @@ def _compact_lineage(value: Any) -> dict[str, Any] | None:
     as it appears in the schema, and ``[datasetIndex, null]`` refers to a whole
     entity. Anything that does not parse as a URN is kept as a string.
 
-    Kept: each upstream's ``type`` and ``query``; each mapping's ``upstreams``,
-    ``downstreams``, ``transformOperation``, ``confidenceScore`` and ``query``.
-    Left out: audit stamps, ``created``, ``properties`` and the upstream and
-    downstream types. Entries are added in aspect order until
+    Kept: each upstream's ``type``, ``query``, ``matchType`` and ``properties``;
+    each mapping's ``upstreams``, ``downstreams``, ``transformOperation``,
+    ``confidenceScore``, ``query`` and ``matchType``. Left out: the audit stamps
+    (``auditStamp``, ``created``) and ``upstreamType``/``downstreamType``, which the
+    references already show. Entries are added in aspect order until
     ``MAX_COMPACT_LINEAGE_CHARS``, so a cut keeps a consistent prefix, and the
     totals say how many entries the aspect holds.
     """
@@ -241,16 +240,22 @@ def _compact_lineage(value: Any) -> dict[str, Any] | None:
             if isinstance(dataset, str)
             else _bounded_provenance_value(dataset)
         }
-        for key in ("type", "query"):
+        for key in ("type", "query", "matchType"):
             if key in upstream:
                 projected[key] = _bounded_provenance_value(upstream[key])
+        properties = upstream.get("properties")
+        if isinstance(properties, dict) and properties:
+            projected["properties"] = {
+                str(name): _bounded_provenance_value(item)
+                for name, item in properties.items()
+            }
         return projected
 
     def compact_edge(edge: dict[str, Any]) -> dict[str, Any]:
         projected: dict[str, Any] = {
             key: entity_refs(edge.get(key)) for key in ("upstreams", "downstreams")
         }
-        for key in ("transformOperation", "confidenceScore", "query"):
+        for key in ("transformOperation", "confidenceScore", "query", "matchType"):
             if key in edge:
                 projected[key] = _bounded_provenance_value(edge[key])
         return projected

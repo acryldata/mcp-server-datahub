@@ -572,7 +572,14 @@ def test_lineage_that_fits_returns_the_raw_value_only(graph):
 def test_compact_lineage_keeps_dataset_and_query_references(graph):
     lineage = _wide_lineage(200)
     query_urn = "urn:li:query:orders-model"
-    lineage["upstreams"][0]["query"] = "urn:li:query:orders-etl"
+    lineage["upstreams"][0].update(
+        {
+            "query": "urn:li:query:orders-etl",
+            "matchType": "NORMALIZED",
+            "properties": {"source": "dbt"},
+            "created": {"time": 1, "actor": "urn:li:corpuser:datahub"},
+        }
+    )
     lineage["fineGrainedLineages"][0] = {
         "upstreamType": "DATASET",
         "upstreams": [UPSTREAM_URN],
@@ -580,6 +587,7 @@ def test_compact_lineage_keeps_dataset_and_query_references(graph):
         "downstreams": [_field(URN_A, "[version=2.0].[type=struct].address.city")],
         "transformOperation": "COALESCE",
         "query": query_urn,
+        "matchType": "UNRESOLVED",
     }
     graph._session.post.return_value = _response(
         [_entity(URN_A, upstreamLineage=_aspect(lineage))]
@@ -587,13 +595,20 @@ def test_compact_lineage_keeps_dataset_and_query_references(graph):
     current = _run(graph, URN_A, "upstreamLineage")["results"][0]["current"]
     compact = current["compactLineage"]
     assert compact["upstreams"] == [
-        {"dataset": 0, "type": "TRANSFORMED", "query": "urn:li:query:orders-etl"}
+        {
+            "dataset": 0,
+            "type": "TRANSFORMED",
+            "query": "urn:li:query:orders-etl",
+            "matchType": "NORMALIZED",
+            "properties": {"source": "dbt"},
+        }
     ]
     assert compact["fineGrainedLineages"][0] == {
         "upstreams": [[0, None]],
         "downstreams": [[1, "[version=2.0].[type=struct].address.city"]],
         "transformOperation": "COALESCE",
         "query": query_urn,
+        "matchType": "UNRESOLVED",
     }
 
 
@@ -608,6 +623,8 @@ def test_compact_lineage_decodes_reserved_characters_in_field_paths():
     assert [edge["downstreams"][0][1] for edge in edges] == paths
     for original, edge in zip(lineage["fineGrainedLineages"], edges, strict=True):
         assert _resolve(compact, edge["downstreams"][0]) == original["downstreams"][0]
+    # Only the encoder's own uppercase form is decoded, as in the web app.
+    assert history_module._decode_field_path("x%2cy%2Cz") == "x%2cy,z"
 
 
 def test_compact_lineage_tolerates_malformed_references():
