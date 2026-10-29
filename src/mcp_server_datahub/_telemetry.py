@@ -1,6 +1,7 @@
 import logging
 from typing import Any
 
+import anyio
 import mcp.types as mt
 from datahub.telemetry import telemetry
 from datahub.utilities.perf_timer import PerfTimer
@@ -75,6 +76,9 @@ class TelemetryMiddleware(Middleware):
 
                 return result
 
+            except anyio.get_cancelled_exc_class():
+                telemetry_data["tool_call_cancelled"] = True
+                raise
             except Exception as e:
                 telemetry_data["tool_call_error"] = e.__class__.__name__
                 telemetry_data["tool_call_error_message"] = str(e)[:500]
