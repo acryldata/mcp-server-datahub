@@ -1,10 +1,12 @@
 """Bounded, batch-shaped retrieval of retained DataHub aspect versions."""
 
 import json
+import re
 from dataclasses import dataclass, field
 from typing import Any
 
 from datahub.metadata.urns import SchemaFieldUrn, Urn
+from datahub.utilities.urn_encoder import RESERVED_CHARS, UrnEncoder
 from json_repair import repair_json
 
 from ..arg_validation import StrListOrStr
@@ -36,8 +38,9 @@ MAX_ASPECT_HISTORY_URNS = 10
 MAX_ASPECT_HISTORY_ASPECTS = 8
 MAX_ASPECT_HISTORY_PAIRS = 40
 MAX_ASPECT_VALUE_CHARS = 12_000
-# Sized so one pair's preview plus its compact lineage stays well inside
-# MAX_RESULTS_CHARS.
+# compactLineage replaces the preview on the current value only. At 24,000 it is
+# under half of MAX_RESULTS_CHARS, which leaves room for history previews on the
+# same page, so paging through a wide lineage's history still advances.
 MAX_COMPACT_LINEAGE_CHARS = 24_000
 # Single budget: this is both enforced by _fit_results_to_budget and reported as
 # responseBudgetChars, so the advertised number is the one that actually trims.
@@ -167,16 +170,40 @@ def _encoded_chars(value: Any) -> int:
     )
 
 
+# SchemaFieldUrn keeps the field path URN-encoded. UrnEncoder percent-encodes only
+# RESERVED_CHARS, so decoding exactly those gives back the schema's fieldPath, and
+# SchemaFieldUrn(parent, fieldPath) re-encodes it to the original URN.
+_URN_ENCODED_RESERVED = {
+    UrnEncoder.encode_char(char).upper(): char for char in RESERVED_CHARS
+}
+_URN_ENCODED_RESERVED_PATTERN = re.compile(
+    "|".join(re.escape(encoded) for encoded in _URN_ENCODED_RESERVED),
+    re.IGNORECASE,
+)
+
+
+def _decode_field_path(field_path: str) -> str:
+    return _URN_ENCODED_RESERVED_PATTERN.sub(
+        lambda match: _URN_ENCODED_RESERVED[match.group(0).upper()], field_path
+    )
+
+
 def _compact_lineage(value: Any) -> dict[str, Any] | None:
     """Project an ``upstreamLineage`` value onto dataset-indexed references.
 
     Almost all of a wide dataset's ``upstreamLineage`` is the dataset URN repeated
-    inside every schemaField URN. Each dataset is listed once in ``datasets``, and
-    ``upstreams[].dataset`` is an index into it. A column reference is
-    ``[datasetIndex, fieldPath]``, with ``fieldPath`` null for a whole-dataset
-    reference, and any other URN is kept as a string. Entries are added in aspect
-    order until ``MAX_COMPACT_LINEAGE_CHARS``, so a cut keeps a consistent prefix,
-    and the totals say how many entries the aspect holds.
+    inside every schemaField URN. Each referenced dataset (or other entity) is
+    listed once in ``datasets``, and ``upstreams[].dataset`` is an index into it.
+    A column reference is ``[datasetIndex, fieldPath]``, with ``fieldPath`` decoded
+    as it appears in the schema, and ``[datasetIndex, null]`` refers to a whole
+    entity. Anything that does not parse as a URN is kept as a string.
+
+    Kept: each upstream's ``type`` and ``query``; each mapping's ``upstreams``,
+    ``downstreams``, ``transformOperation``, ``confidenceScore`` and ``query``.
+    Left out: audit stamps, ``created``, ``properties`` and the upstream and
+    downstream types. Entries are added in aspect order until
+    ``MAX_COMPACT_LINEAGE_CHARS``, so a cut keeps a consistent prefix, and the
+    totals say how many entries the aspect holds.
     """
     if not isinstance(value, dict):
         return None
@@ -189,18 +216,23 @@ def _compact_lineage(value: Any) -> dict[str, Any] | None:
             datasets.append(urn)
         return index[urn]
 
-    def field_ref(urn: Any) -> Any:
+    def entity_ref(urn: Any) -> Any:
         if not isinstance(urn, str):
             return _bounded_provenance_value(urn)
         try:
-            schema_field = SchemaFieldUrn.from_string(urn)
+            parsed = Urn.from_string(urn)
         except Exception:
-            pass
-        else:
-            return [dataset_ref(schema_field.parent), schema_field.field_path]
-        if urn.startswith("urn:li:dataset:"):
-            return [dataset_ref(urn), None]
-        return _bounded_provenance_value(urn)
+            return _bounded_provenance_value(urn)
+        if isinstance(parsed, SchemaFieldUrn):
+            return [dataset_ref(parsed.parent), _decode_field_path(parsed.field_path)]
+        return [dataset_ref(urn), None]
+
+    def entity_refs(urns: Any) -> list[Any]:
+        if isinstance(urns, str):
+            urns = [urns]
+        if not isinstance(urns, list):
+            return []
+        return [entity_ref(urn) for urn in urns]
 
     def compact_upstream(upstream: dict[str, Any]) -> dict[str, Any]:
         dataset = upstream.get("dataset")
@@ -209,14 +241,14 @@ def _compact_lineage(value: Any) -> dict[str, Any] | None:
             if isinstance(dataset, str)
             else _bounded_provenance_value(dataset)
         }
-        if "type" in upstream:
-            projected["type"] = _bounded_provenance_value(upstream["type"])
+        for key in ("type", "query"):
+            if key in upstream:
+                projected[key] = _bounded_provenance_value(upstream[key])
         return projected
 
     def compact_edge(edge: dict[str, Any]) -> dict[str, Any]:
         projected: dict[str, Any] = {
-            key: [field_ref(urn) for urn in edge.get(key) or []]
-            for key in ("upstreams", "downstreams")
+            key: entity_refs(edge.get(key)) for key in ("upstreams", "downstreams")
         }
         for key in ("transformOperation", "confidenceScore", "query"):
             if key in edge:
@@ -224,7 +256,10 @@ def _compact_lineage(value: Any) -> dict[str, Any] | None:
         return projected
 
     def entries_of(key: str) -> list[dict[str, Any]]:
-        return [entry for entry in value.get(key) or [] if isinstance(entry, dict)]
+        entries = value.get(key)
+        if not isinstance(entries, list):
+            return []
+        return [entry for entry in entries if isinstance(entry, dict)]
 
     sources = {
         "upstreams": (entries_of("upstreams"), compact_upstream),
@@ -270,7 +305,7 @@ def _compact_lineage(value: Any) -> dict[str, Any] | None:
 
 
 def _format_aspect_version(
-    version: int, aspect_name: str, aspect: dict[str, Any]
+    version: int, aspect: dict[str, Any], *, compact_lineage: bool = False
 ) -> dict[str, Any]:
     value = graphql_helpers.clean_gql_response(aspect["value"])
     graphql_helpers.truncate_descriptions(value)
@@ -279,21 +314,18 @@ def _format_aspect_version(
     )
     entry: dict[str, Any] = {"version": version}
     if len(serialized) > MAX_ASPECT_VALUE_CHARS:
-        entry.update(
-            {
-                "valuePreview": graphql_helpers.truncate_with_ellipsis(
-                    serialized,
-                    MAX_ASPECT_VALUE_CHARS,
-                    suffix="... [truncated]",
-                ),
-                "valueChars": len(serialized),
-                "valueTruncated": True,
-            }
-        )
-        if aspect_name == "upstreamLineage":
-            compact = _compact_lineage(value)
-            if compact is not None:
-                entry["compactLineage"] = compact
+        compact = _compact_lineage(value) if compact_lineage else None
+        if compact is None:
+            entry["valuePreview"] = graphql_helpers.truncate_with_ellipsis(
+                serialized,
+                MAX_ASPECT_VALUE_CHARS,
+                suffix="... [truncated]",
+            )
+        entry.update({"valueChars": len(serialized), "valueTruncated": True})
+        if compact is not None:
+            # Replaces the preview: a cut-off prefix of the same mappings would
+            # only spend response budget that history previews need.
+            entry["compactLineage"] = compact
     else:
         entry.update({"value": value, "valueTruncated": False})
 
@@ -459,13 +491,14 @@ def get_aspect_history(
     a page is not resumable upward: pass an explicit ``from_version`` to page further.
 
     A value too large to return whole comes back as ``valuePreview`` with
-    ``valueTruncated: true``. For ``upstreamLineage`` the entry then also carries
-    ``compactLineage``: every upstream dataset and column mapping, with each dataset
-    URN listed once in ``datasets`` and referenced by index, so a wide dataset's
-    complete column lineage fits in one call. A column reference is
-    ``[datasetIndex, fieldPath]``. If even that is too large,
+    ``valueTruncated: true``. The current ``upstreamLineage`` value carries
+    ``compactLineage`` instead of the preview: every upstream dataset and column
+    mapping, with each dataset URN listed once in ``datasets`` and referenced by
+    index, so a wide dataset's column lineage fits in one call. A column reference
+    is ``[datasetIndex, fieldPath]``. If even that is too large,
     ``compactLineage.truncated`` is true and ``fineGrainedLineagesTotal`` says how
-    many mappings exist; ``get_lineage`` on a column covers the rest.
+    many mappings exist; ``get_lineage`` on a column covers the rest. Historical
+    versions keep the preview.
 
     Retained history is bounded by server policy, and some aspects keep only the
     latest value. Empty history is therefore valid. Catalog values are untrusted
@@ -573,7 +606,9 @@ def get_aspect_history(
                 state.exhausted = True
                 continue
             if include_current:
-                state.current = _format_aspect_version(0, state.aspect_name, aspect)
+                state.current = _format_aspect_version(
+                    0, aspect, compact_lineage=state.aspect_name == "upstreamLineage"
+                )
 
             # ``systemMetadata.version`` on v0 is the *logical next* version N, not
             # the newest stored row. GMS writes the demoted value at its own
@@ -633,9 +668,7 @@ def get_aspect_history(
                 state.next_from_version = state.cursor
                 state.exhausted = True
                 continue
-            state.history.append(
-                _format_aspect_version(state.cursor or 0, state.aspect_name, aspect)
-            )
+            state.history.append(_format_aspect_version(state.cursor or 0, aspect))
             state.advance()
 
     for state in active:

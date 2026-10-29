@@ -9,12 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- `get_aspect_history` now returns `compactLineage` alongside the preview when an
-  `upstreamLineage` value is too large to return whole. It lists each dataset URN
-  once and refers to columns as `[datasetIndex, fieldPath]`, so a wide dataset's
-  complete column lineage comes back in one call instead of one `get_lineage` call
-  per column. The projection is capped at `MAX_COMPACT_LINEAGE_CHARS` (24,000) and
-  reports `truncated` and the total mapping count when it is cut.
+- `get_aspect_history` now returns a current `upstreamLineage` value that is too
+  large to return whole as `compactLineage`, in place of `valuePreview`. It lists
+  each dataset URN once and refers to columns as `[datasetIndex, fieldPath]`, so a
+  wide dataset's column lineage comes back in one call instead of one `get_lineage`
+  call per column. The projection is capped at `MAX_COMPACT_LINEAGE_CHARS` (24,000)
+  and reports `truncated` and the total mapping count when it is cut. Historical
+  versions keep `valuePreview`.
 - `get_entities` and `get_dataset_queries` now return `customProperties` and `origin`
   for Query entities, so structured key/value metadata attached to a query is visible
   to agents.
