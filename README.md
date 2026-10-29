@@ -256,7 +256,7 @@ Save standalone documents (insights, decisions, FAQs, notes) to DataHub's knowle
 | `ENTITY_SCHEMA_TOKEN_BUDGET` | `16000` | Token budget per entity for schema fields |
 | `DESCRIPTION_LENGTH_LIMIT` | `5000` | Maximum characters for an entity-level description |
 | `FIELD_DESCRIPTION_LENGTH_LIMIT` | `120` | Maximum characters for a schema field's description, edited description and deprecation note |
-| `DISABLE_NEWER_GMS_FIELD_DETECTION` | `false` | Disable adaptive GMS field detection |
+| `DISABLE_NEWER_GMS_FIELD_DETECTION` | `false` | Disable newer GMS fields. By default, tagged fields are tried on Core and Cloud, with a cached per-query fallback for older schemas. |
 | `DATAHUB_MCP_DISABLE_DEFAULT_VIEW` | `false` | Disable automatic default view application |
 | `SEMANTIC_SEARCH_ENABLED` | `false` | Enable semantic (AI-powered) search |
 
