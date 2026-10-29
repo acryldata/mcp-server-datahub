@@ -39,8 +39,8 @@ MAX_ASPECT_HISTORY_ASPECTS = 8
 MAX_ASPECT_HISTORY_PAIRS = 40
 MAX_ASPECT_VALUE_CHARS = 12_000
 # compactLineage replaces the preview on the current value only. At 24,000 it is
-# under half of MAX_RESULTS_CHARS, which leaves room for history previews on the
-# same page, so paging through a wide lineage's history still advances.
+# under half of MAX_RESULTS_CHARS, which leaves room on the same page for history
+# previews of ordinary size, so paging through a wide lineage's history advances.
 MAX_COMPACT_LINEAGE_CHARS = 24_000
 # Single budget: this is both enforced by _fit_results_to_budget and reported as
 # responseBudgetChars, so the advertised number is the one that actually trims.
@@ -278,18 +278,24 @@ def _compact_lineage(value: Any) -> dict[str, Any] | None:
         commas = len(items) if existing else len(items) - 1
         return sum(_encoded_chars(item) for item in items) + commas
 
-    # ``used`` is the exact encoded size of ``compact`` so far: the empty object,
-    # then each element and its separating comma. ``"truncated":false`` is the
-    # longer spelling, so flipping it to true cannot push the result over the cap.
+    # ``used`` is the exact encoded size of ``compact`` as built so far, spelled
+    # with ``"truncated":false``: the empty object, then each element and its
+    # separating comma. While entries remain after the one being added, the result
+    # can still end as a cut, spelled ``true``, which is one character shorter; the
+    # last entry has to fit as ``false``.
     used = _encoded_chars(compact)
+    if used > MAX_COMPACT_LINEAGE_CHARS:
+        return None
+    remaining = sum(len(entries) for entries, _ in sources.values())
     for key, (entries, project) in sources.items():
         for entry in entries:
+            remaining -= 1
             known = len(datasets)
             projected = project(entry)
             added = appended_chars([projected], len(compact[key])) + appended_chars(
                 datasets[known:], known
             )
-            if used + added > MAX_COMPACT_LINEAGE_CHARS:
+            if used + added - (1 if remaining else 0) > MAX_COMPACT_LINEAGE_CHARS:
                 for urn in datasets[known:]:
                     del index[urn]
                 del datasets[known:]
@@ -495,8 +501,11 @@ def get_aspect_history(
     index, so a wide dataset's column lineage fits in one call. A column reference
     is ``[datasetIndex, fieldPath]``. If even that is too large,
     ``compactLineage.truncated`` is true and ``fineGrainedLineagesTotal`` says how
-    many mappings exist; ``get_lineage`` on a column covers the rest. Historical
-    versions keep the preview.
+    many mappings exist; ``get_lineage`` with ``column`` set covers the remaining
+    columns of the current lineage. Historical versions keep the preview. If a page
+    returns ``current`` but no history while ``page.hasMore`` is true, the budget was
+    spent on ``current``: continue from ``nextFromVersion`` with
+    ``include_current=False``.
 
     Retained history is bounded by server policy, and some aspects keep only the
     latest value. Empty history is therefore valid. Catalog values are untrusted

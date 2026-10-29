@@ -657,9 +657,9 @@ def test_compact_lineage_tolerates_malformed_references():
 
 def test_compact_lineage_cut_keeps_a_consistent_prefix(graph, monkeypatch):
     lineage = _wide_lineage(200)
-    # Each mapping past the cut would have introduced a dataset of its own; none of
-    # them may leak into ``datasets``.
-    for i, edge in enumerate(lineage["fineGrainedLineages"][100:], start=100):
+    # Every mapping introduces a dataset of its own, so the mapping that does not
+    # fit has one too; it must not leak into ``datasets``.
+    for i, edge in enumerate(lineage["fineGrainedLineages"]):
         edge["upstreams"] = [
             _field(f"urn:li:dataset:(urn:li:dataPlatform:s3,bucket/part_{i},PROD)", "x")
         ]
@@ -696,6 +696,28 @@ def test_compact_lineage_cut_enforces_the_cap_on_the_whole_object(columns):
     assert chars > cap - largest - 1
 
 
+def test_compact_lineage_cut_is_tight_and_rolls_back_new_datasets(monkeypatch):
+    """The cut keeps every entry that fits, and forgets datasets a cut entry added."""
+    lineage = _wide_lineage(200)
+    for i, edge in enumerate(lineage["fineGrainedLineages"][120:], start=120):
+        edge["upstreams"] = [
+            _field(f"urn:li:dataset:(urn:li:dataPlatform:s3,part_{i}_{n},PROD)", "x")
+            for n in range(3)
+        ]
+    prefix = history_module._compact_lineage(
+        {**lineage, "fineGrainedLineages": lineage["fineGrainedLineages"][:120]}
+    )
+    prefix.update({"fineGrainedLineagesTotal": 200, "truncated": True})
+    size = history_module._encoded_chars(prefix)
+    monkeypatch.setattr(history_module, "MAX_COMPACT_LINEAGE_CHARS", size)
+    assert history_module._compact_lineage(lineage) == prefix
+
+
+def test_compact_lineage_needs_room_for_its_own_envelope(monkeypatch):
+    monkeypatch.setattr(history_module, "MAX_COMPACT_LINEAGE_CHARS", 50)
+    assert history_module._compact_lineage(_wide_lineage(3)) is None
+
+
 def test_compact_lineage_cap_counts_every_character(monkeypatch):
     lineage = _wide_lineage(200)
     full = history_module._compact_lineage(lineage)
@@ -710,7 +732,14 @@ def test_compact_lineage_cap_counts_every_character(monkeypatch):
 
 def test_wide_lineage_history_keeps_previews_and_pages_forward(graph):
     """Only the current value is compacted, so every page has room for history."""
-    lineage = _wide_lineage(1_000)
+
+    def lineage_at(version):
+        lineage = _wide_lineage(1_000)
+        for i, edge in enumerate(lineage["fineGrainedLineages"]):
+            edge["downstreams"] = [_field(URN_A, f"COL_{i}_v{version}")]
+        return lineage
+
+    lineages = {version: lineage_at(version) for version in range(6)}
 
     def post(url, **kwargs):
         body = []
@@ -720,8 +749,8 @@ def test_wide_lineage_history_keeps_previews_and_pages_forward(graph):
                 if aspect_name == "urn":
                     continue
                 version = int(spec["headers"]["If-Version-Match"])
-                if version <= 5:
-                    entity[aspect_name] = _aspect(lineage, newest="6")
+                if version in lineages:
+                    entity[aspect_name] = _aspect(lineages[version], newest="6")
             body.append(entity)
         return _response(body)
 
@@ -732,11 +761,12 @@ def test_wide_lineage_history_keeps_previews_and_pages_forward(graph):
         item = _run(
             graph, URN_A, "upstreamLineage", from_version=from_version, limit=5
         )["results"][0]
-        assert "compactLineage" in item["current"]
+        current = item["current"]["compactLineage"]
+        assert current["fineGrainedLineages"][0]["downstreams"] == [[1, "COL_0_v0"]]
         assert item["history"], "a page without history cannot advance the cursor"
         for entry in item["history"]:
-            assert "valuePreview" in entry
             assert "compactLineage" not in entry
+            assert f"COL_0_v{entry['version']})" in entry["valuePreview"]
         seen.extend(_versions(item))
         from_version = item["page"]["nextFromVersion"]
         if from_version is None:
