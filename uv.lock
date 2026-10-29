@@ -1412,10 +1412,12 @@ dependencies = [
     { name = "fakeredis" },
     { name = "fastmcp" },
     { name = "google-re2" },
+    { name = "httpx" },
     { name = "jmespath" },
     { name = "json-repair" },
     { name = "loguru" },
     { name = "pydantic" },
+    { name = "uvicorn" },
 ]
 
 [package.dev-dependencies]
@@ -1438,10 +1440,12 @@ requires-dist = [
     { name = "fakeredis", specifier = "!=2.35.0" },
     { name = "fastmcp", specifier = ">=3.2.0,<4" },
     { name = "google-re2" },
+    { name = "httpx", specifier = ">=0.28" },
     { name = "jmespath", specifier = ">=1.0.1,<1.2.0" },
     { name = "json-repair" },
     { name = "loguru" },
     { name = "pydantic", specifier = ">=2.0,<3" },
+    { name = "uvicorn", specifier = ">=0.35" },
 ]
 
 [package.metadata.requires-dev]

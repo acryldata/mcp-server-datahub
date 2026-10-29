@@ -5,13 +5,16 @@ import re
 from typing import Any, Optional
 
 import click
+import uvicorn
 from cachetools import TTLCache
 from datahub.ingestion.graph.config import ClientMode, DatahubClientConfig
 from datahub.sdk.main_client import DataHubClient
 from datahub.telemetry import telemetry
 from fastmcp import FastMCP
-from fastmcp.server.auth import TokenVerifier
+from fastmcp import settings as fastmcp_settings
+from fastmcp.server.auth import AuthProvider, TokenVerifier
 from fastmcp.server.auth.auth import AccessToken
+from fastmcp.server.auth.oauth_proxy import OAuthProxy
 from fastmcp.server.dependencies import get_access_token
 from fastmcp.server.middleware import Middleware
 from fastmcp.server.middleware.logging import LoggingMiddleware
@@ -22,6 +25,12 @@ from typing_extensions import Literal
 from mcp_server_datahub._telemetry import TelemetryMiddleware
 from mcp_server_datahub._version import __version__
 from mcp_server_datahub.document_tools_middleware import DocumentToolsMiddleware
+from mcp_server_datahub.oauth import (
+    DataHubSessionBroker,
+    OAuthSettings,
+    build_oauth_asgi_app,
+    build_oauth_provider,
+)
 from mcp_server_datahub.mcp_server import mcp, register_all_tools, with_datahub_client
 from mcp_server_datahub.version_requirements import VersionFilterMiddleware
 
@@ -198,6 +207,30 @@ class _AuthenticatedDataHubClientMiddleware(Middleware):
             raise
 
 
+class _OAuthUserClientMiddleware(Middleware):
+    """Use a DataHub session for the user who logged in via OAuth."""
+
+    def __init__(self, broker: DataHubSessionBroker) -> None:
+        self._broker = broker
+
+    async def on_message(self, context: Any, call_next: Any) -> Any:
+        access_token = get_access_token()
+        user = (
+            self._broker.settings.user_identity(access_token) if access_token else None
+        )
+        if user is None:
+            raise RuntimeError("OAuth request has no allowed user identity")
+
+        try:
+            client = await self._broker.get_client(user)
+            with with_datahub_client(client):
+                return await call_next(context)
+        except Exception as exc:
+            if _is_datahub_auth_failure(exc):
+                self._broker.invalidate(user)
+            raise
+
+
 # This endpoint deliberately remains outside MCP authentication so container
 # runtimes and Kubernetes can probe the process without a DataHub credential.
 @mcp.custom_route("/health", methods=["GET"])
@@ -222,7 +255,7 @@ def _get_existing_app(mode: _AppMode) -> Optional[FastMCP]:
 def _configure_app(
     mode: _AppMode,
     client_middleware: Middleware,
-    auth: Optional[TokenVerifier] = None,
+    auth: Optional[AuthProvider] = None,
 ) -> FastMCP:
     global _app_mode
     existing_app = _get_existing_app(mode)
@@ -256,7 +289,11 @@ def create_local_app() -> FastMCP:
 
 
 def create_http_app() -> FastMCP:
-    """Create the shared HTTP app with per-request DataHub authentication."""
+    """Create the shared HTTP app with per-request DataHub authentication.
+
+    Users log in via OAuth when MCP_OAUTH_CLIENT_ID is set;
+    otherwise each request must carry a DataHub token as bearer credential.
+    """
 
     existing_app = _get_existing_app("http")
     if existing_app is not None:
@@ -265,6 +302,16 @@ def create_http_app() -> FastMCP:
     server_url = os.environ.get("DATAHUB_GMS_URL")
     if not server_url:
         raise RuntimeError("DATAHUB_GMS_URL is required for HTTP mode")
+
+    oauth_settings = OAuthSettings.from_env()
+    if oauth_settings is not None:
+        return _configure_app(
+            "http",
+            _OAuthUserClientMiddleware(
+                DataHubSessionBroker(server_url, oauth_settings, _build_http_client)
+            ),
+            auth=build_oauth_provider(oauth_settings),
+        )
 
     if os.environ.get("DATAHUB_GMS_TOKEN"):
         raise RuntimeError(
@@ -316,6 +363,19 @@ def http_main(debug: bool) -> None:
 
     if debug:
         mcp.add_middleware(LoggingMiddleware(include_payloads=True))
+
+    oauth_settings = OAuthSettings.from_env()
+    if oauth_settings is not None:
+        server = create_http_app()
+        assert isinstance(server.auth, OAuthProxy)
+        uvicorn.run(
+            build_oauth_asgi_app(server, server.auth, oauth_settings),
+            host=fastmcp_settings.host,
+            port=fastmcp_settings.port,
+            proxy_headers=True,
+            forwarded_allow_ips="*",
+        )
+        return
 
     create_http_app().run(
         transport="http",
