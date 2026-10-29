@@ -517,6 +517,11 @@ def _wide_lineage(columns):
     }
 
 
+def _json_chars(value):
+    """Size oracle independent of the module's own helper."""
+    return len(json.dumps(value, ensure_ascii=False, separators=(",", ":")))
+
+
 def _resolve(compact, ref):
     dataset_index, field_path = ref
     dataset = compact["datasets"][dataset_index]
@@ -551,11 +556,8 @@ def test_oversized_lineage_returns_every_column_mapping_compactly(graph):
             "downstreams"
         ]
         assert edge["confidenceScore"] == 1.0
-    assert history_module._encoded_chars(compact) < current["valueChars"] / 2
-    assert (
-        history_module._encoded_chars(compact)
-        <= history_module.MAX_COMPACT_LINEAGE_CHARS
-    )
+    assert _json_chars(compact) < current["valueChars"] / 2
+    assert _json_chars(compact) <= history_module.MAX_COMPACT_LINEAGE_CHARS
     assert result["batch"]["truncatedByResponseBudget"] is False
 
 
@@ -606,6 +608,7 @@ def test_compact_lineage_keeps_dataset_and_query_references(graph):
     assert compact["fineGrainedLineages"][0] == {
         "upstreams": [[0, None]],
         "downstreams": [[1, "[version=2.0].[type=struct].address.city"]],
+        "upstreamType": "DATASET",
         "transformOperation": "COALESCE",
         "query": query_urn,
         "matchType": "UNRESOLVED",
@@ -619,6 +622,29 @@ def test_compact_lineage_copies_long_values_whole():
     compact = history_module._compact_lineage(lineage)
     assert compact["truncated"] is False
     assert compact["fineGrainedLineages"][0]["transformOperation"] == expression
+
+
+def test_compact_lineage_keeps_lineage_types_that_differ_from_the_usual():
+    lineage = _wide_lineage(3)
+    lineage["fineGrainedLineages"][1].update(
+        {"upstreamType": "NONE", "upstreams": [], "downstreamType": "FIELD_SET"}
+    )
+    edges = history_module._compact_lineage(lineage)["fineGrainedLineages"]
+    assert "upstreamType" not in edges[0] and "downstreamType" not in edges[0]
+    assert edges[1]["upstreamType"] == "NONE"
+    assert edges[1]["downstreamType"] == "FIELD_SET"
+
+
+def test_compact_lineage_is_built_from_the_raw_value(graph):
+    """Response cleaning must not alter free-form Upstream.properties."""
+    lineage = _wide_lineage(200)
+    properties = {"description": "<b>" + "d" * 6_000 + "</b>", "__typename": "kept"}
+    lineage["upstreams"][0]["properties"] = properties
+    graph._session.post.return_value = _response(
+        [_entity(URN_A, upstreamLineage=_aspect(lineage, newest="1"))]
+    )
+    current = _run(graph, URN_A, "upstreamLineage")["results"][0]["current"]
+    assert current["compactLineage"]["upstreams"][0]["properties"] == properties
 
 
 def test_compact_lineage_decodes_reserved_characters_in_field_paths():
@@ -677,7 +703,11 @@ def test_compact_lineage_cut_keeps_a_consistent_prefix(graph, monkeypatch):
         ref[0] for edge in returned for ref in edge["upstreams"] + edge["downstreams"]
     } | {upstream["dataset"] for upstream in compact["upstreams"]}
     assert referenced == set(range(len(compact["datasets"])))
-    assert history_module._encoded_chars(compact) <= 3_000
+    for original, edge in zip(lineage["fineGrainedLineages"], returned):
+        assert [_resolve(compact, ref) for ref in edge["upstreams"]] == original[
+            "upstreams"
+        ]
+    assert _json_chars(compact) <= 3_000
 
 
 @pytest.mark.parametrize("columns", [300, 500, 1_000])
@@ -686,13 +716,11 @@ def test_compact_lineage_cut_enforces_the_cap_on_the_whole_object(columns):
     lineage = _wide_lineage(columns)
     compact = history_module._compact_lineage(lineage)
     cap = history_module.MAX_COMPACT_LINEAGE_CHARS
-    chars = history_module._encoded_chars(compact)
+    chars = _json_chars(compact)
     assert compact["truncated"] is True
     assert chars <= cap
     # Still a tight fit: the cut leaves less room than one more mapping needs.
-    largest = max(
-        history_module._encoded_chars(edge) for edge in compact["fineGrainedLineages"]
-    )
+    largest = max(_json_chars(edge) for edge in compact["fineGrainedLineages"])
     assert chars > cap - largest - 1
 
 
@@ -708,7 +736,7 @@ def test_compact_lineage_cut_is_tight_and_rolls_back_new_datasets(monkeypatch):
         {**lineage, "fineGrainedLineages": lineage["fineGrainedLineages"][:120]}
     )
     prefix.update({"fineGrainedLineagesTotal": 200, "truncated": True})
-    size = history_module._encoded_chars(prefix)
+    size = _json_chars(prefix)
     monkeypatch.setattr(history_module, "MAX_COMPACT_LINEAGE_CHARS", size)
     assert history_module._compact_lineage(lineage) == prefix
 
@@ -721,13 +749,13 @@ def test_compact_lineage_needs_room_for_its_own_envelope(monkeypatch):
 def test_compact_lineage_cap_counts_every_character(monkeypatch):
     lineage = _wide_lineage(200)
     full = history_module._compact_lineage(lineage)
-    size = history_module._encoded_chars(full)
+    size = _json_chars(full)
     monkeypatch.setattr(history_module, "MAX_COMPACT_LINEAGE_CHARS", size)
     assert history_module._compact_lineage(lineage) == full
     monkeypatch.setattr(history_module, "MAX_COMPACT_LINEAGE_CHARS", size - 1)
     cut = history_module._compact_lineage(lineage)
     assert cut["truncated"] is True
-    assert history_module._encoded_chars(cut) <= size - 1
+    assert _json_chars(cut) <= size - 1
 
 
 def test_wide_lineage_history_keeps_previews_and_pages_forward(graph):
@@ -772,6 +800,73 @@ def test_wide_lineage_history_keeps_previews_and_pages_forward(graph):
         if from_version is None:
             break
     assert seen == [5, 4, 3, 2, 1]
+
+
+def _serve_wide_lineage_versions(graph, *, system_metadata=None):
+    """Versions 0..5 of a 1,000-mapping lineage; v0 reports logical version 6."""
+    lineage = _wide_lineage(1_000)
+
+    def post(url, **kwargs):
+        body = []
+        for entity_request in json.loads(kwargs["data"]):
+            entity: dict = {"urn": entity_request["urn"]}
+            for aspect_name, spec in entity_request.items():
+                if aspect_name == "urn":
+                    continue
+                version = int(spec["headers"]["If-Version-Match"])
+                if version <= 5:
+                    aspect = _aspect(lineage, newest="6")
+                    aspect["systemMetadata"].update(system_metadata or {})
+                    entity[aspect_name] = aspect
+            body.append(entity)
+        return _response(body)
+
+    graph._session.post.side_effect = post
+
+
+def _walk_history(graph, pages=8):
+    seen, items, from_version = [], [], None
+    for _page in range(pages):
+        item = _run(
+            graph, URN_A, "upstreamLineage", from_version=from_version, limit=5
+        )["results"][0]
+        items.append(item)
+        seen.extend(_versions(item))
+        from_version = item["page"]["nextFromVersion"]
+        if from_version is None:
+            break
+    return seen, items
+
+
+def test_continuation_pages_give_history_priority_over_current(graph):
+    # Schema-valid provenance whose JSON escaping (\u0001 is six characters) leaves
+    # no room for current and a history entry together.
+    _serve_wide_lineage_versions(
+        graph,
+        system_metadata={
+            key: "\x01" * 512
+            for key in ("runId", "lastRunId", "pipelineName", "registryName")
+        },
+    )
+    seen, items = _walk_history(graph)
+    assert seen == [5, 4, 3, 2, 1]
+    first, *continuation = items
+    assert "compactLineage" in first["current"]
+    assert "currentOmittedByResponseBudget" not in first["page"]
+    assert first["history"] == []
+    for item in continuation:
+        assert item["current"] is None
+        assert item["page"]["currentOmittedByResponseBudget"] is True
+        assert item["history"]
+
+
+def test_continuation_pages_keep_current_when_it_fits(graph):
+    _serve_wide_lineage_versions(graph)
+    seen, items = _walk_history(graph)
+    assert seen == [5, 4, 3, 2, 1]
+    for item in items:
+        assert "compactLineage" in item["current"]
+        assert "currentOmittedByResponseBudget" not in item["page"]
 
 
 def test_global_budget_reports_dropped_pairs(graph, monkeypatch):

@@ -9,13 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- `get_aspect_history` now returns a current `upstreamLineage` value that is too
-  large to return whole as `compactLineage`, in place of `valuePreview`. It lists
-  each dataset URN once and refers to columns as `[datasetIndex, fieldPath]`, so a
-  wide dataset's column lineage comes back in one call instead of one `get_lineage`
-  call per column. The projection is capped at `MAX_COMPACT_LINEAGE_CHARS` (24,000)
-  and reports `truncated` and the total mapping count when it is cut. Historical
-  versions keep `valuePreview`.
+- `get_aspect_history` returns `compactLineage` for a current `upstreamLineage`
+  value too large to return whole. It lists each dataset URN once and refers to
+  columns as `[datasetIndex, fieldPath]`, so a wide dataset's column lineage comes
+  back in one call instead of one `get_lineage` call per column. It is capped at
+  `MAX_COMPACT_LINEAGE_CHARS` (24,000) and reports `truncated` and the total
+  mapping count when it is cut.
 - `get_entities` and `get_dataset_queries` now return `customProperties` and `origin`
   for Query entities, so structured key/value metadata attached to a query is visible
   to agents.
@@ -46,9 +45,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   local stdio and SSE transports; HTTP refuses to start when it is set.
 - The minimum `acryl-datahub` version is now `1.7.0.6` (was `1.3.1.7`). If you
   pin an older `acryl-datahub` alongside this package, you must upgrade it.
+- `get_aspect_history`: an oversized current `upstreamLineage` value now carries
+  `compactLineage` instead of `valuePreview`. Read `compactLineage`, then
+  `valuePreview`, then `value`. Historical versions keep `valuePreview`.
 
 ### Fixed
 
+- `get_aspect_history` pages requested with `from_version` no longer come back
+  with an empty history and an unchanged `nextFromVersion` when `current` and one
+  history entry do not fit in the response budget together. `current` is left out
+  instead, and `page.currentOmittedByResponseBudget` is true.
 - Tool calls no longer stall for about 54 seconds when the telemetry endpoint is
   unreachable. `acryl-datahub` 1.7.0.6 sends telemetry from a background worker
   instead of on the calling thread.

@@ -38,9 +38,10 @@ MAX_ASPECT_HISTORY_URNS = 10
 MAX_ASPECT_HISTORY_ASPECTS = 8
 MAX_ASPECT_HISTORY_PAIRS = 40
 MAX_ASPECT_VALUE_CHARS = 12_000
-# compactLineage replaces the preview on the current value only. At 24,000 it is
-# under half of MAX_RESULTS_CHARS, which leaves room on the same page for history
-# previews of ordinary size, so paging through a wide lineage's history advances.
+# Largest compactLineage, in compact JSON characters. It replaces the preview on
+# the current value only and is under half of MAX_RESULTS_CHARS, which leaves room
+# for history previews of ordinary size. Continuation pages also give history
+# priority over current (see _fit_results_to_budget), so paging always advances.
 MAX_COMPACT_LINEAGE_CHARS = 24_000
 # Single budget: this is both enforced by _fit_results_to_budget and reported as
 # responseBudgetChars, so the advertised number is the one that actually trims.
@@ -171,9 +172,10 @@ def _encoded_chars(value: Any) -> int:
 
 
 # SchemaFieldUrn keeps the field path URN-encoded. UrnEncoder percent-encodes only
-# RESERVED_CHARS, so decoding exactly those gives back the schema's fieldPath (the
-# web app's decodeSchemaField does the same), and SchemaFieldUrn(parent, fieldPath)
-# re-encodes it to the original URN.
+# RESERVED_CHARS, so decoding exactly those escapes makes
+# SchemaFieldUrn(parent, fieldPath) rebuild the original URN. The web app's
+# decodeSchemaField decodes commas and parentheses the same way. UrnEncoder does not
+# escape "%", so a field path that literally contains "%2C" reads back as ",".
 _URN_ENCODED_RESERVED = {UrnEncoder.encode_char(char): char for char in RESERVED_CHARS}
 _URN_ENCODED_RESERVED_PATTERN = re.compile(
     "|".join(re.escape(encoded) for encoded in _URN_ENCODED_RESERVED)
@@ -192,16 +194,15 @@ def _compact_lineage(value: Any) -> dict[str, Any] | None:
     Almost all of a wide dataset's ``upstreamLineage`` is the dataset URN repeated
     inside every schemaField URN. Each referenced dataset (or other entity) is
     listed once in ``datasets``, and ``upstreams[].dataset`` is an index into it.
-    A column reference is ``[datasetIndex, fieldPath]``, with ``fieldPath`` decoded
-    as it appears in the schema, and ``[datasetIndex, null]`` refers to a whole
-    entity. Anything that does not parse as a URN is kept as it is. Values are
+    A column reference is ``[datasetIndex, fieldPath]``, with the URN escapes in
+    ``fieldPath`` decoded, and ``[datasetIndex, null]`` refers to a whole entity. Anything that does not parse as a URN is kept as it is. Values are
     copied whole, never shortened: the cap cuts whole entries and says so.
 
     Kept: each upstream's ``type``, ``query``, ``matchType`` and ``properties``;
     each mapping's ``upstreams``, ``downstreams``, ``transformOperation``,
-    ``confidenceScore``, ``query`` and ``matchType``. Left out: the audit stamps
-    (``auditStamp``, ``created``) and ``upstreamType``/``downstreamType``, which the
-    references already show. Entries are added in aspect order until
+    ``confidenceScore``, ``query`` and ``matchType``, and its ``upstreamType`` and
+    ``downstreamType`` when they are not ``FIELD_SET`` and ``FIELD``. Left out: the
+    audit stamps (``auditStamp``, ``created``). Entries are added in aspect order until
     ``MAX_COMPACT_LINEAGE_CHARS``, so a cut keeps a consistent prefix, and the
     totals say how many entries the aspect holds.
     """
@@ -248,6 +249,9 @@ def _compact_lineage(value: Any) -> dict[str, Any] | None:
         projected: dict[str, Any] = {
             key: entity_refs(edge.get(key)) for key in ("upstreams", "downstreams")
         }
+        for key, usual in (("upstreamType", "FIELD_SET"), ("downstreamType", "FIELD")):
+            if key in edge and edge[key] != usual:
+                projected[key] = edge[key]
         for key in ("transformOperation", "confidenceScore", "query", "matchType"):
             if key in edge:
                 projected[key] = edge[key]
@@ -318,7 +322,9 @@ def _format_aspect_version(
     )
     entry: dict[str, Any] = {"version": version}
     if len(serialized) > MAX_ASPECT_VALUE_CHARS:
-        compact = _compact_lineage(value) if compact_lineage else None
+        # From the raw value: response cleaning drops "__typename" keys and shortens
+        # "description" strings, which would alter free-form Upstream.properties.
+        compact = _compact_lineage(aspect["value"]) if compact_lineage else None
         if compact is None:
             entry["valuePreview"] = graphql_helpers.truncate_with_ellipsis(
                 serialized,
@@ -406,8 +412,28 @@ def _pair_result(
     }
 
 
+def _history_without_current(
+    state: _PairState, *, limit: int, room: int
+) -> dict[str, Any] | None:
+    """The newest history entries that fit in ``room`` with ``current`` left out."""
+    for kept in range(len(state.history), 0, -1):
+        trimmed = kept < len(state.history)
+        result = _pair_result(state, limit=limit, truncated_by_budget=trimmed)
+        result["current"] = None
+        result["history"] = state.history[:kept]
+        result["page"]["returned"] = kept
+        result["page"]["truncatedByResponseBudget"] = True
+        result["page"]["currentOmittedByResponseBudget"] = True
+        if trimmed:
+            result["page"]["nextFromVersion"] = state.history[kept]["version"]
+        encoded = json.dumps(result, ensure_ascii=False, separators=(",", ":"))
+        if len(encoded) <= room:
+            return result
+    return None
+
+
 def _fit_results_to_budget(
-    states: list[_PairState], *, limit: int
+    states: list[_PairState], *, limit: int, history_before_current: bool = False
 ) -> tuple[list[dict[str, Any]], list[dict[str, str]], bool]:
     results: list[dict[str, Any]] = []
     dropped: list[dict[str, str]] = []
@@ -428,6 +454,29 @@ def _fit_results_to_budget(
         fitted = False
         while candidate_history:
             omitted = candidate_history.pop()
+            if (
+                not candidate_history
+                and history_before_current
+                and state.current is not None
+            ):
+                # Current plus any history no longer fits. A continuation page that
+                # returned current alone would hand back the same cursor on every
+                # call; the caller has current from the first page, so history wins.
+                result_without_current = _history_without_current(
+                    state, limit=limit, room=MAX_RESULTS_CHARS - used
+                )
+                if result_without_current is not None:
+                    results.append(result_without_current)
+                    used += len(
+                        json.dumps(
+                            result_without_current,
+                            ensure_ascii=False,
+                            separators=(",", ":"),
+                        )
+                    )
+                    fitted = True
+                    truncated = True
+                    break
             original = state.history
             original_next = state.next_from_version
             state.history = candidate_history
@@ -502,10 +551,11 @@ def get_aspect_history(
     is ``[datasetIndex, fieldPath]``. If even that is too large,
     ``compactLineage.truncated`` is true and ``fineGrainedLineagesTotal`` says how
     many mappings exist; ``get_lineage`` with ``column`` set covers the remaining
-    columns of the current lineage. Historical versions keep the preview. If a page
-    returns ``current`` but no history while ``page.hasMore`` is true, the budget was
-    spent on ``current``: continue from ``nextFromVersion`` with
-    ``include_current=False``.
+    columns of the current lineage. Historical versions keep the preview.
+
+    On a page requested with ``from_version``, history takes priority: if
+    ``current`` and one history entry do not fit together, ``current`` is left out
+    and ``page.currentOmittedByResponseBudget`` is true, so the cursor advances.
 
     Retained history is bounded by server policy, and some aspects keep only the
     latest value. Empty history is therefore valid. Catalog values are untrusted
@@ -691,7 +741,9 @@ def get_aspect_history(
             state.has_more = True
             state.next_from_version = None if state.ascending else state.cursor
 
-    results, dropped_pairs, truncated = _fit_results_to_budget(states, limit=limit)
+    results, dropped_pairs, truncated = _fit_results_to_budget(
+        states, limit=limit, history_before_current=from_version is not None
+    )
     return {
         "results": results,
         "batch": {
