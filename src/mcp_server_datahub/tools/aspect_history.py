@@ -230,34 +230,43 @@ def _compact_lineage(value: Any) -> dict[str, Any] | None:
         "upstreams": (entries_of("upstreams"), compact_upstream),
         "fineGrainedLineages": (entries_of("fineGrainedLineages"), compact_edge),
     }
-    compact: dict[str, list[Any]] = {key: [] for key in sources}
-    used = 0
-    truncated = False
+    compact: dict[str, Any] = {
+        "datasets": datasets,
+        **{key: [] for key in sources},
+        "upstreamsTotal": len(sources["upstreams"][0]),
+        "fineGrainedLineagesTotal": len(sources["fineGrainedLineages"][0]),
+        "truncated": False,
+    }
+
+    def appended_chars(items: list[Any], existing: int) -> int:
+        """Characters ``items`` add to a compact JSON array of ``existing`` items."""
+        if not items:
+            return 0
+        commas = len(items) if existing else len(items) - 1
+        return sum(_encoded_chars(item) for item in items) + commas
+
+    # ``used`` is the exact encoded size of ``compact`` so far: the empty object,
+    # then each element and its separating comma. ``"truncated":false`` is the
+    # longer spelling, so flipping it to true cannot push the result over the cap.
+    used = _encoded_chars(compact)
     for key, (entries, project) in sources.items():
         for entry in entries:
             known = len(datasets)
             projected = project(entry)
-            added = _encoded_chars(projected) + sum(
-                _encoded_chars(urn) for urn in datasets[known:]
+            added = appended_chars([projected], len(compact[key])) + appended_chars(
+                datasets[known:], known
             )
             if used + added > MAX_COMPACT_LINEAGE_CHARS:
                 for urn in datasets[known:]:
                     del index[urn]
                 del datasets[known:]
-                truncated = True
+                compact["truncated"] = True
                 break
             compact[key].append(projected)
             used += added
-        if truncated:
+        if compact["truncated"]:
             break
-
-    return {
-        "datasets": datasets,
-        **compact,
-        "upstreamsTotal": len(sources["upstreams"][0]),
-        "fineGrainedLineagesTotal": len(sources["fineGrainedLineages"][0]),
-        "truncated": truncated,
-    }
+    return compact
 
 
 def _format_aspect_version(

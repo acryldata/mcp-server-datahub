@@ -550,6 +550,10 @@ def test_oversized_lineage_returns_every_column_mapping_compactly(graph):
         ]
         assert edge["confidenceScore"] == 1.0
     assert history_module._encoded_chars(compact) < current["valueChars"] / 2
+    assert (
+        history_module._encoded_chars(compact)
+        <= history_module.MAX_COMPACT_LINEAGE_CHARS
+    )
     assert result["batch"]["truncatedByResponseBudget"] is False
 
 
@@ -609,12 +613,35 @@ def test_compact_lineage_cut_keeps_a_consistent_prefix(graph, monkeypatch):
         ref[0] for edge in returned for ref in edge["upstreams"] + edge["downstreams"]
     } | {upstream["dataset"] for upstream in compact["upstreams"]}
     assert referenced == set(range(len(compact["datasets"])))
-    assert (
-        history_module._encoded_chars(compact["datasets"])
-        + history_module._encoded_chars(compact["upstreams"])
-        + history_module._encoded_chars(returned)
-        <= 3_000 + 100
+    assert history_module._encoded_chars(compact) <= 3_000
+
+
+@pytest.mark.parametrize("columns", [300, 500, 1_000])
+def test_compact_lineage_cut_enforces_the_cap_on_the_whole_object(columns):
+    """The cap holds for the encoded projection, separators and totals included."""
+    lineage = _wide_lineage(columns)
+    compact = history_module._compact_lineage(lineage)
+    cap = history_module.MAX_COMPACT_LINEAGE_CHARS
+    chars = history_module._encoded_chars(compact)
+    assert compact["truncated"] is True
+    assert chars <= cap
+    # Still a tight fit: the cut leaves less room than one more mapping needs.
+    largest = max(
+        history_module._encoded_chars(edge) for edge in compact["fineGrainedLineages"]
     )
+    assert chars > cap - largest - 1
+
+
+def test_compact_lineage_cap_counts_every_character(monkeypatch):
+    lineage = _wide_lineage(200)
+    full = history_module._compact_lineage(lineage)
+    size = history_module._encoded_chars(full)
+    monkeypatch.setattr(history_module, "MAX_COMPACT_LINEAGE_CHARS", size)
+    assert history_module._compact_lineage(lineage) == full
+    monkeypatch.setattr(history_module, "MAX_COMPACT_LINEAGE_CHARS", size - 1)
+    cut = history_module._compact_lineage(lineage)
+    assert cut["truncated"] is True
+    assert history_module._encoded_chars(cut) <= size - 1
 
 
 def test_historical_lineage_versions_are_compacted_too(graph):
