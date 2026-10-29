@@ -52,9 +52,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - `get_aspect_history` pages requested with `from_version` no longer come back
-  with an empty history and an unchanged `nextFromVersion` when `current` and one
-  history entry do not fit in the response budget together. `current` is left out
-  instead, and `page.currentOmittedByResponseBudget` is true.
+  with an empty history and an unchanged `nextFromVersion` when the response
+  budget is short. `current` is left out first, with
+  `page.currentOmittedByResponseBudget: true`; a pair with no room for any history
+  is listed in `batch.droppedPairs`, to be requested alone.
 - Tool calls no longer stall for about 54 seconds when the telemetry endpoint is
   unreachable. `acryl-datahub` 1.7.0.6 sends telemetry from a background worker
   instead of on the calling thread.

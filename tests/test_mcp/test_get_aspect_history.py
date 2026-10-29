@@ -869,6 +869,162 @@ def test_continuation_pages_keep_current_when_it_fits(graph):
         assert "currentOmittedByResponseBudget" not in item["page"]
 
 
+_CONTROL_PROVENANCE = {
+    # Schema-valid, and each escapes to 3,072 JSON characters (\u0001 is six).
+    key: "\x01" * 512
+    for key in ("runId", "lastRunId", "pipelineName", "registryName", "registryVersion")
+}
+
+
+def _extreme_envelope(value, *, newest):
+    """Schema-valid provenance at its 512-character bounds, all control characters."""
+    actor = "urn:li:corpuser:" + "\x01" * (512 - len("urn:li:corpuser:"))
+    stamp = {"time": 1_785_900_000_000, "actor": actor, "impersonator": actor}
+    return {
+        "value": value,
+        "systemMetadata": {
+            **_CONTROL_PROVENANCE,
+            "version": str(newest),
+            "aspectCreated": stamp,
+            "aspectModified": stamp,
+        },
+        "auditStamp": stamp,
+    }
+
+
+def _serve_versions(graph, versions):
+    """Serve ``versions[(urn, aspect_name)][version]`` envelopes; others are absent."""
+
+    def post(url, **kwargs):
+        body = []
+        for entity_request in json.loads(kwargs["data"]):
+            urn = entity_request["urn"]
+            entity: dict = {"urn": urn}
+            for aspect_name, spec in entity_request.items():
+                if aspect_name == "urn":
+                    continue
+                version = int(spec["headers"]["If-Version-Match"])
+                envelope = versions.get((urn, aspect_name), {}).get(version)
+                if envelope is not None:
+                    entity[aspect_name] = envelope
+            body.append(entity)
+        return _response(body)
+
+    graph._session.post.side_effect = post
+
+
+def _wide_versions(newest, *, provenance=None, columns=1_000):
+    envelope = _aspect(_wide_lineage(columns), newest=str(newest))
+    envelope["systemMetadata"].update(provenance or {})
+    return {version: envelope for version in range(newest)}
+
+
+def _pairs_chars(result):
+    return sum(_json_chars(item) for item in result["results"])
+
+
+def test_continuation_drops_a_pair_with_no_room_for_any_history(graph):
+    """A batch must not return history-less pairs whose cursor cannot move."""
+    big_history = _aspect({"customProperties": {"expression": '"' * 20_000}})
+    _serve_versions(
+        graph,
+        {
+            (URN_A, "upstreamLineage"): _wide_versions(2),
+            (URN_A, "datasetProperties"): {
+                0: _aspect({"name": "orders"}, newest="2"),
+                1: big_history,
+            },
+        },
+    )
+    result = _run(
+        graph,
+        URN_A,
+        ["upstreamLineage", "datasetProperties"],
+        from_version=1,
+        limit=1,
+    )
+    assert [item["aspectName"] for item in result["results"]] == ["upstreamLineage"]
+    assert _versions(result["results"][0]) == [1]
+    assert result["batch"]["droppedPairs"] == [
+        {"urn": URN_A, "aspectName": "datasetProperties"}
+    ]
+    alone = _run(graph, URN_A, "datasetProperties", from_version=1, limit=1)
+    assert _versions(alone["results"][0]) == [1]
+
+
+def test_continuation_drops_a_history_entry_too_large_for_the_budget(graph):
+    huge = _extreme_envelope(
+        {"customProperties": {"expression": '"' * 20_000}}, newest=2
+    )
+    _serve_versions(
+        graph,
+        {
+            (URN_A, "datasetProperties"): {
+                0: _aspect({"name": "orders"}, newest="2"),
+                1: huge,
+            }
+        },
+    )
+    result = _run(graph, URN_A, "datasetProperties", from_version=1, limit=1)
+    assert result["results"] == []
+    assert result["batch"]["droppedPairs"] == [
+        {"urn": URN_A, "aspectName": "datasetProperties"}
+    ]
+
+
+def test_first_page_falls_back_to_the_preview_when_compact_lineage_does_not_fit(
+    graph,
+):
+    envelope = _extreme_envelope(_wide_lineage(1_000), newest=2)
+    _serve_versions(graph, {(URN_A, "upstreamLineage"): {0: envelope, 1: envelope}})
+    result = _run(graph, URN_A, "upstreamLineage", limit=1)
+    item = result["results"][0]
+    assert "compactLineage" not in item["current"]
+    assert "valuePreview" in item["current"]
+    assert item["page"]["truncatedByResponseBudget"] is True
+    assert "currentOmittedByResponseBudget" not in item["page"]
+    assert _pairs_chars(result) <= history_module.MAX_RESULTS_CHARS
+
+
+def test_history_that_fits_once_current_is_left_out_ends_the_walk(graph):
+    _serve_versions(
+        graph,
+        {(URN_A, "upstreamLineage"): _wide_versions(2, provenance=_CONTROL_PROVENANCE)},
+    )
+    item = _run(graph, URN_A, "upstreamLineage", from_version=1, limit=5)["results"][0]
+    assert item["current"] is None
+    assert _versions(item) == [1]
+    assert item["page"] == {
+        **item["page"],
+        "returned": 1,
+        "hasMore": False,
+        "nextFromVersion": None,
+        "truncatedByResponseBudget": True,
+        "currentOmittedByResponseBudget": True,
+    }
+
+
+def test_pairs_that_leave_current_out_share_one_budget(graph):
+    urns = [
+        f"urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.t{i},PROD)"
+        for i in range(3)
+    ]
+    _serve_versions(
+        graph,
+        {
+            (urn, "upstreamLineage"): _wide_versions(3, provenance=_CONTROL_PROVENANCE)
+            for urn in urns
+        },
+    )
+    result = _run(graph, urns, "upstreamLineage", from_version=2, limit=5)
+    assert _pairs_chars(result) <= history_module.MAX_RESULTS_CHARS
+    returned = {item["urn"] for item in result["results"]}
+    dropped = {pair["urn"] for pair in result["batch"]["droppedPairs"]}
+    assert returned and dropped and returned | dropped == set(urns)
+    for item in result["results"]:
+        assert item["current"] is None and item["history"]
+
+
 def test_global_budget_reports_dropped_pairs(graph, monkeypatch):
     graph._session.post.return_value = _response(
         [

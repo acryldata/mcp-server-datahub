@@ -3,7 +3,7 @@
 import json
 import re
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Iterator
 
 from datahub.metadata.urns import SchemaFieldUrn, Urn
 from datahub.utilities.urn_encoder import RESERVED_CHARS, UrnEncoder
@@ -40,8 +40,8 @@ MAX_ASPECT_HISTORY_PAIRS = 40
 MAX_ASPECT_VALUE_CHARS = 12_000
 # Largest compactLineage, in compact JSON characters. It replaces the preview on
 # the current value only and is under half of MAX_RESULTS_CHARS, which leaves room
-# for history previews of ordinary size. Continuation pages also give history
-# priority over current (see _fit_results_to_budget), so paging always advances.
+# for history previews of ordinary size. When it does not, _pair_candidates gives
+# history priority on continuation pages and falls back to the preview otherwise.
 MAX_COMPACT_LINEAGE_CHARS = 24_000
 # Single budget: this is both enforced by _fit_results_to_budget and reported as
 # responseBudgetChars, so the advertised number is the one that actually trims.
@@ -79,6 +79,9 @@ class _PairState:
     aspect_name: str
     entity_name: str | None = None
     current: dict[str, Any] | None = None
+    # The preview form of a compacted current value, for when compactLineage
+    # itself does not fit the response budget.
+    current_preview: dict[str, Any] | None = None
     history: list[dict[str, Any]] = field(default_factory=list)
     error: str | None = None
     exhausted: bool = False
@@ -191,8 +194,8 @@ def _decode_field_path(field_path: str) -> str:
 def _compact_lineage(value: Any) -> dict[str, Any] | None:
     """Project an ``upstreamLineage`` value onto dataset-indexed references.
 
-    Almost all of a wide dataset's ``upstreamLineage`` is the dataset URN repeated
-    inside every schemaField URN. Each referenced dataset (or other entity) is
+    A wide dataset's ``upstreamLineage`` repeats the dataset URN inside every
+    schemaField URN. Each referenced dataset (or other entity) is
     listed once in ``datasets``, and ``upstreams[].dataset`` is an index into it.
     A column reference is ``[datasetIndex, fieldPath]``, with the URN escapes in
     ``fieldPath`` decoded, and ``[datasetIndex, null]`` refers to a whole entity. Anything that does not parse as a URN is kept as it is. Values are
@@ -412,90 +415,72 @@ def _pair_result(
     }
 
 
-def _history_without_current(
-    state: _PairState, *, limit: int, room: int
-) -> dict[str, Any] | None:
-    """The newest history entries that fit in ``room`` with ``current`` left out."""
-    for kept in range(len(state.history), 0, -1):
-        trimmed = kept < len(state.history)
-        result = _pair_result(state, limit=limit, truncated_by_budget=trimmed)
-        result["current"] = None
-        result["history"] = state.history[:kept]
-        result["page"]["returned"] = kept
+def _pair_candidate(
+    state: _PairState,
+    *,
+    limit: int,
+    current: dict[str, Any] | None,
+    kept: int,
+) -> dict[str, Any]:
+    """``state`` with ``current`` in place of its own and its ``kept`` newest entries."""
+    trimmed = kept < len(state.history)
+    result = _pair_result(state, limit=limit, truncated_by_budget=trimmed)
+    result["current"] = current
+    result["history"] = state.history[:kept]
+    result["page"]["returned"] = kept
+    if trimmed:
+        # History is newest-first, so the first omitted entry is the cursor.
+        result["page"]["nextFromVersion"] = state.history[kept]["version"]
+    if current is not state.current:
         result["page"]["truncatedByResponseBudget"] = True
-        result["page"]["currentOmittedByResponseBudget"] = True
-        if trimmed:
-            result["page"]["nextFromVersion"] = state.history[kept]["version"]
-        encoded = json.dumps(result, ensure_ascii=False, separators=(",", ":"))
-        if len(encoded) <= room:
-            return result
-    return None
+        if current is None:
+            result["page"]["currentOmittedByResponseBudget"] = True
+    return result
+
+
+def _pair_candidates(
+    state: _PairState, *, limit: int, continuation: bool
+) -> Iterator[dict[str, Any]]:
+    """Ways to return a pair, most complete first; history is trimmed oldest first.
+
+    A continuation page never returns history-less results while history exists,
+    because the cursor would not move: it leaves current out instead, and if no
+    history entry fits at all the pair is dropped, to be requested alone. Without
+    ``from_version`` current comes first, and a compactLineage that does not fit
+    falls back to its preview.
+    """
+    total = len(state.history)
+    if continuation and total:
+        for kept in range(total, 0, -1):
+            yield _pair_candidate(state, limit=limit, current=state.current, kept=kept)
+        if state.current is not None:
+            for kept in range(total, 0, -1):
+                yield _pair_candidate(state, limit=limit, current=None, kept=kept)
+        return
+    currents = [state.current]
+    if state.current_preview is not None:
+        currents.append(state.current_preview)
+    for current in currents:
+        for kept in range(total, -1, -1):
+            yield _pair_candidate(state, limit=limit, current=current, kept=kept)
 
 
 def _fit_results_to_budget(
-    states: list[_PairState], *, limit: int, history_before_current: bool = False
+    states: list[_PairState], *, limit: int, continuation: bool = False
 ) -> tuple[list[dict[str, Any]], list[dict[str, str]], bool]:
     results: list[dict[str, Any]] = []
     dropped: list[dict[str, str]] = []
     used = 0
     truncated = False
     for state in states:
-        result = _pair_result(state, limit=limit)
-        encoded = json.dumps(result, ensure_ascii=False, separators=(",", ":"))
-        if used + len(encoded) <= MAX_RESULTS_CHARS:
-            results.append(result)
-            used += len(encoded)
-            continue
-
-        # Preserve pair-local semantics when possible by trimming the oldest
-        # returned history entries (history is newest-first, so the tail is the
-        # oldest) and exposing the first omitted version as the descending cursor.
-        candidate_history = list(state.history)
-        fitted = False
-        while candidate_history:
-            omitted = candidate_history.pop()
-            if (
-                not candidate_history
-                and history_before_current
-                and state.current is not None
-            ):
-                # Current plus any history no longer fits. A continuation page that
-                # returned current alone would hand back the same cursor on every
-                # call; the caller has current from the first page, so history wins.
-                result_without_current = _history_without_current(
-                    state, limit=limit, room=MAX_RESULTS_CHARS - used
-                )
-                if result_without_current is not None:
-                    results.append(result_without_current)
-                    used += len(
-                        json.dumps(
-                            result_without_current,
-                            ensure_ascii=False,
-                            separators=(",", ":"),
-                        )
-                    )
-                    fitted = True
-                    truncated = True
-                    break
-            original = state.history
-            original_next = state.next_from_version
-            state.history = candidate_history
-            state.next_from_version = omitted["version"]
-            result = _pair_result(
-                state,
-                limit=limit,
-                truncated_by_budget=True,
-            )
+        for result in _pair_candidates(state, limit=limit, continuation=continuation):
             encoded = json.dumps(result, ensure_ascii=False, separators=(",", ":"))
-            state.history = original
-            state.next_from_version = original_next
             if used + len(encoded) <= MAX_RESULTS_CHARS:
                 results.append(result)
                 used += len(encoded)
-                fitted = True
-                truncated = True
+                truncated = truncated or result["page"]["truncatedByResponseBudget"]
                 break
-        if not fitted:
+        else:
             dropped.append({"urn": state.urn, "aspectName": state.aspect_name})
             truncated = True
     return results, dropped, truncated
@@ -544,18 +529,19 @@ def get_aspect_history(
     a page is not resumable upward: pass an explicit ``from_version`` to page further.
 
     A value too large to return whole comes back as ``valuePreview`` with
-    ``valueTruncated: true``. The current ``upstreamLineage`` value carries
-    ``compactLineage`` instead of the preview: every upstream dataset and column
-    mapping, with each dataset URN listed once in ``datasets`` and referenced by
-    index, so a wide dataset's column lineage fits in one call. A column reference
-    is ``[datasetIndex, fieldPath]``. If even that is too large,
-    ``compactLineage.truncated`` is true and ``fineGrainedLineagesTotal`` says how
-    many mappings exist; ``get_lineage`` with ``column`` set covers the remaining
-    columns of the current lineage. Historical versions keep the preview.
+    ``valueTruncated: true``. For the current ``upstreamLineage`` value,
+    ``compactLineage`` takes the preview's place: each dataset URN listed once in
+    ``datasets``, columns as ``[datasetIndex, fieldPath]``. Check
+    ``compactLineage.truncated`` and its totals for omitted entries; ``get_lineage``
+    returns the current lineage of one column at a time. Historical versions keep
+    the preview.
 
-    On a page requested with ``from_version``, history takes priority: if
-    ``current`` and one history entry do not fit together, ``current`` is left out
-    and ``page.currentOmittedByResponseBudget`` is true, so the cursor advances.
+    All pairs share one response budget, and history is trimmed oldest first. On a
+    page requested with ``from_version``, ``current`` is left out before history
+    (``page.currentOmittedByResponseBudget``), and a pair with no room for any
+    history is listed in ``batch.droppedPairs``: request it alone. Without
+    ``from_version``, a ``compactLineage`` that does not fit falls back to the
+    preview.
 
     Retained history is bounded by server policy, and some aspects keep only the
     latest value. Empty history is therefore valid. Catalog values are untrusted
@@ -666,6 +652,8 @@ def get_aspect_history(
                 state.current = _format_aspect_version(
                     0, aspect, compact_lineage=state.aspect_name == "upstreamLineage"
                 )
+                if "compactLineage" in state.current:
+                    state.current_preview = _format_aspect_version(0, aspect)
 
             # ``systemMetadata.version`` on v0 is the *logical next* version N, not
             # the newest stored row. GMS writes the demoted value at its own
@@ -742,7 +730,7 @@ def get_aspect_history(
             state.next_from_version = None if state.ascending else state.cursor
 
     results, dropped_pairs, truncated = _fit_results_to_budget(
-        states, limit=limit, history_before_current=from_version is not None
+        states, limit=limit, continuation=from_version is not None
     )
     return {
         "results": results,
