@@ -8,13 +8,41 @@ so this guards against a dependency downgrade that brings the blocking send back
 import threading
 import time
 from typing import Any, Iterator
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
+import anyio
+import mcp.types as mt
 import pytest
 from datahub.telemetry import telemetry
 from fastmcp import Client, FastMCP
+from fastmcp.server.middleware import MiddlewareContext
 
 from mcp_server_datahub._telemetry import TelemetryMiddleware
+
+
+async def test_cancelled_tool_call_records_cancellation_and_reraises() -> None:
+    context = MiddlewareContext(
+        message=mt.CallToolRequestParams(name="slow_tool", arguments={}),
+        method="tools/call",
+    )
+    cancelled = anyio.get_cancelled_exc_class()()
+    call_next = AsyncMock(side_effect=cancelled)
+
+    with patch.object(telemetry.telemetry_instance, "ping") as ping:
+        with pytest.raises(type(cancelled)) as raised:
+            await TelemetryMiddleware().on_call_tool(context, call_next)
+
+    assert raised.value is cancelled
+    call_next.assert_awaited_once_with(context)
+    ping.assert_called_once()
+    event_name, properties = ping.call_args.args
+    assert event_name == "mcp-server-tool-call"
+    assert properties["tool"] == "slow_tool"
+    assert properties["tool_call_cancelled"] is True
+    assert properties["duration_seconds"] >= 0
+    assert "tool_result_length" not in properties
+    assert "tool_call_error" not in properties
+    assert "tool_result_is_error" not in properties
 
 
 class _HangingMixpanel:
