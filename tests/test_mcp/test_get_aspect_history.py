@@ -612,6 +612,15 @@ def test_compact_lineage_keeps_dataset_and_query_references(graph):
     }
 
 
+def test_compact_lineage_copies_long_values_whole():
+    lineage = _wide_lineage(3)
+    expression = "CASE " + "WHEN a THEN b " * 200 + "END"
+    lineage["fineGrainedLineages"][0]["transformOperation"] = expression
+    compact = history_module._compact_lineage(lineage)
+    assert compact["truncated"] is False
+    assert compact["fineGrainedLineages"][0]["transformOperation"] == expression
+
+
 def test_compact_lineage_decodes_reserved_characters_in_field_paths():
     lineage = _wide_lineage(3)
     paths = ["amount,usd", "total(net)", "a\u241fb"]

@@ -194,7 +194,8 @@ def _compact_lineage(value: Any) -> dict[str, Any] | None:
     listed once in ``datasets``, and ``upstreams[].dataset`` is an index into it.
     A column reference is ``[datasetIndex, fieldPath]``, with ``fieldPath`` decoded
     as it appears in the schema, and ``[datasetIndex, null]`` refers to a whole
-    entity. Anything that does not parse as a URN is kept as a string.
+    entity. Anything that does not parse as a URN is kept as it is. Values are
+    copied whole, never shortened: the cap cuts whole entries and says so.
 
     Kept: each upstream's ``type``, ``query``, ``matchType`` and ``properties``;
     each mapping's ``upstreams``, ``downstreams``, ``transformOperation``,
@@ -217,11 +218,11 @@ def _compact_lineage(value: Any) -> dict[str, Any] | None:
 
     def entity_ref(urn: Any) -> Any:
         if not isinstance(urn, str):
-            return _bounded_provenance_value(urn)
+            return urn
         try:
             parsed = Urn.from_string(urn)
         except Exception:
-            return _bounded_provenance_value(urn)
+            return urn
         if isinstance(parsed, SchemaFieldUrn):
             return [dataset_ref(parsed.parent), _decode_field_path(parsed.field_path)]
         return [dataset_ref(urn), None]
@@ -236,19 +237,11 @@ def _compact_lineage(value: Any) -> dict[str, Any] | None:
     def compact_upstream(upstream: dict[str, Any]) -> dict[str, Any]:
         dataset = upstream.get("dataset")
         projected: dict[str, Any] = {
-            "dataset": dataset_ref(dataset)
-            if isinstance(dataset, str)
-            else _bounded_provenance_value(dataset)
+            "dataset": dataset_ref(dataset) if isinstance(dataset, str) else dataset
         }
-        for key in ("type", "query", "matchType"):
+        for key in ("type", "query", "matchType", "properties"):
             if key in upstream:
-                projected[key] = _bounded_provenance_value(upstream[key])
-        properties = upstream.get("properties")
-        if isinstance(properties, dict) and properties:
-            projected["properties"] = {
-                str(name): _bounded_provenance_value(item)
-                for name, item in properties.items()
-            }
+                projected[key] = upstream[key]
         return projected
 
     def compact_edge(edge: dict[str, Any]) -> dict[str, Any]:
@@ -257,7 +250,7 @@ def _compact_lineage(value: Any) -> dict[str, Any] | None:
         }
         for key in ("transformOperation", "confidenceScore", "query", "matchType"):
             if key in edge:
-                projected[key] = _bounded_provenance_value(edge[key])
+                projected[key] = edge[key]
         return projected
 
     def entries_of(key: str) -> list[dict[str, Any]]:
