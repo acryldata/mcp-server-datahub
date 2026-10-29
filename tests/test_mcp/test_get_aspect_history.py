@@ -5,6 +5,7 @@ import sys
 from unittest.mock import MagicMock, patch
 
 import pytest
+from datahub.metadata.schema_classes import UpstreamLineageClass
 from datahub.metadata.urns import SchemaFieldUrn
 from datahub_integrations.mcp.mcp_server import get_aspect_history
 
@@ -645,6 +646,48 @@ def test_compact_lineage_is_built_from_the_raw_value(graph):
     )
     current = _run(graph, URN_A, "upstreamLineage")["results"][0]["current"]
     assert current["compactLineage"]["upstreams"][0]["properties"] == properties
+
+
+def test_compact_lineage_keeps_every_upstream_in_order_with_its_values():
+    """Several upstreams, a non-default confidence and long values, schema-valid."""
+    urns = [
+        f"urn:li:dataset:(urn:li:dataPlatform:snowflake,raw.{name},PROD)"
+        for name in ("a", "b", "c")
+    ]
+    query = "urn:li:query:" + "q" * 650
+    properties = {"description": "<b>" + "d" * 6_000 + "</b>", "__typename": "kept"}
+    upstreams = [
+        {"dataset": urns[0], "type": "COPY"},
+        {"dataset": urns[1], "type": "VIEW", "query": query, "properties": properties},
+    ]
+    edge = {
+        "upstreamType": "FIELD_SET",
+        "upstreams": [
+            str(SchemaFieldUrn(urns[0], "amount,usd")),
+            str(SchemaFieldUrn(urns[1], "a\u241fb")),
+        ],
+        "downstreamType": "FIELD_SET",
+        "downstreams": [str(SchemaFieldUrn(urns[2], "COL"))],
+        "confidenceScore": 0.625,
+        "query": query,
+    }
+    lineage = {"upstreams": upstreams, "fineGrainedLineages": [edge] * 200}
+    assert UpstreamLineageClass.from_obj(lineage).validate()
+    compact = history_module._format_aspect_version(
+        0, {"value": lineage}, compact_lineage=True
+    )["compactLineage"]
+    assert compact["upstreamsTotal"] == 2
+    assert [compact["datasets"][item["dataset"]] for item in compact["upstreams"]] == [
+        urns[0],
+        urns[1],
+    ]
+    assert compact["upstreams"][1]["query"] == query
+    assert compact["upstreams"][1]["properties"] == properties
+    mapping = compact["fineGrainedLineages"][0]
+    assert mapping["confidenceScore"] == 0.625
+    assert mapping["query"] == query
+    assert mapping["downstreamType"] == "FIELD_SET"
+    assert [_resolve(compact, ref) for ref in mapping["upstreams"]] == edge["upstreams"]
 
 
 def test_compact_lineage_decodes_reserved_characters_in_field_paths():

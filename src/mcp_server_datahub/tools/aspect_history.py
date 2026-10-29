@@ -176,7 +176,8 @@ def _encoded_chars(value: Any) -> int:
 
 # SchemaFieldUrn keeps the field path URN-encoded. UrnEncoder percent-encodes only
 # RESERVED_CHARS, so decoding exactly those escapes makes
-# SchemaFieldUrn(parent, fieldPath) rebuild the original URN. The web app's
+# SchemaFieldUrn(parent, fieldPath) rebuild an SDK-generated URN; a noncanonical
+# parent such as "urn:li:query:(q)" comes back normalized. The web app's
 # decodeSchemaField decodes commas and parentheses the same way. UrnEncoder does not
 # escape "%", so a field path that literally contains "%2C" reads back as ",".
 _URN_ENCODED_RESERVED = {UrnEncoder.encode_char(char): char for char in RESERVED_CHARS}
@@ -198,8 +199,9 @@ def _compact_lineage(value: Any) -> dict[str, Any] | None:
     schemaField URN. Each referenced dataset (or other entity) is
     listed once in ``datasets``, and ``upstreams[].dataset`` is an index into it.
     A column reference is ``[datasetIndex, fieldPath]``, with the URN escapes in
-    ``fieldPath`` decoded, and ``[datasetIndex, null]`` refers to a whole entity. Anything that does not parse as a URN is kept as it is. Values are
-    copied whole, never shortened: the cap cuts whole entries and says so.
+    ``fieldPath`` decoded, and ``[datasetIndex, null]`` refers to a whole entity.
+    Anything that does not parse as a URN is kept as it is. Values are copied
+    whole, never shortened: the cap cuts whole entries and says so.
 
     Kept: each upstream's ``type``, ``query``, ``matchType`` and ``properties``;
     each mapping's ``upstreams``, ``downstreams``, ``transformOperation``,
@@ -530,16 +532,17 @@ def get_aspect_history(
 
     A value too large to return whole comes back as ``valuePreview`` with
     ``valueTruncated: true``. For the current ``upstreamLineage`` value,
-    ``compactLineage`` takes the preview's place: each dataset URN listed once in
-    ``datasets``, columns as ``[datasetIndex, fieldPath]``. Check
-    ``compactLineage.truncated`` and its totals for omitted entries; ``get_lineage``
-    returns the current lineage of one column at a time. Historical versions keep
-    the preview.
+    ``compactLineage`` takes the preview's place when it fits the response budget:
+    each referenced dataset URN listed once in ``datasets``, columns as
+    ``[datasetIndex, fieldPath]``. Check ``compactLineage.truncated`` and its totals
+    for omitted entries; ``get_lineage`` returns the current lineage of one column
+    at a time and may need paging. Oversized historical values keep the preview.
 
-    All pairs share one response budget, and history is trimmed oldest first. On a
-    page requested with ``from_version``, ``current`` is left out before history
-    (``page.currentOmittedByResponseBudget``), and a pair with no room for any
-    history is listed in ``batch.droppedPairs``: request it alone. Without
+    All pairs share one response budget, and history is trimmed oldest first. With
+    ``from_version``, if no history fits next to ``current``, ``current`` is left out
+    (``page.currentOmittedByResponseBudget``); if no history entry fits at all, the
+    pair is listed in ``batch.droppedPairs``. Retry it alone, although an entry
+    larger than the whole budget still cannot be returned. Without
     ``from_version``, a ``compactLineage`` that does not fit falls back to the
     preview.
 

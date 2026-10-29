@@ -11,10 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `get_aspect_history` returns `compactLineage` for a current `upstreamLineage`
   value too large to return whole. It lists each dataset URN once and refers to
-  columns as `[datasetIndex, fieldPath]`, so a wide dataset's column lineage comes
-  back in one call instead of one `get_lineage` call per column. It is capped at
-  `MAX_COMPACT_LINEAGE_CHARS` (24,000) and reports `truncated` and the total
-  mapping count when it is cut.
+  columns as `[datasetIndex, fieldPath]`, so when `truncated` is false one call
+  returns every mapping instead of one `get_lineage` call per column. It is capped
+  at `MAX_COMPACT_LINEAGE_CHARS` (24,000 compact JSON characters) and reports the
+  total mapping count.
 - `get_entities` and `get_dataset_queries` now return `customProperties` and `origin`
   for Query entities, so structured key/value metadata attached to a query is visible
   to agents.
@@ -46,16 +46,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The minimum `acryl-datahub` version is now `1.7.0.6` (was `1.3.1.7`). If you
   pin an older `acryl-datahub` alongside this package, you must upgrade it.
 - `get_aspect_history`: an oversized current `upstreamLineage` value now carries
-  `compactLineage` instead of `valuePreview`. Read `compactLineage`, then
-  `valuePreview`, then `value`. Historical versions keep `valuePreview`.
+  `compactLineage` instead of `valuePreview`, unless the projection does not fit
+  the response budget. Read `compactLineage`, then `valuePreview`, then `value`.
+  Oversized historical values keep `valuePreview`.
 
 ### Fixed
 
 - `get_aspect_history` pages requested with `from_version` no longer come back
   with an empty history and an unchanged `nextFromVersion` when the response
-  budget is short. `current` is left out first, with
-  `page.currentOmittedByResponseBudget: true`; a pair with no room for any history
-  is listed in `batch.droppedPairs`, to be requested alone.
+  budget is short. If no history fits next to `current`, `current` is left out,
+  with `page.currentOmittedByResponseBudget: true`; if no history entry fits at
+  all, the pair is listed in `batch.droppedPairs`. Retry it alone; an entry larger
+  than the whole budget still cannot be returned.
 - Tool calls no longer stall for about 54 seconds when the telemetry endpoint is
   unreachable. `acryl-datahub` 1.7.0.6 sends telemetry from a background worker
   instead of on the calling thread.
