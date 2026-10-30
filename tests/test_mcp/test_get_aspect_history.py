@@ -5,6 +5,8 @@ import sys
 from unittest.mock import MagicMock, patch
 
 import pytest
+from datahub.metadata.schema_classes import UpstreamLineageClass
+from datahub.metadata.urns import SchemaFieldUrn
 from datahub_integrations.mcp.mcp_server import get_aspect_history
 
 history_module = sys.modules[get_aspect_history.__module__]
@@ -483,6 +485,587 @@ def test_oversized_value_returns_preview_instead_of_raw_value(graph):
     assert current["valueChars"] > history_module.MAX_ASPECT_VALUE_CHARS
     assert len(current["valuePreview"]) <= history_module.MAX_ASPECT_VALUE_CHARS
     assert "value" not in current
+    assert "compactLineage" not in current
+
+
+UPSTREAM_URN = "urn:li:dataset:(urn:li:dataPlatform:snowflake,raw.order_details,PROD)"
+
+
+def _field(dataset_urn, field_path):
+    return f"urn:li:schemaField:({dataset_urn},{field_path})"
+
+
+def _wide_lineage(columns):
+    """An upstreamLineage shaped like a wide BI model: one mapping per column."""
+    return {
+        "upstreams": [
+            {
+                "type": "TRANSFORMED",
+                "dataset": UPSTREAM_URN,
+                "auditStamp": {"time": 0, "actor": "urn:li:corpuser:datahub"},
+            }
+        ],
+        "fineGrainedLineages": [
+            {
+                "upstreamType": "FIELD_SET",
+                "upstreams": [_field(UPSTREAM_URN, f"col_{i}")],
+                "downstreamType": "FIELD",
+                "downstreams": [_field(URN_A, f"COL_{i}")],
+                "confidenceScore": 1.0,
+            }
+            for i in range(columns)
+        ],
+    }
+
+
+def _json_chars(value):
+    """Size oracle independent of the module's own helper."""
+    return len(json.dumps(value, ensure_ascii=False, separators=(",", ":")))
+
+
+def _resolve(compact, ref):
+    dataset_index, field_path = ref
+    dataset = compact["datasets"][dataset_index]
+    return dataset if field_path is None else str(SchemaFieldUrn(dataset, field_path))
+
+
+def test_oversized_lineage_returns_every_column_mapping_compactly(graph):
+    lineage = _wide_lineage(200)
+    # A single write: only v0 exists, so the response is the current value alone.
+    graph._session.post.return_value = _response(
+        [_entity(URN_A, upstreamLineage=_aspect(lineage, newest="1"))]
+    )
+    result = _run(graph, URN_A, "upstreamLineage")
+    current = result["results"][0]["current"]
+    assert current["valueTruncated"] is True
+    assert current["valueChars"] > history_module.MAX_ASPECT_VALUE_CHARS
+    assert "valuePreview" not in current
+
+    compact = current["compactLineage"]
+    assert compact["truncated"] is False
+    assert compact["datasets"] == [UPSTREAM_URN, URN_A]
+    assert compact["upstreams"] == [{"dataset": 0, "type": "TRANSFORMED"}]
+    assert compact["fineGrainedLineagesTotal"] == 200
+    assert len(compact["fineGrainedLineages"]) == 200
+    for original, edge in zip(
+        lineage["fineGrainedLineages"], compact["fineGrainedLineages"], strict=True
+    ):
+        assert [_resolve(compact, ref) for ref in edge["upstreams"]] == original[
+            "upstreams"
+        ]
+        assert [_resolve(compact, ref) for ref in edge["downstreams"]] == original[
+            "downstreams"
+        ]
+        assert edge["confidenceScore"] == 1.0
+    assert _json_chars(compact) < current["valueChars"] / 2
+    assert _json_chars(compact) <= history_module.MAX_COMPACT_LINEAGE_CHARS
+    assert result["batch"]["truncatedByResponseBudget"] is False
+
+
+def test_lineage_that_fits_returns_the_raw_value_only(graph):
+    graph._session.post.return_value = _response(
+        [_entity(URN_A, upstreamLineage=_aspect(_wide_lineage(3)))]
+    )
+    current = _run(graph, URN_A, "upstreamLineage")["results"][0]["current"]
+    assert current["valueTruncated"] is False
+    assert len(current["value"]["fineGrainedLineages"]) == 3
+    assert "compactLineage" not in current
+
+
+def test_compact_lineage_keeps_dataset_and_query_references(graph):
+    lineage = _wide_lineage(200)
+    query_urn = "urn:li:query:orders-model"
+    lineage["upstreams"][0].update(
+        {
+            "query": "urn:li:query:orders-etl",
+            "matchType": "NORMALIZED",
+            "properties": {"source": "dbt"},
+            "created": {"time": 1, "actor": "urn:li:corpuser:datahub"},
+        }
+    )
+    lineage["fineGrainedLineages"][0] = {
+        "upstreamType": "DATASET",
+        "upstreams": [UPSTREAM_URN],
+        "downstreamType": "FIELD",
+        "downstreams": [_field(URN_A, "[version=2.0].[type=struct].address.city")],
+        "transformOperation": "COALESCE",
+        "query": query_urn,
+        "matchType": "UNRESOLVED",
+    }
+    graph._session.post.return_value = _response(
+        [_entity(URN_A, upstreamLineage=_aspect(lineage))]
+    )
+    current = _run(graph, URN_A, "upstreamLineage")["results"][0]["current"]
+    compact = current["compactLineage"]
+    assert compact["upstreams"] == [
+        {
+            "dataset": 0,
+            "type": "TRANSFORMED",
+            "query": "urn:li:query:orders-etl",
+            "matchType": "NORMALIZED",
+            "properties": {"source": "dbt"},
+        }
+    ]
+    assert compact["fineGrainedLineages"][0] == {
+        "upstreams": [[0, None]],
+        "downstreams": [[1, "[version=2.0].[type=struct].address.city"]],
+        "upstreamType": "DATASET",
+        "transformOperation": "COALESCE",
+        "query": query_urn,
+        "matchType": "UNRESOLVED",
+    }
+
+
+def test_compact_lineage_copies_long_values_whole():
+    lineage = _wide_lineage(3)
+    expression = "CASE " + "WHEN a THEN b " * 200 + "END"
+    lineage["fineGrainedLineages"][0]["transformOperation"] = expression
+    compact = history_module._compact_lineage(lineage)
+    assert compact["truncated"] is False
+    assert compact["fineGrainedLineages"][0]["transformOperation"] == expression
+
+
+def test_compact_lineage_keeps_lineage_types_that_differ_from_the_usual():
+    lineage = _wide_lineage(3)
+    lineage["fineGrainedLineages"][1].update(
+        {"upstreamType": "NONE", "upstreams": [], "downstreamType": "FIELD_SET"}
+    )
+    edges = history_module._compact_lineage(lineage)["fineGrainedLineages"]
+    assert "upstreamType" not in edges[0] and "downstreamType" not in edges[0]
+    assert edges[1]["upstreamType"] == "NONE"
+    assert edges[1]["downstreamType"] == "FIELD_SET"
+
+
+def test_compact_lineage_is_built_from_the_raw_value(graph):
+    """Response cleaning must not alter free-form Upstream.properties."""
+    lineage = _wide_lineage(200)
+    properties = {"description": "<b>" + "d" * 6_000 + "</b>", "__typename": "kept"}
+    lineage["upstreams"][0]["properties"] = properties
+    graph._session.post.return_value = _response(
+        [_entity(URN_A, upstreamLineage=_aspect(lineage, newest="1"))]
+    )
+    current = _run(graph, URN_A, "upstreamLineage")["results"][0]["current"]
+    assert current["compactLineage"]["upstreams"][0]["properties"] == properties
+
+
+def test_compact_lineage_keeps_every_upstream_in_order_with_its_values():
+    """Several upstreams, a non-default confidence and long values, schema-valid."""
+    urns = [
+        f"urn:li:dataset:(urn:li:dataPlatform:snowflake,raw.{name},PROD)"
+        for name in ("a", "b", "c")
+    ]
+    query = "urn:li:query:" + "q" * 650
+    properties = {"description": "<b>" + "d" * 6_000 + "</b>", "__typename": "kept"}
+    upstreams = [
+        {"dataset": urns[0], "type": "COPY"},
+        {"dataset": urns[1], "type": "VIEW", "query": query, "properties": properties},
+    ]
+    edge = {
+        "upstreamType": "FIELD_SET",
+        "upstreams": [
+            str(SchemaFieldUrn(urns[0], "amount,usd")),
+            str(SchemaFieldUrn(urns[1], "a\u241fb")),
+        ],
+        "downstreamType": "FIELD_SET",
+        "downstreams": [str(SchemaFieldUrn(urns[2], "COL"))],
+        "confidenceScore": 0.625,
+        "query": query,
+    }
+    lineage = {"upstreams": upstreams, "fineGrainedLineages": [edge] * 200}
+    assert UpstreamLineageClass.from_obj(lineage).validate()
+    compact = history_module._format_aspect_version(
+        0, {"value": lineage}, compact_lineage=True
+    )["compactLineage"]
+    assert compact["upstreamsTotal"] == 2
+    assert [compact["datasets"][item["dataset"]] for item in compact["upstreams"]] == [
+        urns[0],
+        urns[1],
+    ]
+    assert compact["upstreams"][1]["query"] == query
+    assert compact["upstreams"][1]["properties"] == properties
+    mapping = compact["fineGrainedLineages"][0]
+    assert mapping["confidenceScore"] == 0.625
+    assert mapping["query"] == query
+    assert mapping["downstreamType"] == "FIELD_SET"
+    assert [_resolve(compact, ref) for ref in mapping["upstreams"]] == edge["upstreams"]
+
+
+def test_compact_lineage_decodes_reserved_characters_in_field_paths():
+    lineage = _wide_lineage(3)
+    paths = ["amount,usd", "total(net)", "a\u241fb"]
+    for edge, path in zip(lineage["fineGrainedLineages"], paths, strict=True):
+        edge["downstreams"] = [str(SchemaFieldUrn(URN_A, path))]
+    assert "amount%2Cusd" in lineage["fineGrainedLineages"][0]["downstreams"][0]
+    compact = history_module._compact_lineage(lineage)
+    edges = compact["fineGrainedLineages"]
+    assert [edge["downstreams"][0][1] for edge in edges] == paths
+    for original, edge in zip(lineage["fineGrainedLineages"], edges, strict=True):
+        assert _resolve(compact, edge["downstreams"][0]) == original["downstreams"][0]
+    # Only the encoder's own uppercase form is decoded, as in the web app.
+    assert history_module._decode_field_path("x%2cy%2Cz") == "x%2cy,z"
+
+
+def test_compact_lineage_tolerates_malformed_references():
+    lineage = _wide_lineage(3)
+    chart_urn = "urn:li:chart:(looker,orders)"
+    lineage["fineGrainedLineages"][0]["downstreams"] = _field(URN_A, "COL_0")
+    lineage["fineGrainedLineages"][1]["downstreams"] = {"not": "a list"}
+    lineage["fineGrainedLineages"][2]["upstreams"] = [chart_urn, "not a urn", 7]
+    compact = history_module._compact_lineage(lineage)
+    edges = compact["fineGrainedLineages"]
+    # A bare string is one reference, not a sequence of characters.
+    assert [_resolve(compact, ref) for ref in edges[0]["downstreams"]] == [
+        _field(URN_A, "COL_0")
+    ]
+    assert edges[1]["downstreams"] == []
+    chart_ref, *unparsed = edges[2]["upstreams"]
+    assert _resolve(compact, chart_ref) == chart_urn
+    assert chart_ref[1] is None
+    assert unparsed == ["not a urn", 7]
+
+
+def test_compact_lineage_cut_keeps_a_consistent_prefix(graph, monkeypatch):
+    lineage = _wide_lineage(200)
+    # Every mapping introduces a dataset of its own, so the mapping that does not
+    # fit has one too; it must not leak into ``datasets``.
+    for i, edge in enumerate(lineage["fineGrainedLineages"]):
+        edge["upstreams"] = [
+            _field(f"urn:li:dataset:(urn:li:dataPlatform:s3,bucket/part_{i},PROD)", "x")
+        ]
+    monkeypatch.setattr(history_module, "MAX_COMPACT_LINEAGE_CHARS", 3_000)
+    graph._session.post.return_value = _response(
+        [_entity(URN_A, upstreamLineage=_aspect(lineage))]
+    )
+    current = _run(graph, URN_A, "upstreamLineage")["results"][0]["current"]
+    compact = current["compactLineage"]
+    returned = compact["fineGrainedLineages"]
+    assert compact["truncated"] is True
+    assert compact["fineGrainedLineagesTotal"] == 200
+    assert 0 < len(returned) < 200
+    referenced = {
+        ref[0] for edge in returned for ref in edge["upstreams"] + edge["downstreams"]
+    } | {upstream["dataset"] for upstream in compact["upstreams"]}
+    assert referenced == set(range(len(compact["datasets"])))
+    for original, edge in zip(lineage["fineGrainedLineages"], returned):
+        assert [_resolve(compact, ref) for ref in edge["upstreams"]] == original[
+            "upstreams"
+        ]
+    assert _json_chars(compact) <= 3_000
+
+
+@pytest.mark.parametrize("columns", [300, 500, 1_000])
+def test_compact_lineage_cut_enforces_the_cap_on_the_whole_object(columns):
+    """The cap holds for the encoded projection, separators and totals included."""
+    lineage = _wide_lineage(columns)
+    compact = history_module._compact_lineage(lineage)
+    cap = history_module.MAX_COMPACT_LINEAGE_CHARS
+    chars = _json_chars(compact)
+    assert compact["truncated"] is True
+    assert chars <= cap
+    # Still a tight fit: the cut leaves less room than one more mapping needs.
+    largest = max(_json_chars(edge) for edge in compact["fineGrainedLineages"])
+    assert chars > cap - largest - 1
+
+
+def test_compact_lineage_cut_is_tight_and_rolls_back_new_datasets(monkeypatch):
+    """The cut keeps every entry that fits, and forgets datasets a cut entry added."""
+    lineage = _wide_lineage(200)
+    for i, edge in enumerate(lineage["fineGrainedLineages"][120:], start=120):
+        edge["upstreams"] = [
+            _field(f"urn:li:dataset:(urn:li:dataPlatform:s3,part_{i}_{n},PROD)", "x")
+            for n in range(3)
+        ]
+    prefix = history_module._compact_lineage(
+        {**lineage, "fineGrainedLineages": lineage["fineGrainedLineages"][:120]}
+    )
+    prefix.update({"fineGrainedLineagesTotal": 200, "truncated": True})
+    size = _json_chars(prefix)
+    monkeypatch.setattr(history_module, "MAX_COMPACT_LINEAGE_CHARS", size)
+    assert history_module._compact_lineage(lineage) == prefix
+
+
+def test_compact_lineage_needs_room_for_its_own_envelope(monkeypatch):
+    monkeypatch.setattr(history_module, "MAX_COMPACT_LINEAGE_CHARS", 50)
+    assert history_module._compact_lineage(_wide_lineage(3)) is None
+
+
+def test_compact_lineage_cap_counts_every_character(monkeypatch):
+    lineage = _wide_lineage(200)
+    full = history_module._compact_lineage(lineage)
+    size = _json_chars(full)
+    monkeypatch.setattr(history_module, "MAX_COMPACT_LINEAGE_CHARS", size)
+    assert history_module._compact_lineage(lineage) == full
+    monkeypatch.setattr(history_module, "MAX_COMPACT_LINEAGE_CHARS", size - 1)
+    cut = history_module._compact_lineage(lineage)
+    assert cut["truncated"] is True
+    assert _json_chars(cut) <= size - 1
+
+
+def test_wide_lineage_history_keeps_previews_and_pages_forward(graph):
+    """Only the current value is compacted, so every page has room for history."""
+
+    def lineage_at(version):
+        lineage = _wide_lineage(1_000)
+        for i, edge in enumerate(lineage["fineGrainedLineages"]):
+            edge["downstreams"] = [_field(URN_A, f"COL_{i}_v{version}")]
+        return lineage
+
+    lineages = {version: lineage_at(version) for version in range(6)}
+
+    def post(url, **kwargs):
+        body = []
+        for entity_request in json.loads(kwargs["data"]):
+            entity: dict = {"urn": entity_request["urn"]}
+            for aspect_name, spec in entity_request.items():
+                if aspect_name == "urn":
+                    continue
+                version = int(spec["headers"]["If-Version-Match"])
+                if version in lineages:
+                    entity[aspect_name] = _aspect(lineages[version], newest="6")
+            body.append(entity)
+        return _response(body)
+
+    graph._session.post.side_effect = post
+    seen: list[int] = []
+    from_version = None
+    for _page in range(6):
+        item = _run(
+            graph, URN_A, "upstreamLineage", from_version=from_version, limit=5
+        )["results"][0]
+        current = item["current"]["compactLineage"]
+        assert current["fineGrainedLineages"][0]["downstreams"] == [[1, "COL_0_v0"]]
+        assert item["history"], "a page without history cannot advance the cursor"
+        for entry in item["history"]:
+            assert "compactLineage" not in entry
+            assert f"COL_0_v{entry['version']})" in entry["valuePreview"]
+        seen.extend(_versions(item))
+        from_version = item["page"]["nextFromVersion"]
+        if from_version is None:
+            break
+    assert seen == [5, 4, 3, 2, 1]
+
+
+def _serve_wide_lineage_versions(graph, *, system_metadata=None):
+    """Versions 0..5 of a 1,000-mapping lineage; v0 reports logical version 6."""
+    lineage = _wide_lineage(1_000)
+
+    def post(url, **kwargs):
+        body = []
+        for entity_request in json.loads(kwargs["data"]):
+            entity: dict = {"urn": entity_request["urn"]}
+            for aspect_name, spec in entity_request.items():
+                if aspect_name == "urn":
+                    continue
+                version = int(spec["headers"]["If-Version-Match"])
+                if version <= 5:
+                    aspect = _aspect(lineage, newest="6")
+                    aspect["systemMetadata"].update(system_metadata or {})
+                    entity[aspect_name] = aspect
+            body.append(entity)
+        return _response(body)
+
+    graph._session.post.side_effect = post
+
+
+def _walk_history(graph, pages=8):
+    seen, items, from_version = [], [], None
+    for _page in range(pages):
+        item = _run(
+            graph, URN_A, "upstreamLineage", from_version=from_version, limit=5
+        )["results"][0]
+        items.append(item)
+        seen.extend(_versions(item))
+        from_version = item["page"]["nextFromVersion"]
+        if from_version is None:
+            break
+    return seen, items
+
+
+def test_continuation_pages_give_history_priority_over_current(graph):
+    # Schema-valid provenance whose JSON escaping (\u0001 is six characters) leaves
+    # no room for current and a history entry together.
+    _serve_wide_lineage_versions(
+        graph,
+        system_metadata={
+            key: "\x01" * 512
+            for key in ("runId", "lastRunId", "pipelineName", "registryName")
+        },
+    )
+    seen, items = _walk_history(graph)
+    assert seen == [5, 4, 3, 2, 1]
+    first, *continuation = items
+    assert "compactLineage" in first["current"]
+    assert "currentOmittedByResponseBudget" not in first["page"]
+    assert first["history"] == []
+    for item in continuation:
+        assert item["current"] is None
+        assert item["page"]["currentOmittedByResponseBudget"] is True
+        assert item["history"]
+
+
+def test_continuation_pages_keep_current_when_it_fits(graph):
+    _serve_wide_lineage_versions(graph)
+    seen, items = _walk_history(graph)
+    assert seen == [5, 4, 3, 2, 1]
+    for item in items:
+        assert "compactLineage" in item["current"]
+        assert "currentOmittedByResponseBudget" not in item["page"]
+
+
+_CONTROL_PROVENANCE = {
+    # Schema-valid, and each escapes to 3,072 JSON characters (\u0001 is six).
+    key: "\x01" * 512
+    for key in ("runId", "lastRunId", "pipelineName", "registryName", "registryVersion")
+}
+
+
+def _extreme_envelope(value, *, newest):
+    """Schema-valid provenance at its 512-character bounds, all control characters."""
+    actor = "urn:li:corpuser:" + "\x01" * (512 - len("urn:li:corpuser:"))
+    stamp = {"time": 1_785_900_000_000, "actor": actor, "impersonator": actor}
+    return {
+        "value": value,
+        "systemMetadata": {
+            **_CONTROL_PROVENANCE,
+            "version": str(newest),
+            "aspectCreated": stamp,
+            "aspectModified": stamp,
+        },
+        "auditStamp": stamp,
+    }
+
+
+def _serve_versions(graph, versions):
+    """Serve ``versions[(urn, aspect_name)][version]`` envelopes; others are absent."""
+
+    def post(url, **kwargs):
+        body = []
+        for entity_request in json.loads(kwargs["data"]):
+            urn = entity_request["urn"]
+            entity: dict = {"urn": urn}
+            for aspect_name, spec in entity_request.items():
+                if aspect_name == "urn":
+                    continue
+                version = int(spec["headers"]["If-Version-Match"])
+                envelope = versions.get((urn, aspect_name), {}).get(version)
+                if envelope is not None:
+                    entity[aspect_name] = envelope
+            body.append(entity)
+        return _response(body)
+
+    graph._session.post.side_effect = post
+
+
+def _wide_versions(newest, *, provenance=None, columns=1_000):
+    envelope = _aspect(_wide_lineage(columns), newest=str(newest))
+    envelope["systemMetadata"].update(provenance or {})
+    return {version: envelope for version in range(newest)}
+
+
+def _pairs_chars(result):
+    return sum(_json_chars(item) for item in result["results"])
+
+
+def test_continuation_drops_a_pair_with_no_room_for_any_history(graph):
+    """A batch must not return history-less pairs whose cursor cannot move."""
+    big_history = _aspect({"customProperties": {"expression": '"' * 20_000}})
+    _serve_versions(
+        graph,
+        {
+            (URN_A, "upstreamLineage"): _wide_versions(2),
+            (URN_A, "datasetProperties"): {
+                0: _aspect({"name": "orders"}, newest="2"),
+                1: big_history,
+            },
+        },
+    )
+    result = _run(
+        graph,
+        URN_A,
+        ["upstreamLineage", "datasetProperties"],
+        from_version=1,
+        limit=1,
+    )
+    assert [item["aspectName"] for item in result["results"]] == ["upstreamLineage"]
+    assert _versions(result["results"][0]) == [1]
+    assert result["batch"]["droppedPairs"] == [
+        {"urn": URN_A, "aspectName": "datasetProperties"}
+    ]
+    alone = _run(graph, URN_A, "datasetProperties", from_version=1, limit=1)
+    assert _versions(alone["results"][0]) == [1]
+
+
+def test_continuation_drops_a_history_entry_too_large_for_the_budget(graph):
+    huge = _extreme_envelope(
+        {"customProperties": {"expression": '"' * 20_000}}, newest=2
+    )
+    _serve_versions(
+        graph,
+        {
+            (URN_A, "datasetProperties"): {
+                0: _aspect({"name": "orders"}, newest="2"),
+                1: huge,
+            }
+        },
+    )
+    result = _run(graph, URN_A, "datasetProperties", from_version=1, limit=1)
+    assert result["results"] == []
+    assert result["batch"]["droppedPairs"] == [
+        {"urn": URN_A, "aspectName": "datasetProperties"}
+    ]
+
+
+def test_first_page_falls_back_to_the_preview_when_compact_lineage_does_not_fit(
+    graph,
+):
+    envelope = _extreme_envelope(_wide_lineage(1_000), newest=2)
+    _serve_versions(graph, {(URN_A, "upstreamLineage"): {0: envelope, 1: envelope}})
+    result = _run(graph, URN_A, "upstreamLineage", limit=1)
+    item = result["results"][0]
+    assert "compactLineage" not in item["current"]
+    assert "valuePreview" in item["current"]
+    assert item["page"]["truncatedByResponseBudget"] is True
+    assert "currentOmittedByResponseBudget" not in item["page"]
+    assert _pairs_chars(result) <= history_module.MAX_RESULTS_CHARS
+
+
+def test_history_that_fits_once_current_is_left_out_ends_the_walk(graph):
+    _serve_versions(
+        graph,
+        {(URN_A, "upstreamLineage"): _wide_versions(2, provenance=_CONTROL_PROVENANCE)},
+    )
+    item = _run(graph, URN_A, "upstreamLineage", from_version=1, limit=5)["results"][0]
+    assert item["current"] is None
+    assert _versions(item) == [1]
+    assert item["page"] == {
+        **item["page"],
+        "returned": 1,
+        "hasMore": False,
+        "nextFromVersion": None,
+        "truncatedByResponseBudget": True,
+        "currentOmittedByResponseBudget": True,
+    }
+
+
+def test_pairs_that_leave_current_out_share_one_budget(graph):
+    urns = [
+        f"urn:li:dataset:(urn:li:dataPlatform:snowflake,analytics.t{i},PROD)"
+        for i in range(3)
+    ]
+    _serve_versions(
+        graph,
+        {
+            (urn, "upstreamLineage"): _wide_versions(3, provenance=_CONTROL_PROVENANCE)
+            for urn in urns
+        },
+    )
+    result = _run(graph, urns, "upstreamLineage", from_version=2, limit=5)
+    assert _pairs_chars(result) <= history_module.MAX_RESULTS_CHARS
+    returned = {item["urn"] for item in result["results"]}
+    dropped = {pair["urn"] for pair in result["batch"]["droppedPairs"]}
+    assert returned and dropped and returned | dropped == set(urns)
+    for item in result["results"]:
+        assert item["current"] is None and item["history"]
 
 
 def test_global_budget_reports_dropped_pairs(graph, monkeypatch):
