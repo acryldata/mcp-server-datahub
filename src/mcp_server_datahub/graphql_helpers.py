@@ -387,16 +387,16 @@ def _disable_cloud_fields(query: str) -> str:
     return "\n".join(processed_lines)
 
 
-# Cache to track whether newer GMS fields are supported for each graph instance
-# Key: id(graph), Value: bool indicating if newer GMS fields are supported
-_newer_gms_fields_support_cache: dict[int, bool] = {}
+# Cache successful compatibility fallbacks per graph and query. A schema error in
+# one operation does not imply that every newer field is unavailable.
+_newer_gms_fields_support_cache: dict[tuple[int, str], bool] = {}
 
 
 def _is_datahub_cloud(graph: DataHubGraph) -> bool:
     """Check if the graph instance is DataHub Cloud.
 
-    Cloud instances typically have newer GMS versions with additional fields.
-    This heuristic uses the presence of frontend_base_url to detect Cloud instances.
+    Uses frontend_base_url for Cloud-only fields and frontend URL injection.
+    Newer GMS schema capabilities are detected separately by execute_graphql.
     """
     # Allow disabling newer GMS field detection via environment variable
     # This is useful when the GMS version doesn't support all newer fields
@@ -435,8 +435,8 @@ def execute_graphql(
     operation_name: Optional[str] = None,
     variables: Optional[Dict[str, Any]] = None,
 ) -> Any:
-    graph_id = id(graph)
     original_query = query  # Keep original for fallback
+    cache_key = (id(graph), original_query)
 
     # Detect if this is a DataHub Cloud instance
     is_cloud = _is_datahub_cloud(graph)
@@ -447,26 +447,23 @@ def execute_graphql(
     else:
         query = _disable_cloud_fields(query)
 
-    # Process NEWER_GMS tags
-    # Check if we've already determined newer GMS fields support for this graph
-    newer_gms_enabled_for_this_query = False
-    if graph_id in _newer_gms_fields_support_cache:
-        supports_newer_fields = _newer_gms_fields_support_cache[graph_id]
-        if supports_newer_fields:
-            query = _enable_newer_gms_fields(query)
-            newer_gms_enabled_for_this_query = True
-        else:
-            query = _disable_newer_gms_fields(query)
+    # Probe tagged fields on both Core and Cloud. Only active tagged lines can
+    # trigger a compatibility retry; CLOUD filtering may already have hidden them.
+    has_newer_fields = any(
+        "#[NEWER_GMS]" in line and not line.lstrip().startswith("#")
+        for line in query.splitlines()
+    )
+    newer_gms_enabled_for_this_query = (
+        has_newer_fields
+        and not get_boolean_env_variable(
+            "DISABLE_NEWER_GMS_FIELD_DETECTION", default=False
+        )
+        and _newer_gms_fields_support_cache.get(cache_key, True)
+    )
+    if newer_gms_enabled_for_this_query:
+        query = _enable_newer_gms_fields(query)
     else:
-        # First attempt: try with newer GMS fields if it's detected as cloud
-        # (Cloud instances typically run newer GMS versions)
-        if is_cloud:
-            query = _enable_newer_gms_fields(query)
-            newer_gms_enabled_for_this_query = True
-        else:
-            query = _disable_newer_gms_fields(query)
-        # Cache the initial detection result
-        _newer_gms_fields_support_cache[graph_id] = is_cloud
+        query = _disable_newer_gms_fields(query)
 
     logger.debug(
         f"Executing GraphQL {operation_name or 'query'}: "
@@ -495,9 +492,6 @@ def execute_graphql(
             )
             logger.exception(e)
 
-            # Update cache to indicate newer GMS fields are NOT supported
-            _newer_gms_fields_support_cache[graph_id] = False
-
             # Retry with newer GMS fields disabled - process both tags again
             try:
                 fallback_query = original_query
@@ -519,6 +513,9 @@ def execute_graphql(
                     variables=variables,
                     operation_name=operation_name,
                 )
+                # Only a successful fallback establishes that removing tagged
+                # fields fixed the query. Do not cache unrelated failures.
+                _newer_gms_fields_support_cache[cache_key] = False
                 logger.info(
                     f"Fallback query succeeded without newer GMS fields for operation: {operation_name}"
                 )
@@ -545,7 +542,7 @@ def execute_graphql(
         logger.exception(
             f"GraphQL {operation_name or 'query'} failed: {e}\n"
             f"Cloud instance: {is_cloud}\n"
-            f"Newer GMS fields enabled: {_newer_gms_fields_support_cache.get(graph_id, 'unknown')}\n"
+            f"Newer GMS fields enabled: {_newer_gms_fields_support_cache.get(cache_key, 'unknown')}\n"
             f"Variables: {variables}"
         )
         raise
