@@ -146,6 +146,27 @@ minutes. If a cached request receives a 401 or 403 from DataHub, that client is
 evicted and the next request revalidates the token. Failed validations are not
 cached; concurrent upstream validations are bounded to protect DataHub.
 
+### OAuth login (HTTP)
+
+Instead of sending DataHub tokens, users can log in with an identity provider
+(Google or any OpenID Connect provider). Set `MCP_OAUTH_CLIENT_ID` (plus the
+variables below) to enable it. The server acts as an OAuth authorization server
+for MCP clients, maps the user's identity claim (by default the verified email)
+to a DataHub user and obtains a DataHub session for that user from GMS
+(`/auth/generateSessionTokenForUser`, using the DataHub system client).
+
+Google is used by default. For another provider (e.g. Okta, Keycloak, Microsoft
+Entra ID), set `MCP_OAUTH_OIDC_CONFIG_URL` to its discovery document; the
+identity claims are then read from the provider's ID token. If the provider
+does not send `email_verified` (e.g. Entra ID), set
+`MCP_OAUTH_REQUIRE_VERIFIED_EMAIL=false` and use a claim the provider
+guarantees, e.g. `MCP_OAUTH_USER_CLAIM=preferred_username`.
+
+If `MCP_OAUTH_BASE_URL` has a path (e.g. `https://datahub.example/datahub-mcp`),
+the server is served below it (`/datahub-mcp/mcp`) and publishes the OAuth
+discovery documents at the host root. The OAuth client at the identity provider
+needs the redirect URI `<MCP_OAUTH_BASE_URL>/auth/callback`.
+
 ## Demo
 
 Check out the [demo video](https://youtu.be/VXRvHIZ3Eww?t=1878), done in collaboration with the team at Block.
@@ -242,6 +263,18 @@ Save standalone documents (insights, decisions, FAQs, notes) to DataHub's knowle
 |----------|---------|-------------|
 | `DATAHUB_GMS_URL` | none | DataHub server URL. Required in HTTP mode; stdio can also load it from `~/.datahubenv`. |
 | `DATAHUB_GMS_TOKEN` | none | Legacy stdio/SSE credential. HTTP mode refuses to start when this shared credential is set. |
+| `MCP_OAUTH_CLIENT_ID` | none | Enables OAuth login in HTTP mode. |
+| `MCP_OAUTH_CLIENT_SECRET` | none | OAuth client secret (required with OAuth). |
+| `MCP_OAUTH_OIDC_CONFIG_URL` | none (Google) | OIDC discovery URL of a non-Google identity provider. |
+| `MCP_OAUTH_SCOPES` | `openid email` | Space- or comma-separated scopes requested from the identity provider. |
+| `MCP_OAUTH_USER_CLAIM` | `email` | Token claim identifying the user. |
+| `MCP_OAUTH_REQUIRE_VERIFIED_EMAIL` | `true` | Require the `email_verified` claim to be true. |
+| `MCP_OAUTH_BASE_URL` | none | Public server URL incl. optional path prefix (required with OAuth). |
+| `MCP_OAUTH_JWT_SIGNING_KEY` | none | Secret for signing tokens issued to MCP clients (required with OAuth). |
+| `MCP_OAUTH_ALLOWED_DOMAINS` | none | Comma-separated domains (after `@` in the user claim) allowed to log in. |
+| `MCP_OAUTH_USERNAME_REGEX` | `(.*)` | Maps the user claim to the DataHub username (like `AUTH_OIDC_USER_NAME_CLAIM_REGEX`). |
+| `DATAHUB_SYSTEM_CLIENT_ID` | `__datahub_system` | DataHub system client used to create user sessions with OAuth. |
+| `DATAHUB_SYSTEM_CLIENT_SECRET` | none | DataHub system client secret (required with OAuth). |
 | `FASTMCP_HOST` | FastMCP default (`127.0.0.1`); image default (`0.0.0.0`) | HTTP/SSE bind address. |
 | `FASTMCP_PORT` | `8000` | HTTP/SSE listen port; also used by the image health check. |
 | `TOOLS_IS_MUTATION_ENABLED` | `false` | Enable mutation tools (add/remove tags, owners, etc.) |
