@@ -10,7 +10,7 @@ resolution-markers = [
 
 [[package]]
 name = "acryl-datahub"
-version = "1.7.0.14"
+version = "1.7.0.17"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiohttp" },
@@ -48,9 +48,9 @@ dependencies = [
     { name = "typing-inspect" },
     { name = "urllib3" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/30/30/7c4b98a6dc3dfe37a8ce601fd6785469bbb12c9a4e471173072e98142a4d/acryl_datahub-1.7.0.14.tar.gz", hash = "sha256:4956e380d7c745d93092a0c0db75cf3ff1d3d62c93198a88a1a3487e2f451c58", size = 4874851, upload-time = "2026-09-29T18:13:45.155Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/0d/05/7fe5daab6518c4e438e7ee7a1d0fbd62526144d40f1ed9882c06374baa85/acryl_datahub-1.7.0.17.tar.gz", hash = "sha256:bf82ba81014fe7234b15f2e38d92ffd68d08b1742327262d6343e61ab7f473f4", size = 5231771, upload-time = "2026-10-23T12:41:20.271Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/7a/7c/0786e5db52dcec510303a085f96ce698e8648abcc94c6000e8b62ffb7d8e/acryl_datahub-1.7.0.14-py3-none-any.whl", hash = "sha256:ed2b1d2c8d75dbef8840a0e878ca2c6c20d4d4af3ce7c92714a541576eb04c58", size = 5766413, upload-time = "2026-09-29T18:13:38.637Z" },
+    { url = "https://files.pythonhosted.org/packages/3e/42/c4ebc1e6f44cda39a5862734d212cb3ed4ecc2ea96350e2c4efb689a65ec/acryl_datahub-1.7.0.17-py3-none-any.whl", hash = "sha256:b59787604fd6a68493a7976d60f86247ae798f62da2987a4b40e82d70b56b797", size = 6166140, upload-time = "2026-10-23T12:41:13.284Z" },
 ]
 
 [[package]]
@@ -554,14 +554,11 @@ wheels = [
 
 [[package]]
 name = "click"
-version = "8.2.1"
+version = "8.5.0"
 source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "colorama", marker = "sys_platform == 'win32'" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/60/6c/8ca2efa64cf75a977a0d7fac081354553ebe483345c734fb6b6515d96bbc/click-8.2.1.tar.gz", hash = "sha256:27c491cc05d968d271d5a1db13e3b5a184636d9d930f148c50b038f0d0646202", size = 286342, upload-time = "2025-05-20T23:19:49.832Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/c7/0e/7fa0ef50764b67090eca4114772a2abf8b6148198475e54c660b97caeee6/click-8.5.0.tar.gz", hash = "sha256:ba0d2089de75ea0310e2dde03160e6ca10009947fb95a182f9b54021bb272e34", size = 382235, upload-time = "2026-08-26T13:33:14.56Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/85/32/10bb5764d90a8eee674e9dc6f4db6a0ab47c8c4d0d83c27f7c39ac415a4d/click-8.2.1-py3-none-any.whl", hash = "sha256:61a3265b914e850b85317d0b3109c7f8cd35a670f963866005d6ef1d5175a12b", size = 102215, upload-time = "2025-05-20T23:19:47.796Z" },
+    { url = "https://files.pythonhosted.org/packages/58/50/6c0d534c5f134586a8e1ba4e330569e32f057e33372ae556463212fb4cd3/click-8.5.0-py3-none-any.whl", hash = "sha256:255bc9599cf7748b4b1a446ccc735421bd08a2ae529a8b88597d3de5664ee360", size = 125251, upload-time = "2026-08-26T13:33:12.928Z" },
 ]
 
 [[package]]
