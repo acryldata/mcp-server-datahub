@@ -133,12 +133,12 @@ def test_query_documents_request_custom_properties_and_origin(gql_file: str) -> 
     assert re.search(r"\borigin \{", src)
 
 
-def test_assertion_fragment_requests_every_definition_and_run_values(
-    entity_preview_fragments: dict[str, str],
-) -> None:
+def test_assertion_fragment_requests_every_definition_and_run_values() -> None:
     # A definition missing here is an assertion get_entities returns with no
     # definition at all: external CUSTOM ones (dbt, Great Expectations) did.
-    body = entity_preview_fragments["Assertion"]
+    src = _strip_markers((GQL_DIR / "assertion_entity.gql").read_text())
+    start = src.index("{", src.index("fragment assertionDetails on Assertion"))
+    body = _balanced_block(src, start)
     for definition in (
         "datasetAssertion",
         "freshnessAssertion",
@@ -186,6 +186,17 @@ def test_assertion_fragment_requests_every_definition_and_run_values(
         "severity",
     ):
         assert re.search(rf"\b{value}\b", result), value
+    # OSS servers have no displayMessage; an errored run's message is in properties.
+    error = _balanced_block(result, re.search(r"\berror \{", result).end() - 1)
+    assert re.search(r"\bproperties \{", error)
+
+
+def test_entity_preview_leaves_assertions_to_their_own_document(
+    entity_preview_fragments: dict[str, str],
+) -> None:
+    # get_entities sends assertion URNs GetAssertionEntity. An Assertion arm here
+    # would only be another place for newer-only fields to knock out GetEntity.
+    assert "Assertion" not in entity_preview_fragments
 
 
 def test_data_contract_arm_requests_status_and_member_assertions(
