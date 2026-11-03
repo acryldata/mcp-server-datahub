@@ -1,0 +1,280 @@
+# get_entities sends this for assertion URNs instead of GetEntity. The newer-GMS
+# fallback in execute_graphql drops every tagged line of a document at once and
+# remembers that per document, so the assertion fields only newer servers have live
+# here: a server without them cannot also cost GetEntity its other tagged arms.
+query GetAssertionEntity($urn: String!) {
+    entity(urn: $urn) {
+        urn
+        ...assertionDetails
+    }
+}
+
+fragment assertionDetails on Assertion {
+    urn
+    type
+    info {
+        type
+        description
+        lastUpdated {
+            time
+            actor
+        }
+        datasetAssertion {
+            datasetUrn
+            scope
+            aggregation
+            operator
+            parameters {
+                value {
+                    value
+                    type
+                }
+                minValue {
+                    value
+                    type
+                }
+                maxValue {
+                    value
+                    type
+                }
+            }
+            fields {
+                urn
+                path
+            }
+            nativeType
+            nativeParameters {
+                key
+                value
+            }
+            logic
+        }
+        fieldAssertion {
+            type
+            entityUrn
+            fieldValuesAssertion {
+                field {
+                    path
+                    type
+                    nativeType
+                }
+                operator
+                parameters {
+                    value {
+                        value
+                        type
+                    }
+                    minValue {
+                        value
+                        type
+                    }
+                    maxValue {
+                        value
+                        type
+                    }
+                }
+                failThreshold {
+                    type
+                    value
+                }
+                excludeNulls
+            }
+            fieldMetricAssertion {
+                field {
+                    path
+                    type
+                    nativeType
+                }
+                metric
+                operator
+                parameters {
+                    value {
+                        value
+                        type
+                    }
+                    minValue {
+                        value
+                        type
+                    }
+                    maxValue {
+                        value
+                        type
+                    }
+                }
+            }
+        }
+        volumeAssertion {
+            type
+            entityUrn
+            rowCountTotal {
+                operator
+                parameters {
+                    value {
+                        value
+                        type
+                    }
+                    minValue {
+                        value
+                        type
+                    }
+                    maxValue {
+                        value
+                        type
+                    }
+                }
+            }
+            rowCountChange {
+                type
+                operator
+                parameters {
+                    value {
+                        value
+                        type
+                    }
+                    minValue {
+                        value
+                        type
+                    }
+                    maxValue {
+                        value
+                        type
+                    }
+                }
+            }
+        }
+        sqlAssertion {
+            type
+            entityUrn
+            statement
+            operator
+            parameters {
+                value {
+                    value
+                    type
+                }
+                minValue {
+                    value
+                    type
+                }
+                maxValue {
+                    value
+                    type
+                }
+            }
+        }
+        freshnessAssertion {
+            entityUrn
+            type
+            schedule {
+                type
+                cron {
+                    cron
+                    timezone
+                }
+                fixedInterval {
+                    unit
+                    multiple
+                }
+            }
+            filter {
+                type
+                sql
+            }
+        }
+        schemaAssertion {
+            entityUrn
+            compatibility
+            fields {
+                path
+                type
+                nativeType
+            }
+        }
+        customAssertion {
+            type
+            entityUrn
+            field {
+                urn
+                path
+            }
+            fields {                                        #[NEWER_GMS]
+                urn                                         #[NEWER_GMS]
+                path                                        #[NEWER_GMS]
+            }                                               #[NEWER_GMS]
+            scope                                           #[NEWER_GMS]
+            aggregation                                     #[NEWER_GMS]
+            operator                                        #[NEWER_GMS]
+            parameters {                                    #[NEWER_GMS]
+                value {                                     #[NEWER_GMS]
+                    value                                   #[NEWER_GMS]
+                    type                                    #[NEWER_GMS]
+                }                                           #[NEWER_GMS]
+                minValue {                                  #[NEWER_GMS]
+                    value                                   #[NEWER_GMS]
+                    type                                    #[NEWER_GMS]
+                }                                           #[NEWER_GMS]
+                maxValue {                                  #[NEWER_GMS]
+                    value                                   #[NEWER_GMS]
+                    type                                    #[NEWER_GMS]
+                }                                           #[NEWER_GMS]
+            }                                               #[NEWER_GMS]
+            nativeType                                      #[NEWER_GMS]
+            nativeParameters {                              #[NEWER_GMS]
+                key                                         #[NEWER_GMS]
+                value                                       #[NEWER_GMS]
+            }                                               #[NEWER_GMS]
+            logic
+        }
+        customProperties {                                  #[NEWER_GMS]
+            key                                             #[NEWER_GMS]
+            value                                           #[NEWER_GMS]
+        }                                                   #[NEWER_GMS]
+        source {
+            type
+            created {
+                time
+                actor
+            }
+        }
+    }
+    platform {
+        urn
+        name
+        properties {
+            displayName
+        }
+    }
+    runEvents(status: COMPLETE, limit: 10) {
+        total
+        failed
+        succeeded
+        errored
+        runEvents {
+            timestampMillis
+            status
+            result {
+                type
+                rowCount
+                missingCount
+                unexpectedCount
+                actualAggValue
+                externalUrl
+                nativeResults {
+                    key
+                    value
+                }
+                # OSS servers carry an errored run's message in properties;
+                # displayMessage is a Cloud field.
+                error {
+                    type
+                    properties {
+                        key
+                        value
+                    }
+                    displayMessage                              #[CLOUD]
+                }
+                severity                                    #[NEWER_GMS]
+            }
+        }
+    }
+}

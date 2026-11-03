@@ -74,6 +74,20 @@ FIELD_STRUCTURED_PROPERTY_CHAR_LIMIT = int(
 FIELD_STRUCTURED_PROPERTY_MAX_VALUES = int(
     os.getenv("FIELD_STRUCTURED_PROPERTY_MAX_VALUES", "25")
 )
+# An assertion's source-defined key/value lists (run nativeResults and error
+# properties, nativeParameters, customProperties) have no size limit (compiled SQL,
+# sampled rows), so every tool that returns them caps both the key count and each
+# value with these.
+MAX_ASSERTION_KEY_VALUE_ENTRIES = int(
+    os.getenv("MAX_ASSERTION_KEY_VALUE_ENTRIES", "10")
+)
+MAX_ASSERTION_KEY_VALUE_CHARS = int(os.getenv("MAX_ASSERTION_KEY_VALUE_CHARS", "200"))
+
+# Data quality members returned per data contract. Each member carries its latest
+# run, and a contract can group hundreds of assertions.
+MAX_CONTRACT_DATA_QUALITY_ASSERTIONS = int(
+    os.getenv("MAX_CONTRACT_DATA_QUALITY_ASSERTIONS", "25")
+)
 
 
 def select_results_within_budget(
@@ -178,10 +192,25 @@ def sanitize_html_content(text: str) -> str:
     return text.strip()
 
 
-def truncate_with_ellipsis(text: str, max_length: int, suffix: str = "...") -> str:
-    """Truncate text to max_length and add suffix if truncated."""
+def truncate_with_ellipsis(
+    text: str,
+    max_length: int,
+    suffix: str = "...",
+    *,
+    dropped_count: bool = False,
+) -> str:
+    """Truncate text to max_length and add suffix if truncated.
+
+    With ``dropped_count`` the suffix instead names how many characters were
+    elided (``"...text… [+403 chars]"``), appended beyond ``max_length``, so a
+    reader can tell the value is a partial preview and roughly how much is missing.
+    """
     if not text or len(text) <= max_length:
         return text
+
+    if dropped_count:
+        cut = text[: max(max_length, 0)].rstrip()
+        return f"{cut}… [+{len(text) - len(cut)} chars]"
 
     # A limit too small to fit the suffix gets a hard cut. Without this, a negative
     # slice index would keep almost all of the text.
@@ -222,6 +251,110 @@ def sanitize_and_truncate_description(text: str, max_length: int) -> str:
     except Exception as e:
         logger.warning(f"Error sanitizing and truncating description: {e}")
         return text[:max_length] if len(text) > max_length else text
+
+
+def cap_key_values(entries: object) -> tuple[list[dict[str, str]], int]:
+    """Cap a source-defined [{key, value}] list from an assertion.
+
+    Returns the first MAX_ASSERTION_KEY_VALUE_ENTRIES distinct keys that carry a
+    value, each value cut to MAX_ASSERTION_KEY_VALUE_CHARS with a ``[+N chars]``
+    marker, and the number of distinct keys with a value before the cap.
+    """
+    if not isinstance(entries, list):
+        return [], 0
+    seen: dict[str, str] = {}
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        key, value = entry.get("key"), entry.get("value")
+        if key and value is not None and key not in seen:
+            seen[key] = str(value)
+    capped = [
+        {
+            "key": key,
+            "value": truncate_with_ellipsis(
+                value, MAX_ASSERTION_KEY_VALUE_CHARS, dropped_count=True
+            ),
+        }
+        for key, value in list(seen.items())[:MAX_ASSERTION_KEY_VALUE_ENTRIES]
+    ]
+    return capped, len(seen)
+
+
+def cap_key_values_in_place(container: object, field: str) -> None:
+    """Cap ``container[field]`` with cap_key_values, in place.
+
+    A list that had more keys than the cap gets ``<field>Total`` beside it.
+    """
+    if not isinstance(container, dict) or field not in container:
+        return
+    capped, total = cap_key_values(container[field])
+    if capped:
+        container[field] = capped
+    else:
+        container.pop(field)
+    if total > len(capped):
+        container[f"{field}Total"] = total
+
+
+def cap_assertion_key_values(assertion: object) -> None:
+    """Cap an assertion's source-defined key/value lists, in place.
+
+    Covers info.customProperties, each definition's nativeParameters, and each
+    run's nativeResults and error properties.
+    """
+    if not isinstance(assertion, dict) or not str(assertion.get("urn")).startswith(
+        "urn:li:assertion:"
+    ):
+        return
+    info = assertion.get("info")
+    if isinstance(info, dict):
+        cap_key_values_in_place(info, "customProperties")
+        for definition in info.values():
+            cap_key_values_in_place(definition, "nativeParameters")
+    run_events = assertion.get("runEvents")
+    if not isinstance(run_events, dict):
+        return
+    for event in run_events.get("runEvents") or []:
+        result = event.get("result") if isinstance(event, dict) else None
+        if not isinstance(result, dict):
+            continue
+        cap_key_values_in_place(result, "nativeResults")
+        cap_key_values_in_place(result.get("error"), "properties")
+
+
+def _contract_member_rank(member: object) -> int:
+    """Sort key that puts members deciding a contract's verdict first."""
+    assertion = member.get("assertion") if isinstance(member, dict) else None
+    runs = ((assertion or {}).get("runEvents") or {}).get("runEvents") or []
+    result_type = ((runs[0] or {}).get("result") or {}).get("type") if runs else None
+    return {"FAILURE": 0, "ERROR": 1, "SUCCESS": 2}.get(result_type or "", 3)
+
+
+def cap_data_contract_members(contract: object) -> None:
+    """Cap a data contract's data quality members, in place.
+
+    Failing and erroring members are kept first, then passing, then those that have
+    not run, so the members returned still decide the contract's verdict. A cut list
+    gets ``dataQualityTotal`` beside it.
+    """
+    if not isinstance(contract, dict) or not str(contract.get("urn")).startswith(
+        "urn:li:dataContract:"
+    ):
+        return
+    properties = contract.get("properties")
+    if not isinstance(properties, dict):
+        return
+    members = properties.get("dataQuality")
+    if (
+        not isinstance(members, list)
+        or len(members) <= MAX_CONTRACT_DATA_QUALITY_ASSERTIONS
+    ):
+        return
+    properties["dataQuality"] = sorted(members, key=_contract_member_rank)[
+        :MAX_CONTRACT_DATA_QUALITY_ASSERTIONS
+    ]
+    properties["dataQualityTotal"] = len(members)
 
 
 def truncate_descriptions(
@@ -949,6 +1082,9 @@ def clean_get_entities_response(
 
     4. **Truncate view definitions**: Limits SQL view logic to QUERY_LENGTH_HARD_LIMIT
 
+    5. **Cap assertion key/value lists and contract members**: via
+       cap_assertion_key_values and cap_data_contract_members
+
     The result is optimized for LLM tool responses: reduced token usage, no duplication,
     clear distinction between system-generated and user-curated content.
 
@@ -1074,6 +1210,10 @@ def clean_get_entities_response(
                     logger.info(
                         f"Document content truncated: {original_length:,} -> {truncate_at:,} chars"
                     )
+
+    if response:
+        cap_assertion_key_values(response)
+        cap_data_contract_members(response)
 
     return response
 

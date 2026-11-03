@@ -15,6 +15,7 @@ entity_details_fragment_gql = (
     graphql_helpers.GQL_DIR / "entity_details.gql"
 ).read_text()
 query_entity_gql = (graphql_helpers.GQL_DIR / "query_entity.gql").read_text()
+assertion_entity_gql = (graphql_helpers.GQL_DIR / "assertion_entity.gql").read_text()
 related_documents_gql = (graphql_helpers.GQL_DIR / "related_documents.gql").read_text()
 
 
@@ -28,6 +29,21 @@ def get_entities(urns: StrListOrStr) -> List[dict] | dict:
 
     Supports all entity types including datasets, assertions, incidents, dashboards, charts,
     users, groups, and more. The response fields vary based on the entity type.
+
+    For an assertion, `info` holds its definition and `runEvents` its last 10 completed
+    runs with observed values (actualAggValue, rowCount, nativeResults, error, severity)
+    and failed/errored counts.
+
+    A data contract URN returns its `status` and its member assertions, each with its
+    latest completed run. Judge a contract the way the DataHub contract tab does, in
+    this order: `status.state` PENDING means pending (normal for contracts created
+    from YAML); otherwise classify each member's latest completed run: SUCCESS as
+    PASSING, FAILURE as FAILING, ERROR as ERROR, INIT or no run as not run, which
+    does not count. No member with a run means no assertions have run; every member
+    that has run is PASSING means passing; any FAILING means failing; any ERROR means
+    erroring. Data quality members are capped: past the cap, failing and erroring
+    members come first, then passing, then not run, and `properties.dataQualityTotal`
+    gives the full count, so the verdict still holds.
     """
     client = graphql_helpers.get_datahub_client()
 
@@ -81,6 +97,15 @@ def get_entities(urns: StrListOrStr) -> List[dict] | dict:
                     query=query_entity_gql,
                     variables=variables,
                     operation_name="GetQueryEntity",
+                )["entity"]
+            elif urn.startswith("urn:li:assertion:"):
+                # Own document, so a server too old for its newer fields falls back
+                # on this query alone and GetEntity keeps its other tagged fields.
+                result = graphql_helpers.execute_graphql(
+                    client._graph,
+                    query=assertion_entity_gql,
+                    variables=variables,
+                    operation_name="GetAssertionEntity",
                 )["entity"]
             else:
                 result = graphql_helpers.execute_graphql(

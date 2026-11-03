@@ -1168,189 +1168,29 @@ fragment entityPreview on Entity {
             }
         }
     }
-    ... on Assertion {
+    # A contract is a status plus the assertions it groups, so the arm selects each
+    # member assertion's latest completed run.
+    ... on DataContract {
         urn
         type
-        info {
-            type
-            description
-            lastUpdated {
-                time
-                actor
-            }
-            datasetAssertion {
-                datasetUrn
-                scope
-                aggregation
-                operator
-                parameters {
-                    value {
-                        value
-                        type
-                    }
-                    minValue {
-                        value
-                        type
-                    }
-                    maxValue {
-                        value
-                        type
-                    }
-                }
-                fields {
-                    urn
-                    path
-                }
-                nativeType
-                nativeParameters {
-                    key
-                    value
-                }
-                logic
-            }
-            fieldAssertion {
-                type
-                entityUrn
-                fieldValuesAssertion {
-                    field {
-                        path
-                        type
-                        nativeType
-                    }
-                    operator
-                    parameters {
-                        value {
-                            value
-                            type
-                        }
-                        minValue {
-                            value
-                            type
-                        }
-                        maxValue {
-                            value
-                            type
-                        }
-                    }
-                    failThreshold {
-                        type
-                        value
-                    }
-                    excludeNulls
-                }
-                fieldMetricAssertion {
-                    field {
-                        path
-                        type
-                        nativeType
-                    }
-                    metric
-                    operator
-                    parameters {
-                        value {
-                            value
-                            type
-                        }
-                        minValue {
-                            value
-                            type
-                        }
-                        maxValue {
-                            value
-                            type
-                        }
-                    }
-                }
-            }
-            volumeAssertion {
-                type
-                entityUrn
-                rowCountTotal {
-                    operator
-                    parameters {
-                        value {
-                            value
-                            type
-                        }
-                        minValue {
-                            value
-                            type
-                        }
-                        maxValue {
-                            value
-                            type
-                        }
-                    }
-                }
-                rowCountChange {
-                    type
-                    operator
-                    parameters {
-                        value {
-                            value
-                            type
-                        }
-                        minValue {
-                            value
-                            type
-                        }
-                        maxValue {
-                            value
-                            type
-                        }
-                    }
-                }
-            }
-            sqlAssertion {
-                type
-                entityUrn
-                statement
-                operator
-                parameters {
-                    value {
-                        value
-                        type
-                    }
-                    minValue {
-                        value
-                        type
-                    }
-                    maxValue {
-                        value
-                        type
-                    }
-                }
-            }
-            source {
-                type
-                created {
-                    time
-                    actor
-                }
-            }
+        status {
+            state
         }
-        platform {
-            urn
-            name
-            properties {
-                displayName
+        properties {
+            entityUrn
+            freshness {
+                assertion {
+                    ...dataContractAssertionSummary
+                }
             }
-        }
-        runEvents(status: COMPLETE, limit: 10) {
-            total
-            failed
-            succeeded
-            runEvents {
-                timestampMillis
-                status
-                result {
-                    type
-                    actualAggValue
-                    externalUrl
-                    nativeResults {
-                        key
-                        value
-                    }
+            schema {
+                assertion {
+                    ...dataContractAssertionSummary
+                }
+            }
+            dataQuality {
+                assertion {
+                    ...dataContractAssertionSummary
                 }
             }
         }
@@ -1793,6 +1633,23 @@ fragment viewProperties on Dataset {
         logic
         # formattedLogic
         language
+    }
+}
+
+fragment dataContractAssertionSummary on Assertion {
+    urn
+    info {
+        type
+        description
+    }
+    runEvents(status: COMPLETE, limit: 1) {
+        runEvents {
+            timestampMillis
+            result {
+                type
+                actualAggValue
+            }
+        }
     }
 }
 

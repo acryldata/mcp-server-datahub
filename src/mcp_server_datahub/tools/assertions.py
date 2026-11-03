@@ -140,13 +140,26 @@ query SearchDatasetAssertions(
                             type
                             entityUrn
                             field { urn path }
+                            fields { urn path }                         #[NEWER_GMS]
+                            scope                                       #[NEWER_GMS]
+                            aggregation                                 #[NEWER_GMS]
+                            operator                                    #[NEWER_GMS]
+                            parameters {                                #[NEWER_GMS]
+                                value { value type }                    #[NEWER_GMS]
+                                minValue { value type }                 #[NEWER_GMS]
+                                maxValue { value type }                 #[NEWER_GMS]
+                            }                                           #[NEWER_GMS]
+                            nativeType                                  #[NEWER_GMS]
+                            nativeParameters { key value }              #[NEWER_GMS]
                             logic
                         }
+                        customProperties { key value }                  #[NEWER_GMS]
                     }
                     runEvents(status: COMPLETE, limit: $runEventsLimit) {
                         total
                         failed
                         succeeded
+                        errored
                         runEvents {
                             timestampMillis
                             status
@@ -162,6 +175,7 @@ query SearchDatasetAssertions(
                                     type
                                     displayMessage
                                 }
+                                severity                                #[NEWER_GMS]
                             }
                         }
                     }
@@ -184,6 +198,17 @@ DEFAULT_PAGE_SIZE = 5
 MAX_PAGE_SIZE = 20
 MIN_RUN_EVENTS = 1
 MAX_RUN_EVENTS = 10
+
+# Observed values and severity kept per run when the server returns them. They are
+# what a caller needs to compare a failing run against the ones before it.
+_RUN_RESULT_VALUE_KEYS = (
+    "actualAggValue",
+    "rowCount",
+    "missingCount",
+    "unexpectedCount",
+    "externalUrl",
+    "severity",
+)
 
 # Literal is required for FastMCP/pydantic JSON Schema generation so the LLM
 # sees valid enum values.  Values sourced from AssertionTypeClass and
@@ -261,6 +286,12 @@ def _build_assertion_summary(assertion: dict[str, Any]) -> dict[str, Any]:
     events = run_events.get("runEvents") or []
     latest_result = events[0].get("result") if events else None
 
+    definition = _extract_definition(info)
+    graphql_helpers.cap_key_values_in_place(definition, "nativeParameters")
+    custom_properties, custom_properties_total = _flatten_key_values(
+        info.get("customProperties")
+    )
+
     summary: dict[str, Any] = {
         "urn": assertion.get("urn"),
         "type": info.get("type"),
@@ -270,16 +301,22 @@ def _build_assertion_summary(assertion: dict[str, Any]) -> dict[str, Any]:
         "platform": _extract_platform(assertion),
         "sourceType": _extract_source_type(info),
         "column": _get_column_path(assertion),
-        "definition": _extract_definition(info),
+        "definition": definition,
+        "customProperties": custom_properties or None,
         "latestResultType": latest_result.get("type") if latest_result else None,
+        # GMS computes these counts over the runs it returned, so they cover the
+        # run_events_count window only, not the assertion's whole history.
         "runSummary": {
             "total": run_events.get("total", 0),
             "succeeded": run_events.get("succeeded", 0),
             "failed": run_events.get("failed", 0),
+            "errored": run_events.get("errored", 0),
         },
         "runHistory": _extract_run_history(events),
         "tags": _extract_tags(assertion),
     }
+    if custom_properties_total > len(custom_properties):
+        summary["customPropertiesTotal"] = custom_properties_total
     return summary
 
 
@@ -311,10 +348,16 @@ def _extract_definition(info: dict[str, Any]) -> dict[str, Any] | None:
     return None
 
 
+def _flatten_key_values(entries: object) -> tuple[dict[str, str], int]:
+    """Flatten capped [{key, value}] into a dict. Returns it and the source key count."""
+    capped, total = graphql_helpers.cap_key_values(entries)
+    return {e["key"]: e["value"] for e in capped}, total
+
+
 def _extract_run_history(
     events: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    """Return a slim run-event history list."""
+    """Return a slim run-event history list with each run's observed values."""
     history: list[dict[str, Any]] = []
     for event in events:
         result = event.get("result") or {}
@@ -322,6 +365,15 @@ def _extract_run_history(
             "timestampMillis": event.get("timestampMillis"),
             "resultType": result.get("type"),
         }
+        for key in _RUN_RESULT_VALUE_KEYS:
+            value = result.get(key)
+            if value is not None:
+                entry[key] = value
+        native, native_total = _flatten_key_values(result.get("nativeResults"))
+        if native:
+            entry["nativeResults"] = native
+            if native_total > len(native):
+                entry["nativeResultsTotal"] = native_total
         error = result.get("error")
         if error:
             entry["error"] = error.get("displayMessage") or error.get("type")
@@ -380,9 +432,15 @@ def get_dataset_assertions(
     - sourceType: How the assertion was created (NATIVE, EXTERNAL, INFERRED)
     - column: The column/field this assertion targets, if applicable (null for table-level assertions)
     - definition: Type-specific configuration (thresholds, operators, schedules, SQL statements, etc.)
+    - customProperties: Source-specific key/values not in definition (e.g. dbt
+      freshness thresholds), as a dict. It, nativeParameters and nativeResults are
+      capped in keys and value length; one with keys cut has `<name>Total` beside it
     - latestResultType: Most recent evaluation outcome (SUCCESS, FAILURE, ERROR, INIT)
-    - runSummary: Aggregate counts of total/succeeded/failed evaluations
-    - runHistory: Chronological list of recent evaluation results with timestamps
+    - runSummary: total/succeeded/failed/errored counts over the returned runs only
+      (at most run_events_count), not all-time
+    - runHistory: Recent evaluation results, newest first, with timestamps and, when
+      reported, observed values (actualAggValue, rowCount, missingCount,
+      unexpectedCount, externalUrl, nativeResults, severity)
     - tags: Tag names applied to this assertion
 
     Example:

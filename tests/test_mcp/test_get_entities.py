@@ -101,6 +101,82 @@ class TestGetEntitiesSingleURN:
                 with pytest.raises(Exception, match="GraphQL error"):
                     await async_background(get_entities)(urn)
 
+    async def test_data_contract_returns_status_and_member_assertions(
+        self, mock_client
+    ):
+        urn = "urn:li:dataContract:orders-contract"
+        contract = {
+            "urn": urn,
+            "type": "DATA_CONTRACT",
+            "status": {"state": "ACTIVE"},
+            "properties": {
+                "entityUrn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,db.schema.table,PROD)",
+                "freshness": [
+                    {
+                        "assertion": {
+                            "urn": "urn:li:assertion:fresh",
+                            "info": {"type": "FRESHNESS"},
+                            "runEvents": {
+                                "runEvents": [
+                                    {
+                                        "timestampMillis": 1700000000000,
+                                        "result": {"type": "SUCCESS"},
+                                    }
+                                ]
+                            },
+                        }
+                    }
+                ],
+            },
+        }
+
+        with patch(
+            "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
+            return_value=mock_client,
+        ):
+            mock_client._graph.exists.return_value = True
+
+            with patch(
+                "datahub_integrations.mcp.graphql_helpers.execute_graphql"
+            ) as mock_gql:
+                mock_gql.side_effect = [{"entity": contract}, {"entity": {}}]
+
+                from datahub_integrations.mcp.mcp_server import get_entities
+
+                result = await async_background(get_entities)(urn)
+
+        assert result["status"] == {"state": "ACTIVE"}
+        member = result["properties"]["freshness"][0]["assertion"]
+        assert member["urn"] == "urn:li:assertion:fresh"
+        assert member["runEvents"]["runEvents"][0]["result"]["type"] == "SUCCESS"
+
+    async def test_assertion_urn_uses_its_own_query(self, mock_client):
+        # Kept apart from GetEntity so a server too old for the assertion fields
+        # falls back on this query alone, not on GetEntity's other tagged arms.
+        urn = "urn:li:assertion:a1"
+        with patch(
+            "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
+            return_value=mock_client,
+        ):
+            mock_client._graph.exists.return_value = True
+
+            with patch(
+                "datahub_integrations.mcp.graphql_helpers.execute_graphql"
+            ) as mock_gql:
+                mock_gql.side_effect = [
+                    {"entity": {"urn": urn, "type": "ASSERTION"}},
+                    {"entity": {}},
+                ]
+
+                from datahub_integrations.mcp.mcp_server import get_entities
+
+                result = await async_background(get_entities)(urn)
+
+        assert result["urn"] == urn
+        first_call = mock_gql.call_args_list[0].kwargs
+        assert first_call["operation_name"] == "GetAssertionEntity"
+        assert "fragment assertionDetails" in first_call["query"]
+
 
 class TestGetEntitiesMultipleURNs:
     """Tests for get_entities with multiple URNs (batch mode)."""
