@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `get_entities` returns assertion run values and more definitions. Each run in
+  `runEvents` carries `rowCount`, `missingCount`, `unexpectedCount`, `error` and
+  `severity`, and the block counts `errored` runs. `info` now includes freshness,
+  schema and custom definitions (custom ones with `operator`, `parameters`,
+  `scope`, `aggregation`, `fields`, `nativeType`, `nativeParameters`) and
+  `customProperties`. Run `nativeResults` are capped at 10 keys and 200
+  characters per value, with `nativeResultsTotal` when keys are cut.
+- `get_dataset_assertions` keeps each run's observed values, severity and capped
+  `nativeResults` in `runHistory`, returns `customProperties` and the same custom
+  definition fields, and adds `errored` to `runSummary`.
+- `get_entities` on a data contract URN returns its `status` and its freshness,
+  schema and data quality member assertions, each with its latest completed run.
+  The tool description tells agents how to judge a contract from these.
 - `get_aspect_history` returns `compactLineage` for a current `upstreamLineage`
   value too large to return whole. It lists each dataset URN once and refers to
   columns as `[datasetIndex, fieldPath]`, so when `truncated` is false one call

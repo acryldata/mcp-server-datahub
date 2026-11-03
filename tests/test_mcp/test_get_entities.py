@@ -101,6 +101,55 @@ class TestGetEntitiesSingleURN:
                 with pytest.raises(Exception, match="GraphQL error"):
                     await async_background(get_entities)(urn)
 
+    async def test_data_contract_returns_status_and_member_assertions(
+        self, mock_client
+    ):
+        urn = "urn:li:dataContract:orders-contract"
+        contract = {
+            "urn": urn,
+            "type": "DATA_CONTRACT",
+            "status": {"state": "ACTIVE"},
+            "properties": {
+                "entityUrn": "urn:li:dataset:(urn:li:dataPlatform:snowflake,db.schema.table,PROD)",
+                "freshness": [
+                    {
+                        "assertion": {
+                            "urn": "urn:li:assertion:fresh",
+                            "info": {"type": "FRESHNESS"},
+                            "runEvents": {
+                                "runEvents": [
+                                    {
+                                        "timestampMillis": 1700000000000,
+                                        "result": {"type": "SUCCESS"},
+                                    }
+                                ]
+                            },
+                        }
+                    }
+                ],
+            },
+        }
+
+        with patch(
+            "datahub_integrations.mcp.graphql_helpers.get_datahub_client",
+            return_value=mock_client,
+        ):
+            mock_client._graph.exists.return_value = True
+
+            with patch(
+                "datahub_integrations.mcp.graphql_helpers.execute_graphql"
+            ) as mock_gql:
+                mock_gql.side_effect = [{"entity": contract}, {"entity": {}}]
+
+                from datahub_integrations.mcp.mcp_server import get_entities
+
+                result = await async_background(get_entities)(urn)
+
+        assert result["status"] == {"state": "ACTIVE"}
+        member = result["properties"]["freshness"][0]["assertion"]
+        assert member["urn"] == "urn:li:assertion:fresh"
+        assert member["runEvents"]["runEvents"][0]["result"]["type"] == "SUCCESS"
+
 
 class TestGetEntitiesMultipleURNs:
     """Tests for get_entities with multiple URNs (batch mode)."""

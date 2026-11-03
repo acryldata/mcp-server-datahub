@@ -28,6 +28,18 @@ def get_entities(urns: StrListOrStr) -> List[dict] | dict:
 
     Supports all entity types including datasets, assertions, incidents, dashboards, charts,
     users, groups, and more. The response fields vary based on the entity type.
+
+    For an assertion, `info` holds its definition and `runEvents` its last 10 completed
+    runs with observed values (actualAggValue, rowCount, nativeResults, error, severity)
+    and failed/errored counts.
+
+    A data contract URN returns its `status` and its member assertions, each with its
+    latest completed run. Judge a contract the way the DataHub contract tab does, in
+    this order: `status.state` PENDING means pending (normal for contracts created
+    from YAML); otherwise classify each member's latest completed run: SUCCESS as
+    PASSING, FAILURE as FAILING, ERROR as ERROR, INIT or no run as not run. No member
+    with a run means no assertions have run; all PASSING means passing; any FAILING
+    means failing; any ERROR means erroring.
     """
     client = graphql_helpers.get_datahub_client()
 

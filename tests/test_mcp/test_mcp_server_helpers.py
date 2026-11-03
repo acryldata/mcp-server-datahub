@@ -1714,3 +1714,25 @@ class TestEditableSchemaMetadataMerging:
         field = result["schemaMetadata"]["fields"][0]
         # Last duplicate wins
         assert field["editedDescription"] == "Second edit"[:120]
+
+
+def test_clean_get_entities_response_caps_assertion_native_results() -> None:
+    native = [{"key": f"k{i}", "value": "x" * 500} for i in range(15)]
+    raw_response = {
+        "urn": "urn:li:assertion:a1",
+        "runEvents": {
+            "total": 2,
+            "runEvents": [
+                {"result": {"type": "FAILURE", "nativeResults": native}},
+                {"result": {"type": "SUCCESS", "rowCount": 0}},
+            ],
+        },
+    }
+
+    result = clean_get_entities_response(raw_response)
+
+    capped, untouched = (e["result"] for e in result["runEvents"]["runEvents"])
+    assert len(capped["nativeResults"]) == graphql_helpers.MAX_NATIVE_RESULT_KEYS
+    assert capped["nativeResultsTotal"] == 15
+    assert capped["nativeResults"][0]["value"].endswith("[+300 chars]")
+    assert untouched == {"type": "SUCCESS", "rowCount": 0}

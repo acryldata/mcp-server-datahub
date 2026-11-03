@@ -1321,6 +1321,73 @@ fragment entityPreview on Entity {
                     }
                 }
             }
+            freshnessAssertion {
+                entityUrn
+                type
+                schedule {
+                    type
+                    cron {
+                        cron
+                        timezone
+                    }
+                    fixedInterval {
+                        unit
+                        multiple
+                    }
+                }
+                filter {
+                    type
+                    sql
+                }
+            }
+            schemaAssertion {
+                entityUrn
+                compatibility
+                fields {
+                    path
+                    type
+                    nativeType
+                }
+            }
+            customAssertion {
+                type
+                entityUrn
+                field {
+                    urn
+                    path
+                }
+                fields {                                        #[NEWER_GMS]
+                    urn                                         #[NEWER_GMS]
+                    path                                        #[NEWER_GMS]
+                }                                               #[NEWER_GMS]
+                scope                                           #[NEWER_GMS]
+                aggregation                                     #[NEWER_GMS]
+                operator                                        #[NEWER_GMS]
+                parameters {                                    #[NEWER_GMS]
+                    value {                                     #[NEWER_GMS]
+                        value                                   #[NEWER_GMS]
+                        type                                    #[NEWER_GMS]
+                    }                                           #[NEWER_GMS]
+                    minValue {                                  #[NEWER_GMS]
+                        value                                   #[NEWER_GMS]
+                        type                                    #[NEWER_GMS]
+                    }                                           #[NEWER_GMS]
+                    maxValue {                                  #[NEWER_GMS]
+                        value                                   #[NEWER_GMS]
+                        type                                    #[NEWER_GMS]
+                    }                                           #[NEWER_GMS]
+                }                                               #[NEWER_GMS]
+                nativeType                                      #[NEWER_GMS]
+                nativeParameters {                              #[NEWER_GMS]
+                    key                                         #[NEWER_GMS]
+                    value                                       #[NEWER_GMS]
+                }                                               #[NEWER_GMS]
+                logic
+            }
+            customProperties {                                  #[NEWER_GMS]
+                key                                             #[NEWER_GMS]
+                value                                           #[NEWER_GMS]
+            }                                                   #[NEWER_GMS]
             source {
                 type
                 created {
@@ -1340,18 +1407,58 @@ fragment entityPreview on Entity {
             total
             failed
             succeeded
+            errored
             runEvents {
                 timestampMillis
                 status
                 result {
                     type
+                    rowCount
+                    missingCount
+                    unexpectedCount
                     actualAggValue
                     externalUrl
                     nativeResults {
                         key
                         value
                     }
+                    error {
+                        type
+                    }
+                    severity                                    #[NEWER_GMS]
                 }
+            }
+        }
+    }
+    # A contract is a status plus the assertions it groups, so the arm selects each
+    # member assertion's latest completed run.
+    ... on DataContract {
+        urn
+        type
+        status {
+            state
+        }
+        properties {
+            entityUrn
+            freshness {
+                assertion {
+                    ...dataContractAssertionSummary
+                }
+            }
+            schema {
+                assertion {
+                    ...dataContractAssertionSummary
+                }
+            }
+            dataQuality {
+                assertion {
+                    ...dataContractAssertionSummary
+                }
+            }
+        }
+        structuredProperties {
+            properties {
+                ...structuredPropertiesFields
             }
         }
     }
@@ -1793,6 +1900,23 @@ fragment viewProperties on Dataset {
         logic
         # formattedLogic
         language
+    }
+}
+
+fragment dataContractAssertionSummary on Assertion {
+    urn
+    info {
+        type
+        description
+    }
+    runEvents(status: COMPLETE, limit: 1) {
+        runEvents {
+            timestampMillis
+            result {
+                type
+                actualAggValue
+            }
+        }
     }
 }
 

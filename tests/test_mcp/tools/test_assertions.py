@@ -268,6 +268,48 @@ class TestBuildAssertionSummary:
         assert summary["latestResultType"] is None
         assert summary["runHistory"] == []
 
+    def test_errored_runs_are_counted_apart_from_failed(self):
+        assertion = _make_assertion(result_type="ERROR")
+        assertion["runEvents"].update(
+            {"total": 2, "failed": 1, "succeeded": 0, "errored": 1}
+        )
+        summary = _build_assertion_summary(assertion)
+
+        assert summary["runSummary"] == {
+            "total": 2,
+            "succeeded": 0,
+            "failed": 1,
+            "errored": 1,
+        }
+
+    def test_external_custom_assertion_keeps_structured_definition(self):
+        # The shape dbt ingests for a not_null test: the check lives on the
+        # structured fields, not on logic.
+        custom = {
+            "type": "dbt",
+            "entityUrn": DATASET_URN,
+            "field": {"urn": "urn:li:schemaField:1", "path": "user_id"},
+            "fields": [{"urn": "urn:li:schemaField:1", "path": "user_id"}],
+            "scope": "DATASET_COLUMN",
+            "aggregation": "IDENTITY",
+            "operator": "NOT_NULL",
+            "parameters": None,
+            "nativeType": "not_null",
+            "nativeParameters": [{"key": "column_name", "value": "user_id"}],
+            "logic": None,
+        }
+        assertion = _make_assertion(
+            assertion_type="CUSTOM",
+            freshnessAssertion=None,
+            customAssertion=custom,
+            customProperties=[{"key": "severity", "value": "error"}],
+        )
+        summary = _build_assertion_summary(assertion)
+
+        assert summary["definition"] == custom
+        assert summary["customProperties"] == [{"key": "severity", "value": "error"}]
+        assert summary["column"] == "user_id"
+
 
 class TestExtractDefinition:
     def test_freshness(self):
@@ -304,6 +346,82 @@ class TestExtractRunHistory:
         assert len(history) == 2
         assert history[0] == {"timestampMillis": 1000, "resultType": "SUCCESS"}
         assert history[1]["error"] == "Bad data"
+
+    def test_keeps_observed_values(self):
+        events = [
+            {
+                "timestampMillis": 1000,
+                "result": {
+                    "type": "FAILURE",
+                    "actualAggValue": 42.0,
+                    "rowCount": 1000,
+                    "missingCount": None,
+                    "unexpectedCount": 7,
+                    "externalUrl": "https://example.com/run/1",
+                    "nativeResults": [
+                        {"key": "compiled_sql", "value": "SELECT 1"},
+                        {"key": "failures", "value": "7"},
+                    ],
+                    "error": None,
+                },
+            }
+        ]
+        history = _extract_run_history(events)
+        assert history[0] == {
+            "timestampMillis": 1000,
+            "resultType": "FAILURE",
+            "actualAggValue": 42.0,
+            "rowCount": 1000,
+            "unexpectedCount": 7,
+            "externalUrl": "https://example.com/run/1",
+            "nativeResults": {"compiled_sql": "SELECT 1", "failures": "7"},
+        }
+
+    def test_native_results_are_capped(self):
+        native = [{"key": f"k{i}", "value": "x" * 500} for i in range(15)]
+        events = [
+            {
+                "timestampMillis": 1000,
+                "result": {"type": "SUCCESS", "nativeResults": native},
+            }
+        ]
+        entry = _extract_run_history(events)[0]
+        assert len(entry["nativeResults"]) == 10
+        assert entry["nativeResultsTotal"] == 15
+        assert all(len(v) < 300 for v in entry["nativeResults"].values())
+
+    def test_native_results_skip_nulls_and_repeated_keys_before_capping(self):
+        native = [{"key": "empty", "value": None}] * 5
+        native += [{"key": "dup", "value": "1"}, {"key": "dup", "value": "2"}]
+        native += [{"key": f"k{i}", "value": str(i)} for i in range(9)]
+        events = [
+            {
+                "timestampMillis": 1000,
+                "result": {"type": "FAILURE", "nativeResults": native},
+            }
+        ]
+        entry = _extract_run_history(events)[0]
+        assert entry["nativeResults"]["dup"] == "1"
+        assert len(entry["nativeResults"]) == 10
+        assert "empty" not in entry["nativeResults"]
+        assert "nativeResultsTotal" not in entry
+
+    def test_zero_values_and_severity_are_kept(self):
+        events = [
+            {
+                "timestampMillis": 1000,
+                "result": {
+                    "type": "FAILURE",
+                    "rowCount": 0,
+                    "actualAggValue": 0.0,
+                    "severity": "HIGH",
+                },
+            }
+        ]
+        entry = _extract_run_history(events)[0]
+        assert entry["rowCount"] == 0
+        assert entry["actualAggValue"] == 0.0
+        assert entry["severity"] == "HIGH"
 
     def test_empty(self):
         assert _extract_run_history([]) == []

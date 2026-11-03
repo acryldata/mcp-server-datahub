@@ -74,6 +74,11 @@ FIELD_STRUCTURED_PROPERTY_CHAR_LIMIT = int(
 FIELD_STRUCTURED_PROPERTY_MAX_VALUES = int(
     os.getenv("FIELD_STRUCTURED_PROPERTY_MAX_VALUES", "25")
 )
+# An assertion run's nativeResults are free-form, source-defined key/values with no
+# size limit (compiled SQL, sampled rows), so every tool that returns them caps both
+# the key count and each value with these.
+MAX_NATIVE_RESULT_KEYS = 10
+MAX_NATIVE_RESULT_VALUE_CHARS = 200
 
 
 def select_results_within_budget(
@@ -178,10 +183,25 @@ def sanitize_html_content(text: str) -> str:
     return text.strip()
 
 
-def truncate_with_ellipsis(text: str, max_length: int, suffix: str = "...") -> str:
-    """Truncate text to max_length and add suffix if truncated."""
+def truncate_with_ellipsis(
+    text: str,
+    max_length: int,
+    suffix: str = "...",
+    *,
+    dropped_count: bool = False,
+) -> str:
+    """Truncate text to max_length and add suffix if truncated.
+
+    With ``dropped_count`` the suffix instead names how many characters were
+    elided (``"...text… [+403 chars]"``), appended beyond ``max_length``, so a
+    reader can tell the value is a partial preview and roughly how much is missing.
+    """
     if not text or len(text) <= max_length:
         return text
+
+    if dropped_count:
+        cut = text[: max(max_length, 0)].rstrip()
+        return f"{cut}… [+{len(text) - len(cut)} chars]"
 
     # A limit too small to fit the suffix gets a hard cut. Without this, a negative
     # slice index would keep almost all of the text.
@@ -222,6 +242,54 @@ def sanitize_and_truncate_description(text: str, max_length: int) -> str:
     except Exception as e:
         logger.warning(f"Error sanitizing and truncating description: {e}")
         return text[:max_length] if len(text) > max_length else text
+
+
+def cap_native_results(entries: object) -> tuple[list[dict[str, str]], int]:
+    """Cap an assertion run's nativeResults [{key, value}] list.
+
+    Returns the first MAX_NATIVE_RESULT_KEYS distinct keys that carry a value, each
+    value cut to MAX_NATIVE_RESULT_VALUE_CHARS with a ``[+N chars]`` marker, and the
+    number of distinct keys with a value before the cap.
+    """
+    if not isinstance(entries, list):
+        return [], 0
+    seen: dict[str, str] = {}
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        key, value = entry.get("key"), entry.get("value")
+        if key and value is not None and key not in seen:
+            seen[key] = str(value)
+    capped = [
+        {
+            "key": key,
+            "value": truncate_with_ellipsis(
+                value, MAX_NATIVE_RESULT_VALUE_CHARS, dropped_count=True
+            ),
+        }
+        for key, value in list(seen.items())[:MAX_NATIVE_RESULT_KEYS]
+    ]
+    return capped, len(seen)
+
+
+def cap_assertion_run_native_results(run_events: object) -> None:
+    """Cap nativeResults on each run of an assertion's runEvents block, in place.
+
+    A run that had more keys than the cap gets ``nativeResultsTotal`` beside them.
+    """
+    if not isinstance(run_events, dict):
+        return
+    for event in run_events.get("runEvents") or []:
+        result = event.get("result") if isinstance(event, dict) else None
+        if not isinstance(result, dict) or "nativeResults" not in result:
+            continue
+        capped, total = cap_native_results(result["nativeResults"])
+        if capped:
+            result["nativeResults"] = capped
+        else:
+            result.pop("nativeResults")
+        if total > len(capped):
+            result["nativeResultsTotal"] = total
 
 
 def truncate_descriptions(
@@ -949,6 +1017,8 @@ def clean_get_entities_response(
 
     4. **Truncate view definitions**: Limits SQL view logic to QUERY_LENGTH_HARD_LIMIT
 
+    5. **Cap assertion run nativeResults**: via cap_assertion_run_native_results
+
     The result is optimized for LLM tool responses: reduced token usage, no duplication,
     clear distinction between system-generated and user-curated content.
 
@@ -1074,6 +1144,9 @@ def clean_get_entities_response(
                     logger.info(
                         f"Document content truncated: {original_length:,} -> {truncate_at:,} chars"
                     )
+
+    if response:
+        cap_assertion_run_native_results(response.get("runEvents"))
 
     return response
 

@@ -131,3 +131,69 @@ def test_query_documents_request_custom_properties_and_origin(gql_file: str) -> 
     src = (GQL_DIR / gql_file).read_text()
     assert re.search(r"\bcustomProperties \{", src)
     assert re.search(r"\borigin \{", src)
+
+
+def test_assertion_fragment_requests_every_definition_and_run_values(
+    entity_preview_fragments: dict[str, str],
+) -> None:
+    # A definition missing here is an assertion get_entities returns with no
+    # definition at all: external CUSTOM ones (dbt, Great Expectations) did.
+    body = entity_preview_fragments["Assertion"]
+    for definition in (
+        "datasetAssertion",
+        "freshnessAssertion",
+        "volumeAssertion",
+        "sqlAssertion",
+        "fieldAssertion",
+        "schemaAssertion",
+        "customAssertion",
+    ):
+        assert re.search(rf"\b{definition} \{{", body), definition
+    assert re.search(r"\bcustomProperties \{", body)
+
+    # dbt, Great Expectations and SQLMesh put the check itself on these, not on logic.
+    custom_open = re.search(r"\bcustomAssertion \{", body)
+    assert custom_open
+    custom = _balanced_block(body, custom_open.end() - 1)
+    for field in (
+        "fields",
+        "scope",
+        "aggregation",
+        "operator",
+        "parameters",
+        "nativeType",
+        "nativeParameters",
+        "logic",
+    ):
+        assert re.search(rf"\b{field}\b", custom), field
+
+    run_events_open = re.search(r"\brunEvents\([^)]*\) \{", body)
+    assert run_events_open, "Assertion fragment does not request runEvents"
+    run_events = _balanced_block(body, run_events_open.end() - 1)
+    for count in ("failed", "succeeded", "errored"):
+        assert re.search(rf"\b{count}\b", run_events), count
+
+    result_open = re.search(r"\bresult \{", run_events)
+    assert result_open, "Assertion fragment does not request runEvents results"
+    result = _balanced_block(run_events, result_open.end() - 1)
+    for value in (
+        "actualAggValue",
+        "rowCount",
+        "missingCount",
+        "unexpectedCount",
+        "nativeResults",
+        "error",
+        "severity",
+    ):
+        assert re.search(rf"\b{value}\b", result), value
+
+
+def test_data_contract_arm_requests_status_and_member_assertions(
+    entity_preview_fragments: dict[str, str],
+) -> None:
+    # Without this arm a contract URN came back as bare {urn, url}.
+    body = entity_preview_fragments["DataContract"]
+    assert re.search(r"\bstatus \{\s*state\b", body)
+    props = _balanced_block(body, re.search(r"\bproperties \{", body).end() - 1)
+    for part in ("freshness", "schema", "dataQuality"):
+        assert re.search(rf"\b{part} \{{\s*assertion \{{", props), part
