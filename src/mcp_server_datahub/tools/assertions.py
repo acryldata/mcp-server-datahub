@@ -286,6 +286,12 @@ def _build_assertion_summary(assertion: dict[str, Any]) -> dict[str, Any]:
     events = run_events.get("runEvents") or []
     latest_result = events[0].get("result") if events else None
 
+    definition = _extract_definition(info)
+    graphql_helpers.cap_key_values_in_place(definition, "nativeParameters")
+    custom_properties, custom_properties_total = _flatten_key_values(
+        info.get("customProperties")
+    )
+
     summary: dict[str, Any] = {
         "urn": assertion.get("urn"),
         "type": info.get("type"),
@@ -295,8 +301,8 @@ def _build_assertion_summary(assertion: dict[str, Any]) -> dict[str, Any]:
         "platform": _extract_platform(assertion),
         "sourceType": _extract_source_type(info),
         "column": _get_column_path(assertion),
-        "definition": _extract_definition(info),
-        "customProperties": info.get("customProperties"),
+        "definition": definition,
+        "customProperties": custom_properties or None,
         "latestResultType": latest_result.get("type") if latest_result else None,
         # GMS computes these counts over the runs it returned, so they cover the
         # run_events_count window only, not the assertion's whole history.
@@ -309,6 +315,8 @@ def _build_assertion_summary(assertion: dict[str, Any]) -> dict[str, Any]:
         "runHistory": _extract_run_history(events),
         "tags": _extract_tags(assertion),
     }
+    if custom_properties_total > len(custom_properties):
+        summary["customPropertiesTotal"] = custom_properties_total
     return summary
 
 
@@ -340,11 +348,9 @@ def _extract_definition(info: dict[str, Any]) -> dict[str, Any] | None:
     return None
 
 
-def _flatten_native_results(
-    entries: list[dict[str, Any]],
-) -> tuple[dict[str, str], int]:
+def _flatten_key_values(entries: object) -> tuple[dict[str, str], int]:
     """Flatten capped [{key, value}] into a dict. Returns it and the source key count."""
-    capped, total = graphql_helpers.cap_native_results(entries)
+    capped, total = graphql_helpers.cap_key_values(entries)
     return {e["key"]: e["value"] for e in capped}, total
 
 
@@ -363,9 +369,7 @@ def _extract_run_history(
             value = result.get(key)
             if value is not None:
                 entry[key] = value
-        native, native_total = _flatten_native_results(
-            result.get("nativeResults") or []
-        )
+        native, native_total = _flatten_key_values(result.get("nativeResults"))
         if native:
             entry["nativeResults"] = native
             if native_total > len(native):
@@ -429,7 +433,8 @@ def get_dataset_assertions(
     - column: The column/field this assertion targets, if applicable (null for table-level assertions)
     - definition: Type-specific configuration (thresholds, operators, schedules, SQL statements, etc.)
     - customProperties: Source-specific key/values not in definition (e.g. dbt
-      freshness thresholds)
+      freshness thresholds), as a dict. It, nativeParameters and nativeResults are
+      capped in keys and value length; one with keys cut has `<name>Total` beside it
     - latestResultType: Most recent evaluation outcome (SUCCESS, FAILURE, ERROR, INIT)
     - runSummary: total/succeeded/failed/errored counts over the returned runs only
       (at most run_events_count), not all-time

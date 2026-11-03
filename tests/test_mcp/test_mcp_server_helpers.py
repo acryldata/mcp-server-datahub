@@ -1732,7 +1732,74 @@ def test_clean_get_entities_response_caps_assertion_native_results() -> None:
     result = clean_get_entities_response(raw_response)
 
     capped, untouched = (e["result"] for e in result["runEvents"]["runEvents"])
-    assert len(capped["nativeResults"]) == graphql_helpers.MAX_NATIVE_RESULT_KEYS
+    assert (
+        len(capped["nativeResults"]) == graphql_helpers.MAX_ASSERTION_KEY_VALUE_ENTRIES
+    )
     assert capped["nativeResultsTotal"] == 15
     assert capped["nativeResults"][0]["value"].endswith("[+300 chars]")
     assert untouched == {"type": "SUCCESS", "rowCount": 0}
+
+
+def test_clean_get_entities_response_caps_assertion_definition_and_error_lists() -> (
+    None
+):
+    long_list = [{"key": f"k{i}", "value": "v"} for i in range(15)]
+    raw_response = {
+        "urn": "urn:li:assertion:a1",
+        "info": {
+            "type": "CUSTOM",
+            "customAssertion": {"type": "dbt", "nativeParameters": long_list},
+            "customProperties": [{"key": "sql", "value": "x" * 500}],
+        },
+        "runEvents": {
+            "runEvents": [
+                {
+                    "result": {
+                        "type": "ERROR",
+                        "error": {"type": "UNKNOWN_ERROR", "properties": long_list},
+                    }
+                }
+            ]
+        },
+    }
+
+    result = clean_get_entities_response(raw_response)
+
+    cap = graphql_helpers.MAX_ASSERTION_KEY_VALUE_ENTRIES
+    custom = result["info"]["customAssertion"]
+    assert len(custom["nativeParameters"]) == cap
+    assert custom["nativeParametersTotal"] == 15
+    assert result["info"]["customProperties"][0]["value"].endswith("[+300 chars]")
+    error = result["runEvents"]["runEvents"][0]["result"]["error"]
+    assert len(error["properties"]) == cap
+    assert error["propertiesTotal"] == 15
+
+
+def _contract_member(name: str, result_type: str | None) -> dict:
+    runs = [{"result": {"type": result_type}}] if result_type else []
+    return {
+        "assertion": {
+            "urn": f"urn:li:assertion:{name}",
+            "runEvents": {"runEvents": runs},
+        }
+    }
+
+
+def test_clean_get_entities_response_caps_contract_members_keeping_verdict() -> None:
+    cap = graphql_helpers.MAX_CONTRACT_DATA_QUALITY_ASSERTIONS
+    members = [_contract_member(f"ok{i}", "SUCCESS") for i in range(cap)]
+    members += [_contract_member("never", None), _contract_member("bad", "FAILURE")]
+    members += [_contract_member("err", "ERROR")]
+    raw_response = {
+        "urn": "urn:li:dataContract:c1",
+        "type": "DATA_CONTRACT",
+        "properties": {"dataQuality": members},
+    }
+
+    result = clean_get_entities_response(raw_response)
+
+    kept = [m["assertion"]["urn"] for m in result["properties"]["dataQuality"]]
+    assert len(kept) == cap
+    assert kept[:2] == ["urn:li:assertion:bad", "urn:li:assertion:err"]
+    assert "urn:li:assertion:never" not in kept
+    assert result["properties"]["dataQualityTotal"] == cap + 3

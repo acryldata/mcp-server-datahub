@@ -307,8 +307,24 @@ class TestBuildAssertionSummary:
         summary = _build_assertion_summary(assertion)
 
         assert summary["definition"] == custom
-        assert summary["customProperties"] == [{"key": "severity", "value": "error"}]
+        assert summary["customProperties"] == {"severity": "error"}
         assert summary["column"] == "user_id"
+
+    def test_custom_properties_and_native_parameters_are_capped(self):
+        entries = [{"key": f"k{i}", "value": "v"} for i in range(15)]
+        custom = {"type": "dbt", "entityUrn": DATASET_URN, "nativeParameters": entries}
+        assertion = _make_assertion(
+            assertion_type="CUSTOM",
+            freshnessAssertion=None,
+            customAssertion=custom,
+            customProperties=entries,
+        )
+        summary = _build_assertion_summary(assertion)
+
+        assert len(summary["customProperties"]) == 10
+        assert summary["customPropertiesTotal"] == 15
+        assert len(summary["definition"]["nativeParameters"]) == 10
+        assert summary["definition"]["nativeParametersTotal"] == 15
 
 
 class TestExtractDefinition:

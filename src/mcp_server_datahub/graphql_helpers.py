@@ -74,11 +74,20 @@ FIELD_STRUCTURED_PROPERTY_CHAR_LIMIT = int(
 FIELD_STRUCTURED_PROPERTY_MAX_VALUES = int(
     os.getenv("FIELD_STRUCTURED_PROPERTY_MAX_VALUES", "25")
 )
-# An assertion run's nativeResults are free-form, source-defined key/values with no
-# size limit (compiled SQL, sampled rows), so every tool that returns them caps both
-# the key count and each value with these.
-MAX_NATIVE_RESULT_KEYS = 10
-MAX_NATIVE_RESULT_VALUE_CHARS = 200
+# An assertion's source-defined key/value lists (run nativeResults and error
+# properties, nativeParameters, customProperties) have no size limit (compiled SQL,
+# sampled rows), so every tool that returns them caps both the key count and each
+# value with these.
+MAX_ASSERTION_KEY_VALUE_ENTRIES = int(
+    os.getenv("MAX_ASSERTION_KEY_VALUE_ENTRIES", "10")
+)
+MAX_ASSERTION_KEY_VALUE_CHARS = int(os.getenv("MAX_ASSERTION_KEY_VALUE_CHARS", "200"))
+
+# Data quality members returned per data contract. Each member carries its latest
+# run, and a contract can group hundreds of assertions.
+MAX_CONTRACT_DATA_QUALITY_ASSERTIONS = int(
+    os.getenv("MAX_CONTRACT_DATA_QUALITY_ASSERTIONS", "25")
+)
 
 
 def select_results_within_budget(
@@ -244,12 +253,12 @@ def sanitize_and_truncate_description(text: str, max_length: int) -> str:
         return text[:max_length] if len(text) > max_length else text
 
 
-def cap_native_results(entries: object) -> tuple[list[dict[str, str]], int]:
-    """Cap an assertion run's nativeResults [{key, value}] list.
+def cap_key_values(entries: object) -> tuple[list[dict[str, str]], int]:
+    """Cap a source-defined [{key, value}] list from an assertion.
 
-    Returns the first MAX_NATIVE_RESULT_KEYS distinct keys that carry a value, each
-    value cut to MAX_NATIVE_RESULT_VALUE_CHARS with a ``[+N chars]`` marker, and the
-    number of distinct keys with a value before the cap.
+    Returns the first MAX_ASSERTION_KEY_VALUE_ENTRIES distinct keys that carry a
+    value, each value cut to MAX_ASSERTION_KEY_VALUE_CHARS with a ``[+N chars]``
+    marker, and the number of distinct keys with a value before the cap.
     """
     if not isinstance(entries, list):
         return [], 0
@@ -264,32 +273,88 @@ def cap_native_results(entries: object) -> tuple[list[dict[str, str]], int]:
         {
             "key": key,
             "value": truncate_with_ellipsis(
-                value, MAX_NATIVE_RESULT_VALUE_CHARS, dropped_count=True
+                value, MAX_ASSERTION_KEY_VALUE_CHARS, dropped_count=True
             ),
         }
-        for key, value in list(seen.items())[:MAX_NATIVE_RESULT_KEYS]
+        for key, value in list(seen.items())[:MAX_ASSERTION_KEY_VALUE_ENTRIES]
     ]
     return capped, len(seen)
 
 
-def cap_assertion_run_native_results(run_events: object) -> None:
-    """Cap nativeResults on each run of an assertion's runEvents block, in place.
+def cap_key_values_in_place(container: object, field: str) -> None:
+    """Cap ``container[field]`` with cap_key_values, in place.
 
-    A run that had more keys than the cap gets ``nativeResultsTotal`` beside them.
+    A list that had more keys than the cap gets ``<field>Total`` beside it.
     """
+    if not isinstance(container, dict) or field not in container:
+        return
+    capped, total = cap_key_values(container[field])
+    if capped:
+        container[field] = capped
+    else:
+        container.pop(field)
+    if total > len(capped):
+        container[f"{field}Total"] = total
+
+
+def cap_assertion_key_values(assertion: object) -> None:
+    """Cap an assertion's source-defined key/value lists, in place.
+
+    Covers info.customProperties, each definition's nativeParameters, and each
+    run's nativeResults and error properties.
+    """
+    if not isinstance(assertion, dict) or not str(assertion.get("urn")).startswith(
+        "urn:li:assertion:"
+    ):
+        return
+    info = assertion.get("info")
+    if isinstance(info, dict):
+        cap_key_values_in_place(info, "customProperties")
+        for definition in info.values():
+            cap_key_values_in_place(definition, "nativeParameters")
+    run_events = assertion.get("runEvents")
     if not isinstance(run_events, dict):
         return
     for event in run_events.get("runEvents") or []:
         result = event.get("result") if isinstance(event, dict) else None
-        if not isinstance(result, dict) or "nativeResults" not in result:
+        if not isinstance(result, dict):
             continue
-        capped, total = cap_native_results(result["nativeResults"])
-        if capped:
-            result["nativeResults"] = capped
-        else:
-            result.pop("nativeResults")
-        if total > len(capped):
-            result["nativeResultsTotal"] = total
+        cap_key_values_in_place(result, "nativeResults")
+        cap_key_values_in_place(result.get("error"), "properties")
+
+
+def _contract_member_rank(member: object) -> int:
+    """Sort key that puts members deciding a contract's verdict first."""
+    assertion = member.get("assertion") if isinstance(member, dict) else None
+    runs = ((assertion or {}).get("runEvents") or {}).get("runEvents") or []
+    result_type = ((runs[0] or {}).get("result") or {}).get("type") if runs else None
+    return {"FAILURE": 0, "ERROR": 1, "SUCCESS": 2}.get(result_type or "", 3)
+
+
+def cap_data_contract_members(contract: object) -> None:
+    """Cap a data contract's data quality members, in place.
+
+    Failing and erroring members are kept first, then passing, then those that have
+    not run, so the members returned still decide the contract's verdict. A cut list
+    gets ``dataQualityTotal`` beside it.
+    """
+    if not isinstance(contract, dict) or not str(contract.get("urn")).startswith(
+        "urn:li:dataContract:"
+    ):
+        return
+    properties = contract.get("properties")
+    if not isinstance(properties, dict):
+        return
+    members = properties.get("dataQuality")
+    if (
+        not isinstance(members, list)
+        or len(members) <= MAX_CONTRACT_DATA_QUALITY_ASSERTIONS
+    ):
+        return
+    properties["dataQuality"] = sorted(members, key=_contract_member_rank)[
+        :MAX_CONTRACT_DATA_QUALITY_ASSERTIONS
+    ]
+    properties["dataQualityTotal"] = len(members)
 
 
 def truncate_descriptions(
@@ -1017,7 +1082,8 @@ def clean_get_entities_response(
 
     4. **Truncate view definitions**: Limits SQL view logic to QUERY_LENGTH_HARD_LIMIT
 
-    5. **Cap assertion run nativeResults**: via cap_assertion_run_native_results
+    5. **Cap assertion key/value lists and contract members**: via
+       cap_assertion_key_values and cap_data_contract_members
 
     The result is optimized for LLM tool responses: reduced token usage, no duplication,
     clear distinction between system-generated and user-curated content.
@@ -1146,7 +1212,8 @@ def clean_get_entities_response(
                     )
 
     if response:
-        cap_assertion_run_native_results(response.get("runEvents"))
+        cap_assertion_key_values(response)
+        cap_data_contract_members(response)
 
     return response
 

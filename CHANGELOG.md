@@ -10,18 +10,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `get_entities` returns assertion run values and more definitions. Each run in
-  `runEvents` carries `rowCount`, `missingCount`, `unexpectedCount`, `error` and
-  `severity`, and the block counts `errored` runs. `info` now includes freshness,
-  schema and custom definitions (custom ones with `operator`, `parameters`,
-  `scope`, `aggregation`, `fields`, `nativeType`, `nativeParameters`) and
-  `customProperties`. Run `nativeResults` are capped at 10 keys and 200
-  characters per value, with `nativeResultsTotal` when keys are cut.
+  `runEvents` carries `rowCount`, `missingCount`, `unexpectedCount`, `error` (with
+  its `properties`, where OSS servers put the message) and `severity`, and the
+  block counts `errored` runs. `info` now includes freshness, schema and custom
+  definitions (custom ones with `operator`, `parameters`, `scope`, `aggregation`,
+  `fields`, `nativeType`, `nativeParameters`) and `customProperties`. Assertion
+  URNs use their own query, so on a server older than these fields only that
+  query falls back, and other lookups keep their newer fields. Run
+  `nativeResults` and error `properties`, `nativeParameters` and
+  `customProperties` are capped at `MAX_ASSERTION_KEY_VALUE_ENTRIES` keys (10)
+  and `MAX_ASSERTION_KEY_VALUE_CHARS` characters per value (200), with
+  `<name>Total` when keys are cut.
 - `get_dataset_assertions` keeps each run's observed values, severity and capped
-  `nativeResults` in `runHistory`, returns `customProperties` and the same custom
-  definition fields, and adds `errored` to `runSummary`.
+  `nativeResults` in `runHistory`, returns capped `customProperties` as a dict
+  and the same custom definition fields, and adds `errored` to `runSummary`.
 - `get_entities` on a data contract URN returns its `status` and its freshness,
   schema and data quality member assertions, each with its latest completed run.
-  The tool description tells agents how to judge a contract from these.
+  The tool description tells agents how to judge a contract from these. Data
+  quality members are capped at `MAX_CONTRACT_DATA_QUALITY_ASSERTIONS` (25),
+  failing and erroring ones first, with `dataQualityTotal` when cut.
 - `get_aspect_history` returns `compactLineage` for a current `upstreamLineage`
   value too large to return whole. It lists each dataset URN once and refers to
   columns as `[datasetIndex, fieldPath]`, so when `truncated` is false one call

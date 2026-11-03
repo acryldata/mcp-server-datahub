@@ -41,7 +41,9 @@ def get_entities(urns: StrListOrStr) -> List[dict] | dict:
     PASSING, FAILURE as FAILING, ERROR as ERROR, INIT or no run as not run, which
     does not count. No member with a run means no assertions have run; every member
     that has run is PASSING means passing; any FAILING means failing; any ERROR means
-    erroring.
+    erroring. Data quality members are capped: past the cap, failing and erroring
+    members come first, then passing, then not run, and `properties.dataQualityTotal`
+    gives the full count, so the verdict still holds.
     """
     client = graphql_helpers.get_datahub_client()
 
