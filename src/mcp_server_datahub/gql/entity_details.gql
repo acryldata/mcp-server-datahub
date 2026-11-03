@@ -1456,11 +1456,6 @@ fragment entityPreview on Entity {
                 }
             }
         }
-        structuredProperties {
-            properties {
-                ...structuredPropertiesFields
-            }
-        }
     }
     ... on Incident {
         urn
