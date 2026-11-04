@@ -276,7 +276,7 @@ Save standalone documents (insights, decisions, FAQs, notes) to DataHub's knowle
 | `MCP_OAUTH_USER_CLAIM` | `email` | Token claim identifying the user. |
 | `MCP_OAUTH_REQUIRE_VERIFIED_EMAIL` | `true` | Require the `email_verified` claim to be true. |
 | `MCP_OAUTH_BASE_URL` | none | Public server URL incl. optional path prefix (required with OAuth). |
-| `MCP_OAUTH_JWT_SIGNING_KEY` | none | Secret for signing tokens issued to MCP clients (required with OAuth). |
+| `MCP_OAUTH_JWT_SIGNING_KEY` | none | Secret for signing tokens issued to MCP clients. Optional: defaults to a key derived from `MCP_OAUTH_CLIENT_SECRET` (rotating the client secret then invalidates issued tokens). |
 | `MCP_OAUTH_ALLOWED_DOMAINS` | none | Comma-separated domains (after `@` in the user claim) allowed to log in. |
 | `MCP_OAUTH_USERNAME_REGEX` | `(.*)` | Maps the user claim to the DataHub username (like `AUTH_OIDC_USER_NAME_CLAIM_REGEX`). |
 | `DATAHUB_SYSTEM_CLIENT_ID` | `__datahub_system` | DataHub system client used to create user sessions with OAuth. |

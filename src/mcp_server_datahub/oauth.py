@@ -49,9 +49,10 @@ class OAuthSettings:
     client_id: str
     client_secret: str
     base_url: str
-    jwt_signing_key: str
     system_client_id: str
     system_client_secret: str
+    # None lets FastMCP derive the signing key from the client secret.
+    jwt_signing_key: Optional[str] = None
     # Empty means Google; otherwise the IdP's OIDC discovery document URL.
     oidc_config_url: str = ""
     scopes: tuple[str, ...] = ("openid", "email")
@@ -73,7 +74,6 @@ class OAuthSettings:
             for name in (
                 "MCP_OAUTH_CLIENT_SECRET",
                 "MCP_OAUTH_BASE_URL",
-                "MCP_OAUTH_JWT_SIGNING_KEY",
                 "DATAHUB_SYSTEM_CLIENT_SECRET",
             )
         }
@@ -89,7 +89,7 @@ class OAuthSettings:
             client_id=client_id,
             client_secret=required["MCP_OAUTH_CLIENT_SECRET"],
             base_url=required["MCP_OAUTH_BASE_URL"].rstrip("/"),
-            jwt_signing_key=required["MCP_OAUTH_JWT_SIGNING_KEY"],
+            jwt_signing_key=os.environ.get("MCP_OAUTH_JWT_SIGNING_KEY") or None,
             system_client_id=os.environ.get(
                 "DATAHUB_SYSTEM_CLIENT_ID", "__datahub_system"
             ),

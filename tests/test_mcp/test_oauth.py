@@ -59,6 +59,17 @@ def test_settings_require_secrets(monkeypatch: pytest.MonkeyPatch) -> None:
         OAuthSettings.from_env()
 
 
+def test_jwt_signing_key_is_optional(monkeypatch: pytest.MonkeyPatch) -> None:
+    _set_env(monkeypatch)
+    settings = OAuthSettings.from_env()
+    assert settings is not None and settings.jwt_signing_key == "signing-key"
+
+    monkeypatch.delenv("MCP_OAUTH_JWT_SIGNING_KEY")
+    settings = OAuthSettings.from_env()
+    assert settings is not None and settings.jwt_signing_key is None
+    assert build_oauth_provider(settings)._jwt_signing_key
+
+
 def test_settings_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
     _set_env(monkeypatch, MCP_OAUTH_ALLOWED_DOMAINS="Example.com, other.org")
     settings = OAuthSettings.from_env()
