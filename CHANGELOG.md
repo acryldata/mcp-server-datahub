@@ -78,6 +78,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   with `page.currentOmittedByResponseBudget: true`; if no history entry fits at
   all, the pair is listed in `batch.droppedPairs`. Retry it alone; an entry larger
   than the whole budget still cannot be returned.
+- `get_entities` and `get_lineage` now return DataProcessInstance properties
+  (including `created` and `customProperties`), a bounded run `state`, and
+  `mlTrainingRunProperties`. Previously a training run or pipeline execution
+  resolved to a bare URN with no timestamp.
 - Tool calls no longer stall for about 54 seconds when the telemetry endpoint is
   unreachable. `acryl-datahub` 1.7.0.6 sends telemetry from a background worker
   instead of on the calling thread.
