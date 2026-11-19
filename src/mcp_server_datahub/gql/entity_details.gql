@@ -1195,6 +1195,24 @@ fragment entityPreview on Entity {
             }
         }
     }
+    ... on ERModelRelationship {
+        urn
+        type
+        properties {
+            name
+            source {
+                urn
+            }
+            destination {
+                urn
+            }
+            relationshipFieldMappings {
+                sourceField
+                destinationField
+            }
+            cardinality
+        }
+    }
     ... on Incident {
         urn
         type

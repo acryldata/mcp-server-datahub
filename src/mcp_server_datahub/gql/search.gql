@@ -52,6 +52,11 @@ fragment SearchEntityInfo on Entity {
       name
     }
   }
+  ... on ERModelRelationship {
+    properties {
+      name
+    }
+  }
 }
 
 fragment FacetEntityInfo on Entity {
