@@ -316,3 +316,34 @@ class TestDocumentToolsMiddleware:
         assert DOCUMENT_CHECK_CACHE_TTL_SECONDS >= 60
         # Should be at most 1 hour to ensure relatively fresh data
         assert DOCUMENT_CHECK_CACHE_TTL_SECONDS <= 3600
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("is_oss", [False, True])
+@pytest.mark.parametrize("flag", [None, "false", "true", "TRUE"])
+async def test_document_tools_registration_respects_disabled_flag(
+    monkeypatch: pytest.MonkeyPatch, is_oss: bool, flag: str | None
+) -> None:
+    from fastmcp import Client, FastMCP
+    from fastmcp.exceptions import ToolError
+
+    from datahub_integrations.mcp.mcp_server import register_search_tools
+
+    if flag is None:
+        monkeypatch.delenv("DATAHUB_MCP_DOCUMENT_TOOLS_DISABLED", raising=False)
+    else:
+        monkeypatch.setenv("DATAHUB_MCP_DOCUMENT_TOOLS_DISABLED", flag)
+
+    server = FastMCP("document-tools-registration")
+    register_search_tools(server, is_oss=is_oss)
+
+    async with Client(server) as client:
+        names = {tool.name for tool in await client.list_tools()}
+        assert "search" in names
+        if flag is not None and flag.lower() == "true":
+            assert DOCUMENT_TOOL_NAMES.isdisjoint(names)
+            for name in sorted(DOCUMENT_TOOL_NAMES):
+                with pytest.raises(ToolError, match="Unknown tool"):
+                    await client.call_tool(name, {})
+        else:
+            assert DOCUMENT_TOOL_NAMES <= names

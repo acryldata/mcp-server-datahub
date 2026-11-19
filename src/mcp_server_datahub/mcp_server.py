@@ -29,6 +29,7 @@ from fastmcp import FastMCP
 from fastmcp.tools import Tool as FastMCPTool
 from loguru import logger
 
+from .document_tools_middleware import _are_document_tools_disabled
 from .fastmcp_helpers import list_mcp_tools_sync
 
 # IMPORTANT: Use relative imports to maintain compatibility across repositories
@@ -404,8 +405,9 @@ def register_search_tools(mcp_instance: FastMCP, is_oss: bool = False) -> None:
         get_lineage_paths_between,
         tags={ToolType.SEARCH.value},
     )
-    _register_tool(mcp_instance, "search_documents", search_documents)
-    _register_tool(mcp_instance, "grep_documents", grep_documents)
+    if not _are_document_tools_disabled():
+        _register_tool(mcp_instance, "search_documents", search_documents)
+        _register_tool(mcp_instance, "grep_documents", grep_documents)
 
 
 def register_data_quality_tools(mcp_instance: FastMCP, is_oss: bool = False) -> None:
