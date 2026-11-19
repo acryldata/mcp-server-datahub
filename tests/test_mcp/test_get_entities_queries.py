@@ -84,6 +84,37 @@ def test_get_entities_with_query_urn(mock_client):
     assert len(result["subjects"]) == 1
 
 
+def test_get_entities_with_query_urn_preserves_full_statement(mock_client):
+    """The truncation hint's get_entities call returns the complete SQL text."""
+    query_urn = "urn:li:query:long-query"
+    long_statement = "SELECT * FROM orders WHERE customer_id IS NOT NULL " * 200
+    mock_response = {
+        "entity": {
+            "urn": query_urn,
+            "type": "QUERY",
+            "properties": {
+                "source": "MANUAL",
+                "statement": {"value": long_statement, "language": "SQL"},
+            },
+            "platform": {"name": "snowflake"},
+            "subjects": [],
+        }
+    }
+
+    mock_client._graph.exists.return_value = True
+    mock_client._graph.url_for = lambda x: f"https://example.com/{x}"
+
+    with patch(
+        "datahub_integrations.mcp.graphql_helpers.execute_graphql",
+        side_effect=[mock_response, {"entity": {}}],
+    ):
+        with with_datahub_client(mock_client):
+            result = get_entities(query_urn)
+
+    assert len(long_statement) > 5000
+    assert result["properties"]["statement"]["value"] == long_statement
+
+
 def test_get_entities_with_dataset_urn(mock_client):
     """Test that get_entities() uses GetEntity for non-Query URNs."""
 
