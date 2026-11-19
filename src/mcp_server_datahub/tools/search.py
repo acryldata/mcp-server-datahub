@@ -14,6 +14,10 @@ search_gql = (graphql_helpers.GQL_DIR / "search.gql").read_text()
 semantic_search_gql = (graphql_helpers.GQL_DIR / "semantic_search.gql").read_text()
 smart_search_gql = (graphql_helpers.GQL_DIR / "smart_search.gql").read_text()
 
+# Largest page the search tools will fetch. Requests above this are served at
+# this size, and the response says so via _searchLimitReached.
+MAX_SEARCH_RESULTS = 50
+
 
 def _search_implementation(
     query: str,
@@ -27,8 +31,10 @@ def _search_implementation(
     """Core search implementation that can use semantic, keyword, or ersatz_semantic search."""
     client = graphql_helpers.get_datahub_client()
 
-    # Cap num_results at 50 to prevent excessive requests
-    num_results = min(num_results, 50)
+    # Cap num_results to prevent excessive requests. The requested value is kept
+    # so the response can report that the page was served smaller than asked.
+    requested_num_results = num_results
+    num_results = min(num_results, MAX_SEARCH_RESULTS)
 
     # "relevance" is the *default* ranking, not a sortable field -- no DataHub search
     # index has a `relevance` mapping to sort on. A caller asking to sort by
@@ -102,6 +108,19 @@ def _search_implementation(
         response.pop("searchResults", None)
         response.pop("count", None)
 
+    # Tell the caller when we served a smaller page than they asked for, so an
+    # agent can page through the rest instead of reading a truncated result set
+    # as the whole story. Mirrors _hybridSearchLimitReached in search_documents.
+    if requested_num_results > MAX_SEARCH_RESULTS and isinstance(response, dict):
+        response["_searchLimitReached"] = True
+        response["_searchMaxResults"] = MAX_SEARCH_RESULTS
+        logger.info(
+            "Search page size capped: requested num_results={} exceeds max of {}; "
+            "use offset to paginate",
+            requested_num_results,
+            MAX_SEARCH_RESULTS,
+        )
+
     return graphql_helpers.clean_gql_response(response)
 
 
@@ -147,6 +166,10 @@ def enhanced_search(
 
     PAGINATION:
     - num_results: Number of results to return per page (max: 50)
+    - Asking for more than 50 returns 50, and the response carries
+      `_searchLimitReached: true` — page through the rest with offset rather
+      than treating those 50 as the complete result set. Compare `total` to the
+      number of results returned to see how much is left.
     - offset: Starting position in results (default: 0)
     - Examples:
       * First page: offset=0, num_results=10
@@ -224,6 +247,10 @@ def search(
 
     PAGINATION:
     - num_results: Number of results to return per page (max: 50)
+    - Asking for more than 50 returns 50, and the response carries
+      `_searchLimitReached: true` — page through the rest with offset rather
+      than treating those 50 as the complete result set. Compare `total` to the
+      number of results returned to see how much is left.
     - offset: Starting position in results (default: 0)
     - Examples:
       * First page: offset=0, num_results=10
