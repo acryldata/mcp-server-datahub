@@ -10,6 +10,7 @@ import pytest
 from click.testing import CliRunner
 from datahub.ingestion.graph.config import ClientMode
 from fastmcp import FastMCP
+from fastmcp.server.auth import RemoteAuthProvider
 from fastmcp.server.auth.auth import AccessToken
 
 from mcp_server_datahub.__main__ import (
@@ -258,6 +259,7 @@ def test_create_http_app_installs_authentication(
 ) -> None:
     monkeypatch.setenv("DATAHUB_GMS_URL", "https://datahub.example")
     monkeypatch.delenv("DATAHUB_GMS_TOKEN", raising=False)
+    monkeypatch.delenv("MCP_OAUTH_AUTHORIZATION_SERVERS", raising=False)
 
     with (
         patch("mcp_server_datahub.__main__._configure_app") as configure,
@@ -270,6 +272,62 @@ def test_create_http_app_installs_authentication(
     assert isinstance(verifier, _DataHubTokenVerifier)
     assert isinstance(middleware, _AuthenticatedDataHubClientMiddleware)
     assert middleware._token_verifier is verifier
+
+
+def test_create_http_app_advertises_oauth_metadata_when_configured(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("DATAHUB_GMS_URL", "https://datahub.example")
+    monkeypatch.delenv("DATAHUB_GMS_TOKEN", raising=False)
+    monkeypatch.setenv(
+        "MCP_OAUTH_AUTHORIZATION_SERVERS", "https://idp.example/realms/main"
+    )
+    monkeypatch.setenv("MCP_OAUTH_BASE_URL", "https://mcp.example")
+    monkeypatch.setenv("MCP_OAUTH_SCOPES", "openid, profile")
+
+    with patch("mcp_server_datahub.__main__._configure_app") as configure:
+        create_http_app()
+
+    auth = configure.call_args.kwargs["auth"]
+    assert isinstance(auth, RemoteAuthProvider)
+    assert [str(url) for url in auth.authorization_servers] == [
+        "https://idp.example/realms/main"
+    ]
+    # The token verifier is composed, not replaced.
+    middleware = configure.call_args.args[1]
+    assert isinstance(middleware._token_verifier, _DataHubTokenVerifier)
+
+
+def test_create_http_app_accepts_multiple_authorization_servers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("DATAHUB_GMS_URL", "https://datahub.example")
+    monkeypatch.delenv("DATAHUB_GMS_TOKEN", raising=False)
+    monkeypatch.setenv(
+        "MCP_OAUTH_AUTHORIZATION_SERVERS",
+        "https://idp.example/realms/main, https://idp2.example",
+    )
+    monkeypatch.setenv("MCP_OAUTH_BASE_URL", "https://mcp.example")
+
+    with patch("mcp_server_datahub.__main__._configure_app") as configure:
+        create_http_app()
+
+    auth = configure.call_args.kwargs["auth"]
+    assert len(auth.authorization_servers) == 2
+
+
+def test_create_http_app_requires_base_url_for_oauth(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("DATAHUB_GMS_URL", "https://datahub.example")
+    monkeypatch.delenv("DATAHUB_GMS_TOKEN", raising=False)
+    monkeypatch.setenv(
+        "MCP_OAUTH_AUTHORIZATION_SERVERS", "https://idp.example/realms/main"
+    )
+    monkeypatch.delenv("MCP_OAUTH_BASE_URL", raising=False)
+
+    with pytest.raises(RuntimeError, match="MCP_OAUTH_BASE_URL"):
+        create_http_app()
 
 
 def test_local_cli_does_not_offer_http_transport() -> None:
@@ -405,6 +463,51 @@ async def test_production_http_app_keeps_health_public_and_mcp_private(
         assert health_response.status_code == 200
         assert health_response.json() == {"status": "ok"}
         assert mcp_response.status_code == 401
+    finally:
+        main_module._app_mode = original_mode
+        mcp.auth = original_auth
+        mcp.middleware.clear()
+        mcp.middleware.extend(original_middleware)
+
+
+@pytest.mark.anyio
+async def test_http_app_serves_protected_resource_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import mcp_server_datahub.__main__ as main_module
+
+    original_mode = main_module._app_mode
+    original_auth = mcp.auth
+    original_middleware = list(mcp.middleware)
+    main_module._app_mode = None
+    mcp.auth = None
+    mcp.middleware.clear()
+    monkeypatch.setenv("DATAHUB_GMS_URL", "https://datahub.example")
+    monkeypatch.delenv("DATAHUB_GMS_TOKEN", raising=False)
+    monkeypatch.setenv(
+        "MCP_OAUTH_AUTHORIZATION_SERVERS", "https://idp.example/realms/main"
+    )
+    monkeypatch.setenv("MCP_OAUTH_BASE_URL", "https://mcp.example")
+
+    try:
+        app = create_http_app().http_app(stateless_http=True)
+
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app),
+            base_url="http://testserver",
+            follow_redirects=True,
+        ) as client:
+            metadata = await client.get("/.well-known/oauth-protected-resource/mcp")
+            unauthorized = await client.post("/mcp", json=_INITIALIZE_REQUEST)
+
+        assert metadata.status_code == 200
+        body = metadata.json()
+        assert body["resource"] == "https://mcp.example/mcp"
+        assert body["authorization_servers"] == ["https://idp.example/realms/main"]
+
+        # Without this parameter a client has no way to find the metadata above.
+        assert unauthorized.status_code == 401
+        assert "resource_metadata=" in unauthorized.headers["www-authenticate"]
     finally:
         main_module._app_mode = original_mode
         mcp.auth = original_auth
