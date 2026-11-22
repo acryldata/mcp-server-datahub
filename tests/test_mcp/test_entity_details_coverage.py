@@ -69,6 +69,7 @@ EXPECTED = {
     "Container": ["properties.customProperties", "structuredProperties", "ownership"],
     "DataFlow": ["properties.customProperties", "structuredProperties", "ownership"],
     "DataJob": ["properties.customProperties", "structuredProperties", "ownership"],
+    "DataProcessInstance": ["properties.customProperties"],
     "DataProduct": ["properties.customProperties", "structuredProperties", "ownership"],
     "Domain": ["structuredProperties", "ownership"],
     "GlossaryTerm": [

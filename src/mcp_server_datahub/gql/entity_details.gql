@@ -346,6 +346,13 @@ fragment entityDisplayNameFields on Entity {
         }
         __typename
     }
+    ... on DataProcessInstance {
+        properties {
+            name
+            __typename
+        }
+        __typename
+    }
     ... on GlossaryTerm {
         hierarchicalName
         properties {
@@ -837,6 +844,56 @@ fragment entityPreview on Entity {
         }
         health {
             ...entityHealth
+        }
+    }
+    ... on DataProcessInstance {
+        urn
+        type
+        properties {
+            name
+            created {
+                time
+                actor
+            }
+            customProperties {
+                key
+                value
+            }
+            externalUrl
+        }
+        mlTrainingRunProperties {
+            id
+            outputUrls
+            trainingMetrics {
+                name
+                description
+                value
+            }
+            hyperParams {
+                name
+                description
+                value
+            }
+        }
+        state(limit: 1) {
+            timestampMillis
+            durationMillis
+            status
+            attempt
+            result {
+                resultType
+                nativeResultType
+            }
+        }
+        parentTemplate {
+            urn
+            type
+        }
+        subTypes {
+            typeNames
+        }
+        optionalPlatform: platform {
+            ...platformFields
         }
     }
     ... on GlossaryTerm {
